@@ -54,7 +54,7 @@ def train_bpe_run(input_path : str,
         text = ""
 
     # pre-tokenization
-    PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}+|\s+(?!\S)|\s+"""
+    PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     chunks = regex.split('|'.join(map(regex.escape,special_tokens)),text)  # 按照special_tokens 进行一次分割
     for chunk in chunks:
         for word in regex.findall(PAT, chunk):
