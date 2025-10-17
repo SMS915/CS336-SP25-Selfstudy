@@ -10,8 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 import cs336_basics.train_bpe as bpe_train
-import cs336_basics.BPE_Tokenizer as bpe_tokenizer
-
+from cs336_basics.Linear import Linear
 
 
 def run_linear(
@@ -32,8 +31,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    linear_layer = Linear(d_in, d_out, device=torch.device("cuda"))
+    weight_dict = {'W': weights}
+    linear_layer.load_state_dict(weight_dict)
+    return linear_layer.forward(in_features)
 
 
 def run_embedding(
@@ -563,8 +564,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    # raise NotImplementedError
-    return bpe_tokenizer.BPETokenizer(vocab, merges, special_tokens)
+    raise NotImplementedError
 
 
 def run_train_bpe(
