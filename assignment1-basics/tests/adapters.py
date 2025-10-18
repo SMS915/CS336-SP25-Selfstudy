@@ -8,11 +8,13 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
+from einops import rearrange, einsum
 
-import cs336_basics.train_bpe as bpe_train
+from cs336_basics.train_bpe import train_bpe_run
 from cs336_basics.Linear import Linear
 from cs336_basics.Embedding import Embedding
 from cs336_basics.RMSNorm import RMSNorm
+from cs336_basics.SwiGLU import SwiGLU
 
 
 def run_linear(
@@ -33,7 +35,7 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-    linear_layer = Linear(d_in, d_out, device=torch.device("cuda"))
+    linear_layer = Linear(d_in, d_out)
     weight_dict = {'W': weights}
     linear_layer.load_state_dict(weight_dict)
     return linear_layer.forward(in_features)
@@ -57,7 +59,7 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-    embedding_layer = Embedding(vocab_size, d_model, device=torch.device("cuda"))
+    embedding_layer = Embedding(vocab_size, d_model)
     embedding_dict = {'embed_matrix' : weights}
     embedding_layer.load_state_dict(embedding_dict)
     return embedding_layer.forward(token_ids)
@@ -91,7 +93,12 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    # raise NotImplementedError
+    swiglu_module = SwiGLU(d_model, d_ff)
+    state_dict = {"W1.W" : w1_weight, "W2.W" : w2_weight, "W3.W" : w3_weight}
+    swiglu_module.load_state_dict(state_dict)
+    return swiglu_module(in_features)
+
 
 
 def run_scaled_dot_product_attention(
@@ -602,5 +609,5 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     # raise NotImplementedError
-    vocab, merges = bpe_train.train_bpe_run(input_path, vocab_size, special_tokens)
+    vocab, merges = train_bpe_run(input_path, vocab_size, special_tokens)
     return vocab, merges
