@@ -10,7 +10,7 @@ class Embedding(nn.Module):
         self.device = device
         self.dtype = dtype
 
-        self.embed_matrix = nn.Parameter(torch.empty(self.num_embeddings, self.embedding_dim, device = self.device, dtype = self.dtype))
+        self.embed_matrix = nn.Parameter(torch.empty(self.num_embeddings, self.embedding_dim, device = self.device, dtype = self.dtype, requires_grad=True))
         nn.init.trunc_normal_(self.embed_matrix, mean = 0, std = 1, a = -3, b = 3)
 
     def forward(self, token_ids : torch.Tensor) -> torch.Tensor:
