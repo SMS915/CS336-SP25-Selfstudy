@@ -5,13 +5,17 @@ from einops import rearrange
 
 
 class RoPE(nn.Module):
-   """
-   RoPE, 即Rotary Positional Embedding, 旋转位置编码
-
-   """
+    """
+    RoPE (旋转位置编码) 模块。
+    通过旋转输入向量的成对维度来注入位置信息，实现了用绝对位置编码相对位置注意力的能力。
+    """
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device = None):
-
-
+        """
+        Args:
+            d_k (int): 输入向量的维度 (必须是偶数)。
+            max_seq_len (int): 模型支持的最大序列长度。
+            theta (float): RoPE的基数，默认为10000.0。
+        """
         super().__init__()
         self.theta = theta if theta else 10000.0
         self.d_k = d_k
@@ -28,6 +32,13 @@ class RoPE(nn.Module):
         self.register_buffer('sin_table', sin_table, persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): 输入张量。Shape: (batch_size, seq_len, d_k)
+            token_positions (torch.Tensor): 每个token的绝对位置。Shape: (batch_size, seq_len)
+        Returns:
+            torch.Tensor: 应用RoPE后的张量。Shape: (batch_size, seq_len, d_k)
+        """
         cos, sin = self.cos_table[token_positions], self.sin_table[token_positions]
         even_x, odd_x = rearrange(x, '... (d_half odd_even) -> odd_even ... d_half', odd_even=2)
         x1_rot = even_x * cos - odd_x * sin
