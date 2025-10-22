@@ -5,7 +5,13 @@ from einops import rearrange
 
 
 class RoPE(nn.Module):
+   """
+   RoPE, 即Rotary Positional Embedding, 旋转位置编码
+
+   """
     def __init__(self, theta: float, d_k: int, max_seq_len: int, device = None):
+
+
         super().__init__()
         self.theta = theta if theta else 10000.0
         self.d_k = d_k
