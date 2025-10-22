@@ -4,11 +4,11 @@ from einops import einsum
 from cs336_basics.Softmax import Softmax
 from jaxtyping import Float, Bool
 
-def ScaledDotProductAttention(Q: Float[torch.Tensor, "*batch_size, query_seq_len, d_k"],
-                              K: Float[torch.Tensor, "*batch_size, key_seq_len, d_k"],
-                              V: Float[torch.Tensor, "*batch_size, value_seq_len, d_v"],
-                              mask: Bool[torch.Tensor, "*batch_size, query_seq_len, key_seq_len"] = None)\
-                              -> Float[torch.Tensor, "*batch_size, query_seq_len, d_v"]:
+def ScaledDotProductAttention(Q: Float[torch.Tensor, "*batch_size query_seq_len d_k"],
+                              K: Float[torch.Tensor, "*batch_size key_seq_len d_k"],
+                              V: Float[torch.Tensor, "*batch_size value_seq_len d_v"],
+                              mask: Bool[torch.Tensor, "*batch_size query_seq_len key_seq_len"] = None)\
+                              -> Float[torch.Tensor, "*batch_size query_seq_len d_v"]:
     """
    计算缩放点积注意力。
    公式: Attention(Q, K, V) = softmax( (Q @ K^T) / sqrt(d_k) ) @ V
