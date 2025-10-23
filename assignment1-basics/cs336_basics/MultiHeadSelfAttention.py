@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from einops import rearrange, einsum
+from einops import rearrange, einsum, repeat
 from cs336_basics.ScaledDotProductAttention import ScaledDotProductAttention
 from cs336_basics.RoPE import RoPE
 from cs336_basics.Linear import Linear
@@ -33,7 +33,10 @@ class MultiHeadSelfAttention(nn.Module):
 
         mask = torch.tril(torch.ones(context_length, context_length, device=x.device, dtype=torch.bool), diagonal=0)
         mask.unsqueeze_(0).unsqueeze_(0)
-        if self.rope is not None and token_positions is not None:
+        if self.rope is not None:
+            if token_positions is None:
+                token_positions = torch.arange(context_length, device=x.device).unsqueeze(0).expand(query.shape[0], -1)
+                # token_positions = repeat(torch.arange(context_length, device=x.device), 's -> b s', b=x.shape[0])
             q_rope = self.rope(queries_multi_head, token_positions)
             k_rope = self.rope(keys_multi_head, token_positions)
             out = ScaledDotProductAttention(q_rope, k_rope, values_multi_head, mask) # b h s d
