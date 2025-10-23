@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 from cs336_basics.Linear import Linear
 
+
+def SiLU(x: torch.Tensor) -> torch.Tensor:
+    return x * torch.sigmoid(x)
+
 class SwiGLU(nn.Module):
     """
     SwiGLU 前馈网络模块，遵循 LLaMA 等现代Transformer架构。
@@ -20,8 +24,6 @@ class SwiGLU(nn.Module):
         self.W2 = Linear(self.d_ff, self.d_model)
         self.W3 = Linear(self.d_model, self.d_ff)
 
-    def SiLU(self, x: torch.Tensor) -> torch.Tensor:
-        return x * torch.sigmoid(x)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -30,7 +32,7 @@ class SwiGLU(nn.Module):
         Returns:
             torch.Tensor: 输出张量。Shape: (..., d_model)
         """
-        return self.W2(self.SiLU(self.W1(x)) * self.W3(x))
+        return self.W2(SiLU(self.W1(x)) * self.W3(x))
 
 
 

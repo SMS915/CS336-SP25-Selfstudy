@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 
 class Embedding(nn.Module):
-    # stop auto complete unless I wrote for help
     def __init__(self, num_embeddings: int, embedding_dim: int, device=None, dtype=None, *args, **kwargs):
         super().__init__()
         self.num_embeddings = num_embeddings

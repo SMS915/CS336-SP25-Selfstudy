@@ -9,17 +9,18 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from einops import rearrange, einsum
-
+from cs336_basics.BPE_Tokenizer import BPETokenizer
 from cs336_basics.train_bpe import train_bpe_run
 from cs336_basics.Linear import Linear
 from cs336_basics.Embedding import Embedding
 from cs336_basics.RMSNorm import RMSNorm
-from cs336_basics.SwiGLU import SwiGLU
+from cs336_basics.SwiGLU import SwiGLU, SiLU
 from cs336_basics.RoPE import RoPE
 from cs336_basics.Softmax import Softmax
 from cs336_basics.ScaledDotProductAttention import ScaledDotProductAttention
 from cs336_basics.MultiHeadSelfAttention import MultiHeadSelfAttention
 from cs336_basics.TransformerBlock import TransformerBlock
+from cs336_basics.TransformerLM import TransformerLM
 
 
 def run_linear(
@@ -399,8 +400,24 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    transformer_lm = TransformerLM(vocab_size, context_length, d_model,
+                                   num_layers, num_heads, d_ff, rope_theta)
+    state_dict = {"embed.embed_matrix": weights["token_embeddings.weight"],
+                  "norm_final.gamma": weights["ln_final.weight"],
+                  "lm_head.W": weights["lm_head.weight"]}
 
+    for i in range(num_layers):
+        state_dict[f"blocks.{i}.norm1.gamma"] = weights[f"layers.{i}.ln1.weight"]
+        state_dict[f"blocks.{i}.norm2.gamma"] = weights[f"layers.{i}.ln2.weight"]
+        state_dict[f"blocks.{i}.attn.q_proj.W"] = weights[f"layers.{i}.attn.q_proj.weight"]
+        state_dict[f"blocks.{i}.attn.k_proj.W"] = weights[f"layers.{i}.attn.k_proj.weight"]
+        state_dict[f"blocks.{i}.attn.v_proj.W"] = weights[f"layers.{i}.attn.v_proj.weight"]
+        state_dict[f"blocks.{i}.attn.out_proj.W"] = weights[f"layers.{i}.attn.output_proj.weight"]
+        for j in range(1, 4):
+            state_dict[f"blocks.{i}.ffn.W{j}.W"] = weights[f"layers.{i}.ffn.w{j}.weight"]
+
+    transformer_lm.load_state_dict(state_dict)
+    return transformer_lm(in_indices)
 
 def run_rmsnorm(
     d_model: int,
@@ -440,7 +457,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return SiLU(in_features)
+
 
 
 def run_get_batch(
@@ -608,7 +626,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    return BPETokenizer(vocab, merges, special_tokens=special_tokens)
 
 
 def run_train_bpe(

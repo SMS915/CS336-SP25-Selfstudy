@@ -9,7 +9,28 @@ from sympy.simplify.hyperexpand import try_lerchphi
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
+
+
+
 class BPETokenizer:
+    @staticmethod
+    def _bytes_to_unicode():
+        # 这是标准的GPT-2字节->字符映射表
+        bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(
+            range(ord("®"), ord("ÿ") + 1))
+        cs = bs[:]
+        n = 0
+        for b in range(2 ** 8):
+            if b not in bs:
+                bs.append(b)
+                cs.append(2 ** 8 + n)
+                n += 1
+        cs = [chr(n) for n in cs]
+        return dict(zip(bs, cs))
+
+    _BYTE_TO_UNICODE_MAP = _bytes_to_unicode()
+    _UNICODE_TO_BYTES_MAP = {v: k for k, v in _BYTE_TO_UNICODE_MAP.items()}
+
     def __init__(self, vocab, merges, special_tokens = None):
         self._vocab : Dict[int, bytes] = vocab
         self._merges : List[tuple[bytes, bytes]] = merges
@@ -95,8 +116,8 @@ class BPETokenizer:
             if segment_bytes in self._byte_special_tokens:
                 encoded_ids.append(self._tokens_to_id[segment_bytes])
             else:
-                pretokenized_text = self.pretokenize(segment)
-                for text in pretokenized_text:
+                pretokenized_chunk = self.pretokenize(segment)
+                for text in pretokenized_chunk:
                     text_bytes = text.encode('utf-8')
                     encoded_list = self.encode_segment(text_bytes)
                     encoded_ids.extend(encoded_list)
@@ -108,45 +129,72 @@ class BPETokenizer:
         for line in iterable:
             yield from self.encode(line)
 
+
     @classmethod
-    def from_files(self, cls, vocab_filepath : str | os.PathLike, merges_filepath : str | os.PathLike, special_tokens = None):
-        vocab: Dict[int, bytes] = {}
-        with open(vocab_filepath, encoding="utf-8") as f:
-            vocab_json = json.load(f)
-            for tokens_str, token_id in vocab_json.items():
-                str_bytes = b''
-                for char_repr in tokens_str:
-                    if char_repr in cls._UNICODE_TO_BYTES_MAP:
-                        str_bytes += cls._UNICODE_TO_BYTES_MAP[char_repr]
-                vocab[token_id] = str_bytes
+    # def from_files(cls, vocab_filepath : str | os.PathLike, merges_filepath : str | os.PathLike, special_tokens = None):
+    #     vocab: Dict[int, bytes] = {}
+    #     with open(vocab_filepath, encoding="utf-8") as f:
+    #         vocab_json = json.load(f)
+    #         for tokens_str, token_id in vocab_json.items():
+    #             str_bytes = b''
+    #             for char_repr in tokens_str:
+    #                 if char_repr in cls._UNICODE_TO_BYTES_MAP:
+    #                     str_bytes += cls._UNICODE_TO_BYTES_MAP[char_repr]
+    #             vocab[token_id] = str_bytes
+    #
+    #     merges: List[Tuple[bytes, bytes]] = []
+    #     with open(merges_filepath, encoding="utf-8") as f:
+    #         for line in f:
+    #             line = line.strip()
+    #             if not line or line.startswith("#"):
+    #                 continue
+    #             try:
+    #                 tokens = line.split(' ')
+    #                 if len(tokens) != 2:
+    #                     raise ValueError(f"Invalid line {line}")
+    #
+    #                 token1_str, token2_str = tokens[0], tokens[1]
+    #
+    #                 actual_byte1 = b''
+    #                 for char_repr in token1_str:
+    #                     if char_repr in cls._UNICODE_TO_BYTES_MAP:
+    #                         actual_byte1 = cls._UNICODE_TO_BYTES_MAP[char_repr]
+    #
+    #                 actual_byte2 = b''
+    #                 for char_repr in token2_str:
+    #                     if char_repr in cls._UNICODE_TO_BYTES_MAP:
+    #                         actual_byte2 = cls._UNICODE_TO_BYTES_MAP[char_repr]
+    #
+    #                 merges.append((actual_byte1, actual_byte2))
+    #             except ValueError as e:
+    #                 print(f"Invalid merges line {line} - {e}")
+    #                 continue
+    #
+    #     return cls(vocab, merges, special_tokens)
+    def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None):
+        # 1. 加载 vocab.json
+        with open(vocab_filepath, 'r', encoding='utf-8') as f:
+            vocab_json = json.load(f)  # 这是 str -> int
 
-        merges: List[Tuple[bytes, bytes]] = []
-        with open(merges_filepath, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                try:
-                    tokens = line.split(' ')
-                    if len(tokens) != 2:
-                        raise ValueError(f"Invalid line {line}")
+        # 将 str token 转换回 bytes
+        bytes_to_id = {}
+        for token_str, token_id in vocab_json.items():
+            token_bytes = bytearray([cls._UNICODE_TO_BYTES_MAP[c] for c in token_str])
+            bytes_to_id[bytes(token_bytes)] = token_id
 
-                    token1_str, token2_str = tokens[0], tokens[1]
+        # 翻转得到 vocab: int -> bytes
+        vocab = {v: k for k, v in bytes_to_id.items()}
 
-                    actual_byte1 = b''
-                    for char_repr in token1_str:
-                        if char_repr in cls._UNICODE_TO_BYTES_MAP:
-                            actual_byte1 = cls._UNICODE_TO_BYTES_MAP[char_repr]
+        # 2. 加载 merges.txt
+        with open(merges_filepath, 'r', encoding='utf-8') as f:
+            lines = f.readlines()  # 跳过第一行
 
-                    actual_byte2 = b''
-                    for char_repr in token2_str:
-                        if char_repr in cls._UNICODE_TO_BYTES_MAP:
-                            actual_byte2 = cls._UNICODE_TO_BYTES_MAP[char_repr]
-
-                    merges.append((actual_byte1, actual_byte2))
-                except ValueError as e:
-                    print(f"Invalid merges line {line} - {e}")
-                    continue
+        merges = []
+        for line in lines:
+            p1_str, p2_str = line.strip().split()
+            p1 = bytes(bytearray([cls._UNICODE_TO_BYTES_MAP[c] for c in p1_str]))
+            p2 = bytes(bytearray([cls._UNICODE_TO_BYTES_MAP[c] for c in p2_str]))
+            merges.append((p1, p2))
 
         return cls(vocab, merges, special_tokens)
 
