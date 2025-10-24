@@ -1,4 +1,3 @@
-import math
 import torch
 
 def clip_gradient(parameter: torch.nn.parameter, max_norm: float, eps: float = 1e-6):

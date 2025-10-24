@@ -10,7 +10,7 @@ from cs336_basics.TransformerLM import TransformerLM
 from cs336_basics.DataLoader import DataLoader
 from cs336_basics.AdamW import AdamW
 from cs336_basics.CrossEntropyLoss import cross_entropy_loss
-from cs336_basics.Checkpointing import save_checkpoint, load_checkpoint, get_best_checkpoint, get_latest_checkpoint
+from cs336_basics.Checkpointing import *
 from cs336_basics.GradientClipping import clip_gradient
 from cs336_basics.CosineAnnealing import CosineAnnealing
 
@@ -86,15 +86,25 @@ def main():
         eps = config.get('eps', 1e-8)
     )
 
+    amp_enabled = (device.type == 'cuda')
+    amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    print(f"Using AMP with dtype: {amp_dtype}")
+    scaler = torch.amp.GradScaler(enabled=amp_enabled)
+
     ckpt_dir = config.get('checkpoint_path', './checkpoints')
-    ckpt_list = os.listdir(ckpt_dir) if os.path.exists(ckpt_dir) else []
-    if ckpt_list:
-        ckpt_path = get_latest_checkpoint(ckpt_dir)
-        start_step = load_checkpoint(ckpt_path, model, optimizer)
-        print(f"从检查点 {ckpt_path} 恢复，起始迭代次数: {start_step}")
-    else:
-        start_step = 0
-        print("未找到检查点，开始新的训练")
+    # ckpt_list = os.listdir(ckpt_dir) if os.path.exists(ckpt_dir) else []
+    # if ckpt_list:
+    #     ckpt_path = get_latest_checkpoint(ckpt_dir)
+    #     checkpoint = torch.load(ckpt_path)
+    #     if 'scaler_state_dict' in checkpoint:
+    #         start_step = load_amp_checkpoint(ckpt_path, model, optimizer, scaler)
+    #     else :
+    #         start_step = load_checkpoint(ckpt_path, model, optimizer)
+    #     print(f"从检查点 {ckpt_path} 恢复，起始迭代次数: {start_step}")
+    # else:
+    #     start_step = 0
+    #     print("未找到检查点，开始新的训练")
+    start_step = 0
 
         # 初始化数据加载器
     train_loader = DataLoader(
@@ -115,6 +125,7 @@ def main():
         token_dtype=np.dtype(config.get('token_dtype', 'uint16'))
     )
 
+
     current_epoch = 0
     train_iter = train_loader.__iter__(epoch = current_epoch)
     for step in range(start_step, config['max_steps']):
@@ -125,14 +136,18 @@ def main():
         if epoch_for_dataloader != current_epoch:
             current_epoch = epoch_for_dataloader
             train_iter = train_loader.__iter__(epoch = current_epoch)
-
-        inputs, targets = next(train_iter)
-        logits = model(inputs, token_positions = None)  # batch_size seq_len vocab_size
-        loss = cross_entropy_loss(logits.view(-1, config['vocab_size']), targets.view(-1))
+        with torch.amp.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
+            inputs, targets = next(train_iter)
+            logits = model(inputs, token_positions = None)  # batch_size seq_len vocab_size
+            loss = cross_entropy_loss(logits.view(-1, config['vocab_size']), targets.view(-1))
+        # scaled_loss = loss * s
         optimizer.zero_grad()
-        loss.backward()
+        scaler.scale(loss).backward()  
+        scaler.unscale_(optimizer)
         clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
-        optimizer.step()
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), config.get('max_grad_norm', 1.0))
+        scaler.step(optimizer)
+        scaler.update()
 
         wandb.log({'train/loss': loss.item(), 'learning_rate': optimizer.param_groups[0]['lr']}, step=step)
         if step % config.get('log_interval', 100) == 0:
@@ -158,7 +173,10 @@ def main():
                     os.makedirs(ckpt_dir)
                 ckpt_filename = f"ckpt_step_{step:07d}_loss_{val_loss:.4f}.pt"
                 ckpt_path = os.path.join(ckpt_dir, ckpt_filename)
-                save_checkpoint(model=model, optimizer=optimizer, iteration= step + 1, out=ckpt_path)
+                if scaler is not None:
+                    save_amp_checkpoint(model=model, optimizer=optimizer,scaler=scaler, iteration= step + 1, out=ckpt_path)
+                else:
+                    save_checkpoint(model=model, optimizer=optimizer, iteration= step + 1, out=ckpt_path)
                 print(f"保存检查点: {ckpt_path}\n")
 
     print("训练完成。")

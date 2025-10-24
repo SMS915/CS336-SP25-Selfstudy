@@ -9,11 +9,26 @@ def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer,
     torch.save({'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'iteration': iteration}, out)
+    
+def save_amp_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer,scaler: torch.cuda.amp.GradScaler,
+                    iteration: int, out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]):
+    torch.save({'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scaler_state_dict': scaler.state_dict(),
+                'iteration': iteration}, out)
 
 def load_checkpoint(src: str | os.PathLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer):
     checkpoint = torch.load(src)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    iteration = checkpoint['iteration']
+    return iteration
+
+def load_amp_checkpoint(src: str | os.PathLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer,scaler: torch.cuda.amp.GradScaler):
+    checkpoint = torch.load(src)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scaler.load_state_dict(checkpoint['scaler_state_dict'])
     iteration = checkpoint['iteration']
     return iteration
 
