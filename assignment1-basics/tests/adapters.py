@@ -24,6 +24,11 @@ from cs336_basics.TransformerLM import TransformerLM
 
 from cs336_basics.CrossEntropyLoss import cross_entropy_loss
 from cs336_basics.AdamW import AdamW
+from cs336_basics.CosineAnnealing import CosineAnnealing
+from cs336_basics.GradientClipping import GradientClipping
+
+from cs336_basics.DataLoader import Load_Data
+from cs336_basics.Checkpointing import load_checkpoint, save_checkpoint
 
 def run_linear(
     d_in: int,
@@ -483,7 +488,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    return Load_Data(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
@@ -530,7 +535,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    GradientClipping(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> Any:
@@ -565,8 +570,8 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
-
+    # raise NotImplementedError
+    return CosineAnnealing(it, warmup_iters, cosine_cycle_iters, max_learning_rate, min_learning_rate)
 
 def run_save_checkpoint(
     model: torch.nn.Module,
@@ -584,7 +589,7 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    save_checkpoint(model, optimizer, iteration, out)
 
 
 def run_load_checkpoint(
@@ -605,7 +610,7 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    return load_checkpoint(src, model, optimizer)
 
 
 def get_tokenizer(
