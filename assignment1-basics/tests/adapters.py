@@ -25,7 +25,7 @@ from cs336_basics.TransformerLM import TransformerLM
 from cs336_basics.CrossEntropyLoss import cross_entropy_loss
 from cs336_basics.AdamW import AdamW
 from cs336_basics.CosineAnnealing import CosineAnnealing
-from cs336_basics.GradientClipping import GradientClipping
+from cs336_basics.GradientClipping import clip_gradient
 
 from cs336_basics.LoadSampleData import Load_Data
 from cs336_basics.Checkpointing import load_checkpoint, save_checkpoint
@@ -408,7 +408,7 @@ def run_transformer_lm(
         next-word distribution for each token.
     """
     transformer_lm = TransformerLM(vocab_size, context_length, d_model,
-                                   num_layers, num_heads, d_ff, rope_theta)
+                                   num_layers, num_heads, rope_theta, d_ff)
     state_dict = {"embed.embed_matrix": weights["token_embeddings.weight"],
                   "norm_final.gamma": weights["ln_final.weight"],
                   "lm_head.W": weights["lm_head.weight"]}
@@ -535,7 +535,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    GradientClipping(parameters, max_l2_norm)
+    clip_gradient(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> Any:

@@ -1,0 +1,41 @@
+# General Setting
+project_name: "CS336-TransformerLM-TinyStories"
+seed: 42
+device: "cuda"  # options: "cuda" or "cpu"
+
+# Data Setting
+train_data_path: "./data/TinyStoriesV2-train.bin"
+val_data_path: "./data/TinyStoriesV2-valid.bin"
+
+batch_size: 48
+context_length: 256
+
+# Model Setting
+vocab_size: 50257
+n_layers: 6
+n_heads: 8
+d_model: 512
+d_ff: null
+rope_theta: 10000.0
+token_dtype: "uint16"
+# Training Setting
+
+max_learning_rate: 3e-4
+min_learning_rate: 3e-5
+max_steps: 50000
+weight_decay: 0.01
+max_grad_norm: 1.0
+warmup_steps: 5000
+cycle_steps: 45000
+log_interval: 100
+eval_interval: 500
+eval_steps: 100
+checkpoint_interval: 5000
+steps_per_epoch: 1000
+checkpoint_path: "./checkpoints/"
+
+# Optimizer_Setting
+beta1: 0.9
+beta2: 0.95
+eps: 1e-8
+
