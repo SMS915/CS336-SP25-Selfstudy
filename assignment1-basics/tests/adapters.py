@@ -27,7 +27,7 @@ from cs336_basics.AdamW import AdamW
 from cs336_basics.CosineAnnealing import CosineAnnealing
 from cs336_basics.GradientClipping import GradientClipping
 
-from cs336_basics.DataLoader import Load_Data
+from cs336_basics.LoadSampleData import Load_Data
 from cs336_basics.Checkpointing import load_checkpoint, save_checkpoint
 
 def run_linear(

@@ -1,7 +1,9 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from einops import rearrange, repeat, einsum
-from jaxtyping import Float
+from jaxtyping import Float, Int
 
 from cs336_basics.Embedding import Embedding
 from cs336_basics.Linear import Linear
@@ -28,10 +30,14 @@ class TransformerLM(nn.Module):
         self.norm_final = RMSNorm(self.d_model)
         self.lm_head = Linear(d_model, vocab_size)
 
-    def forward(self, tokens: Float[torch.Tensor, "batch_size seq_len"]) -> torch.Tensor:
+    def forward(self, tokens: Float[torch.Tensor, "batch_size seq_len"], token_positions: Optional[Int[torch.Tensor, "batch_size, seq_len"]] = None) -> torch.Tensor:
         x = self.embed(tokens)  # batch_size seq_len d_model
+        if token_positions is None:
+            batch_size = tokens.shape[0]
+            seq_len = tokens.shape[1]
+            token_positions = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
         for block in self.blocks:
-            x = block(x)
+            x = block(x, token_positions)
         x = self.norm_final(x)
         x = self.lm_head(x) # batch_size seq_len vocab_size
         return x

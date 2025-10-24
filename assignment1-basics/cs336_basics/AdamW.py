@@ -50,8 +50,8 @@ class AdamW(torch.optim.Optimizer):
                 t = state['step']
 
                 grad = p.grad
-                m_avg.mul_(beta1).add_(1 - beta1, grad)
-                v_avg.mul_(beta2).addcmul_(1 - beta2, grad, grad)
+                m_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                v_avg.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
                 bias_correction1 = 1 - beta1 ** t
                 bias_correction2 = 1 - beta2 ** t
                 m_hat = m_avg / bias_correction1
@@ -60,7 +60,7 @@ class AdamW(torch.optim.Optimizer):
                 denom = v_hat.sqrt().add_(eps)
                 p.data.addcdiv_(-lr, m_hat, denom)
                 if weight_decay != 0.0:
-                    p.data.add_(-lr, p.data * weight_decay)
+                    p.data.add_(p.data, alpha=-lr * weight_decay)
 
         return loss
 

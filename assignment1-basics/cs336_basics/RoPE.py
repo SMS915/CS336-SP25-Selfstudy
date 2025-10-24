@@ -25,7 +25,7 @@ class RoPE(nn.Module):
         k_vec = torch.arange(0, self.d_k, 2) / self.d_k
         freq = 1.0 / self.theta ** k_vec
 
-        rotation_matrix = torch.arange(0, max_seq_len).outer(freq)
+        rotation_matrix = torch.outer(torch.arange(0, max_seq_len), freq)
         cos_table = torch.cos(rotation_matrix)
         sin_table = torch.sin(rotation_matrix)
         self.register_buffer('cos_table', cos_table, persistent=False)
