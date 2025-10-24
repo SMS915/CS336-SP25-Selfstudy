@@ -23,7 +23,7 @@ class TransformerBlock(nn.Module):
         self.attn = MultiHeadSelfAttention(self.d_model, self.num_heads, self.max_seq_len, self.theta)
         self.ffn = SwiGLU(self.d_model, self.d_ff)
 
-    def forward(self, x: Float[torch.Tensor, "batch_size seq_len d_model"], token_positions: Float[torch.Tensor, "batch_size, seq_len"]) -> torch.Tensor:
+    def forward(self, x: Float[torch.Tensor, "batch_size seq_len d_model"], token_positions: Float[torch.Tensor, "batch_size seq_len"] = None) -> torch.Tensor:
         x_attn = self.attn(self.norm1(x), token_positions)
         x1 = x + x_attn
 

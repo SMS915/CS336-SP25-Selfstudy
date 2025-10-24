@@ -80,12 +80,10 @@ class DataLoader:
 
             yield inputs, targets
 
-    def __iter__(self):
+    def __iter__(self, epoch: int = 0):
         """在每个epoch开始时被调用，返回一个新的生成器。"""
         # 这是为了追踪epoch，以便为每个epoch设置不同的随机种子
         # 假设我们通过外部的epoch循环来控制，这里只是一个示例
         # 在实际使用中，你通常会用 for batch in dataloader: ...
         # 这里的epoch计数器只是为了随机性
-        epoch = getattr(self, '_epoch', 0)
         yield from self._generator(epoch)
-        self._epoch = epoch + 1

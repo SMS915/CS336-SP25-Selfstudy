@@ -1,7 +1,7 @@
 import math
 import torch
 
-def GradientClipping(parameter: torch.nn.parameter, max_norm: float, eps: float = 1e-6):
+def clip_gradient(parameter: torch.nn.parameter, max_norm: float, eps: float = 1e-6):
     total_norm = 0
     for p in parameter:
         if p.grad is not None:

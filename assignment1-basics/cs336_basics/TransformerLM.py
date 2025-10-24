@@ -13,7 +13,7 @@ from cs336_basics.Softmax import Softmax
 
 class TransformerLM(nn.Module):
     def __init__(self, vocab_size: int, context_length: int, d_model: int,
-                 num_layers: int, num_heads: int, d_ff: int, rope_theta: float):
+                 num_layers: int, num_heads: int, rope_theta: float, d_ff: int = None):
         super().__init__()
         self.vocab_size = vocab_size
         self.context_length = context_length
@@ -30,7 +30,7 @@ class TransformerLM(nn.Module):
         self.norm_final = RMSNorm(self.d_model)
         self.lm_head = Linear(d_model, vocab_size)
 
-    def forward(self, tokens: Float[torch.Tensor, "batch_size seq_len"], token_positions: Optional[Int[torch.Tensor, "batch_size, seq_len"]] = None) -> torch.Tensor:
+    def forward(self, tokens: Int[torch.Tensor, "batch_size seq_len"], token_positions: Optional[Int[torch.Tensor, "batch_size seq_len"]] = None) -> torch.Tensor:
         x = self.embed(tokens)  # batch_size seq_len d_model
         if token_positions is None:
             batch_size = tokens.shape[0]
