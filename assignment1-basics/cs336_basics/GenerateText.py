@@ -2,7 +2,7 @@ __package__ = "cs336_basics"
 import torch
 
 from cs336_basics.TransformerLM import TransformerLM
-from cs336_basics.Checkpointing import *
+from cs336_basics.checkpointing import *
 from cs336_basics.BPE_Tokenizer import BPETokenizer
 from cs336_basics.Softmax import Softmax
 

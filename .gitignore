@@ -167,3 +167,4 @@ cython_debug/
 # ===================================
 # Ignore the reference folder
 reference/
+LectureNotes/

@@ -6,13 +6,11 @@ import os
 import math
 import numpy as np
 
-from cs336_basics.TransformerLM import TransformerLM
-from cs336_basics.DataLoader import DataLoader
-from cs336_basics.AdamW import AdamW
-from cs336_basics.CrossEntropyLoss import cross_entropy_loss
-from cs336_basics.Checkpointing import *
-from cs336_basics.GradientClipping import clip_gradient
-from cs336_basics.CosineAnnealing import CosineAnnealing
+from cs336_basics.utils import *
+from cs336_basics.BPE import BPETokenizer
+from cs336_basics.optimizer import AdamW
+from cs336_basics.checkpointing import *
+from cs336_basics.model import *
 
 def main():
     parser = argparse.ArgumentParser(description="训练大语言模型的脚本")
@@ -129,7 +127,7 @@ def main():
     current_epoch = 0
     train_iter = train_loader.__iter__(epoch = current_epoch)
     for step in range(start_step, config['max_steps']):
-        new_lr = CosineAnnealing(t=step, t_warm=config['warmup_steps'], t_cycle=config['cycle_steps'], lr_max=config['max_learning_rate'], lr_min=config['min_learning_rate'])
+        new_lr = get_lr_schedule(t=step, t_warm=config['warmup_steps'], t_cycle=config['cycle_steps'], lr_max=config['max_learning_rate'], lr_min=config['min_learning_rate'])
         for param_group in optimizer.param_groups:
             param_group['lr'] = new_lr
         epoch_for_dataloader = step // config['steps_per_epoch']

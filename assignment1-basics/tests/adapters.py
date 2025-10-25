@@ -1,34 +1,17 @@
 from __future__ import annotations
 
 import os
+import torch
+from torch import Tensor
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
-
 import numpy.typing as npt
-import torch
-from jaxtyping import Bool, Float, Int
-from torch import Tensor
-from einops import rearrange, einsum
-from cs336_basics.BPE_Tokenizer import BPETokenizer
-from cs336_basics.train_bpe import train_bpe_run
-from cs336_basics.Linear import Linear
-from cs336_basics.Embedding import Embedding
-from cs336_basics.RMSNorm import RMSNorm
-from cs336_basics.SwiGLU import SwiGLU, SiLU
-from cs336_basics.RoPE import RoPE
-from cs336_basics.Softmax import Softmax
-from cs336_basics.ScaledDotProductAttention import ScaledDotProductAttention
-from cs336_basics.MultiHeadSelfAttention import MultiHeadSelfAttention
-from cs336_basics.TransformerBlock import TransformerBlock
-from cs336_basics.TransformerLM import TransformerLM
-
-from cs336_basics.CrossEntropyLoss import cross_entropy_loss
-from cs336_basics.AdamW import AdamW
-from cs336_basics.CosineAnnealing import CosineAnnealing
-from cs336_basics.GradientClipping import clip_gradient
-
-from cs336_basics.LoadSampleData import Load_Data
-from cs336_basics.Checkpointing import load_checkpoint, save_checkpoint
+from cs336_basics.BPE import *
+from cs336_basics.model import *
+from cs336_basics.optimizer import AdamW
+from cs336_basics.utils import *
+from cs336_basics.data import get_batch
+from cs336_basics.checkpointing import load_checkpoint, save_checkpoint
 
 def run_linear(
     d_in: int,
@@ -488,7 +471,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    return Load_Data(dataset, batch_size, context_length, device)
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
@@ -571,7 +554,7 @@ def run_get_lr_cosine_schedule(
         Learning rate at the given iteration under the specified schedule.
     """
     # raise NotImplementedError
-    return CosineAnnealing(it, warmup_iters, cosine_cycle_iters, max_learning_rate, min_learning_rate)
+    return get_lr_schedule(it, warmup_iters, cosine_cycle_iters, max_learning_rate, min_learning_rate)
 
 def run_save_checkpoint(
     model: torch.nn.Module,
