@@ -3,8 +3,8 @@ import yaml
 import argparse
 import os
 
-from cs336_basics.TransformerLM import TransformerLM
-from cs336_basics.BPE_Tokenizer import BPETokenizer
+from cs336_basics.model import TransformerLM
+from cs336_basics.BPE import BPETokenizer
 from cs336_basics.checkpointing import get_latest_checkpoint, get_best_checkpoint
 from cs336_basics.GenerateText import generate_text
 
