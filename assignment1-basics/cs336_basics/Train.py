@@ -11,6 +11,7 @@ from cs336_basics.BPE import BPETokenizer
 from cs336_basics.optimizer import AdamW
 from cs336_basics.checkpointing import *
 from cs336_basics.model import *
+from cs336_basics.data import DataLoader
 
 def main():
     parser = argparse.ArgumentParser(description="训练大语言模型的脚本")

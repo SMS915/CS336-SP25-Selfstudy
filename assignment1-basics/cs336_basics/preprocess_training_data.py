@@ -1,7 +1,7 @@
 import os
 import multiprocessing as mp
 import numpy as np
-from cs336_basics.BPE_Tokenizer import BPETokenizer # 确保路径正确
+from cs336_basics.BPE import BPETokenizer # 确保路径正确
 
 # --- 配置 ---
 TOKENIZER_DIR = "BPE_File"
