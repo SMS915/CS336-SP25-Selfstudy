@@ -199,7 +199,8 @@ class RoPE(nn.Module):
         Returns:
             torch.Tensor: 应用RoPE后的张量。Shape: (batch_size, seq_len, d_k)
         """
-        cos, sin = self.cos_table[token_positions].unsqueeze(1), self.sin_table[token_positions].unsqueeze(1)
+        # cos, sin = self.cos_table[token_positions].unsqueeze(1), self.sin_table[token_positions].unsqueeze(1)
+        cos, sin = self.cos_table[token_positions], self.sin_table[token_positions]
         even_x, odd_x = rearrange(x, '... (d_half odd_even) -> odd_even ... d_half', odd_even=2)
         x1_rot = even_x * cos - odd_x * sin
         x2_rot = even_x * sin + odd_x * cos
