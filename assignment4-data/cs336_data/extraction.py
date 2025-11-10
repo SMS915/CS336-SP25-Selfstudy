@@ -17,7 +17,7 @@ def extract_text(byte_string: bytes) -> str:
         html_string = byte_string.decode('utf-8')
     except UnicodeDecodeError:
         byte_encoding = encoding.detect_encoding(byte_string)
-        html_string = byte_string.decode(byte_encoding)
+        html_string = byte_string.decode(byte_encoding, errors='ignore')
 
     extracted_text = html2text.extract_plain_text(html_string)
     return extracted_text

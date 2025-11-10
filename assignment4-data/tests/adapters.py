@@ -3,28 +3,28 @@ from __future__ import annotations
 import os
 from typing import Any
 from cs336_data.extraction import extract_text
+from cs336_data.content_filter import identify_language, mask_email, mask_phone_number, mask_ip_address
 
 
 
 def run_extract_text_from_html_bytes(html_bytes: bytes) -> str | None:
-    # raise NotImplementedError
     return extract_text(html_bytes)
 
 
 def run_identify_language(text: str) -> tuple[Any, float]:
-    raise NotImplementedError
+    return identify_language(text)
 
 
 def run_mask_emails(text: str) -> tuple[str, int]:
-    raise NotImplementedError
+    return mask_email(text)
 
 
 def run_mask_phone_numbers(text: str) -> tuple[str, int]:
-    raise NotImplementedError
+    return mask_phone_number(text)
 
 
 def run_mask_ips(text: str) -> tuple[str, int]:
-    raise NotImplementedError
+    return mask_ip_address(text)
 
 
 def run_classify_nsfw(text: str) -> tuple[Any, float]:
