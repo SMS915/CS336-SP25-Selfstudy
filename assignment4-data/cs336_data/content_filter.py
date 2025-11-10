@@ -2,23 +2,42 @@ import fasttext
 import regex
 from fasttext import FastText as FTModel
 
-def identify_language(text: str, model_path: str = 'data/classifiers/lid.176.bin'):
+
+def classify_text(text: str, type: str) -> tuple[str, float]:
     """
-    Identify the language of the given text using a FastText language identification model.
+    Classify the given text using a FastText model.
 
     Args:
-        text (str): The input text whose language needs to be identified.
-        model_path (str): The path to the FastText language identification model file.
+        text (str): The input text to classify.
+        model_path (str): The path to the FastText classification model file.
 
     Returns:
-        str: The identified language code.
+        tuple: A tuple containing the predicted label and the associated confidence score.
     """
+    path_dict = {
+        'language': 'data/classifiers/lid.176.bin',
+        'nsfw': 'data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin',
+        'toxic_speech': 'data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin'}
+    
+    model_path = path_dict.get(type)
+
+    if model_path is None:
+        raise ValueError(f"Unsupported classification type: {type}")
     text = text.replace('\n', ' ').strip()
-    model= FTModel.load_model(model_path)
+    model = FTModel.load_model(model_path)
     predictions = model.predict(text)
-    language_code = predictions[0][0].replace('__label__', '')
+    label = predictions[0][0].replace('__label__', '')
     score = predictions[1][0].item()
-    return language_code, score
+    return label, score
+
+def identify_language(text: str) -> tuple[str, float]:
+    return classify_text(text, 'language')
+
+def classify_nsfw(text: str) -> tuple[str, float]:
+    return classify_text(text, 'nsfw')
+
+def classify_toxic_speech(text: str) -> tuple[str, float]:
+    return classify_text(text, 'toxic_speech')
 
 def mask_email(text: str, replace_str: str = '|||EMAIL_ADDRESS|||') -> tuple[str, int]:
     pattern = regex.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')

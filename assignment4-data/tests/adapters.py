@@ -3,7 +3,10 @@ from __future__ import annotations
 import os
 from typing import Any
 from cs336_data.extraction import extract_text
-from cs336_data.content_filter import identify_language, mask_email, mask_phone_number, mask_ip_address
+from cs336_data.content_filter import  mask_email, mask_phone_number, mask_ip_address
+from cs336_data.content_filter import identify_language, classify_nsfw, classify_toxic_speech
+
+from cs336_data.quality_filter import gopher_quality_filter
 
 
 
@@ -28,11 +31,11 @@ def run_mask_ips(text: str) -> tuple[str, int]:
 
 
 def run_classify_nsfw(text: str) -> tuple[Any, float]:
-    raise NotImplementedError
+    return classify_nsfw(text)
 
 
 def run_classify_toxic_speech(text: str) -> tuple[Any, float]:
-    raise NotImplementedError
+    return classify_toxic_speech(text)
 
 
 def run_classify_quality(text: str) -> tuple[Any, float]:
@@ -40,7 +43,7 @@ def run_classify_quality(text: str) -> tuple[Any, float]:
 
 
 def run_gopher_quality_filter(text: str) -> bool:
-    raise NotImplementedError
+    return gopher_quality_filter(text)
 
 
 def run_exact_line_deduplication(
