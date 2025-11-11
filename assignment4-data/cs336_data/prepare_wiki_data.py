@@ -8,7 +8,7 @@ random.seed(42)  # 设置随机种子以确保可重复性
 INPUT_URL_GZ_FILE = Path("data/wiki/enwiki-20240420-extracted_urls.txt.gz")
 
 # 输出文件：抽样后用于wget的URL列表
-NUM_SAMPLES = 10000
+NUM_SAMPLES = 15000
 
 def sample_urls_from_gz(input_path: Path, k: int) -> None:
     """
