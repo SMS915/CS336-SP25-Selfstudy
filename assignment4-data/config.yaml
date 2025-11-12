@@ -1,0 +1,18 @@
+data:
+  train_file: "data/classifiers_dataset/quality_classifier_152.train"
+
+model:
+  output_dir: "data/my_classifiers"
+
+training:
+  epoch: 125
+  lr: 0.1
+  wordNgrams: 2
+  dim: 100
+  # minCount: 1
+  # ws: 5
+
+experiment:
+  name: "quality_classifier_tiny"
+  description: "A tiny quality classifier for testing"
+  version: "v1.0"

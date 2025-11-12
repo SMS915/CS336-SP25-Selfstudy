@@ -7,6 +7,7 @@ from cs336_data.content_filter import  mask_email, mask_phone_number, mask_ip_ad
 from cs336_data.content_filter import identify_language, classify_nsfw, classify_toxic_speech
 
 from cs336_data.quality_filter import gopher_quality_filter
+from cs336_data.quality_classifier import classify_quality
 
 
 
@@ -39,7 +40,7 @@ def run_classify_toxic_speech(text: str) -> tuple[Any, float]:
 
 
 def run_classify_quality(text: str) -> tuple[Any, float]:
-    raise NotImplementedError
+    return classify_quality('/home/justin/CS336/CS336/assignment4-data/data/my_classifiers/quality_classifier_tiny_20251112_071207.bin', text)
 
 
 def run_gopher_quality_filter(text: str) -> bool:
