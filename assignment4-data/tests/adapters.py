@@ -41,7 +41,7 @@ def run_classify_toxic_speech(text: str) -> tuple[Any, float]:
 
 
 def run_classify_quality(text: str) -> tuple[Any, float]:
-    return classify_quality('/home/justin/CS336/CS336/assignment4-data/data/my_classifiers/quality_classifier_tiny_20251112_071207.bin', text)
+    return classify_quality('data/my_classifiers/quality_classifier_3gram.bin', text)
 
 
 def run_gopher_quality_filter(text: str) -> bool:

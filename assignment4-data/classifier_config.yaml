@@ -1,0 +1,21 @@
+data:
+  train_file: "data/classifiers_dataset/quality_classifier_remixed_2114.train_split"
+  valid_file: "data/classifiers_dataset/quality_classifier_remixed_2114.valid_split"
+  output_dir: "data/my_classifiers"
+
+
+model:
+  output_dir: "data/my_classifiers"
+
+training:
+  epoch: 125
+  lr: 0.1
+  wordNgrams: 3
+  dim: 100
+  # minCount: 1
+  # ws: 5
+
+experiment:
+  name: "quality_classifier_remixed"
+  description: "A proper scale fast quality classifier for judging text quality at high speed"
+  version: "v1.0"
