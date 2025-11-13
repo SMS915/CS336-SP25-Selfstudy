@@ -15,7 +15,6 @@ class UnionFind:
 
         Args:
             elements (Iterable[Hashable]): 需要处理的所有元素的集合或列表，
-                                           例如所有的文档ID [0, 1, 2, ...]。
         """
         # `parent` 字典用于存储每个元素的父节点。
         # 如果 parent[x] == x，则 x 是其所在集合的根节点。

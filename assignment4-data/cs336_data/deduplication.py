@@ -2,22 +2,38 @@ import os
 import nltk
 import random
 import mmh3
+import unicodedata
 import numpy as np
+import regex
 from nltk import ngrams
 from tqdm import tqdm
-from hashlib import md5,sha256
+from hashlib import md5
+from cs336_data.UF import UnionFind
 from functools import partial
-from typing import Optional, List, Dict, Tuple, Set, Callable
+from typing import Optional, List, Dict, Tuple, Set, List, Callable, Hashable, cast
 from itertools import combinations
 from collections import defaultdict
 random_seed = 42
 random.seed(random_seed)
 
+def normalize_text_for_duplication(text: str) -> str:
+    """
+    对文本进行全面的标准化，为去重做准备。
+    遵循作业要求：小写、去标点、标准化空格、去重音、NFD范式。
+    """
+    text = unicodedata.normalize('NFD', text.lower()) # 应用NFD Unicode标准化，并将文本转为小写
+
+    text = ''.join(c for c in text if not unicodedata.combining(c)) # 移除重音符号 (组合标记)
+
+    text = regex.sub(r'[^\w\s]', ' ', text) # 匹配并移除任何不是字母、数字、下划线或空白字符的字符，即标点符号
+
+    text = regex.sub(r'\s+', ' ', text).strip() # 标准化空白字符
+    
+    return text
 
 def exact_line_deduplication(input_files: List[os.PathLike], output_directory: os.PathLike) -> None:
     """
-    Perform exact line deduplication on the input text files and save the deduplicated
-    versions to the output directory.
+    对输入的文本文件进行精确行去重并写入到指定的输出文件夹中。
 
     Args:
         input_files (List[os.PathLike]): List of input text file paths.
@@ -25,7 +41,7 @@ def exact_line_deduplication(input_files: List[os.PathLike], output_directory: o
     """
     line_counts = {}
     os.makedirs(output_directory, exist_ok=True)
-    for input_file in tqdm(input_files, desc="正在运行精确行去重"):
+    for input_file in input_files:
         with open(input_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line_hash = md5(line.strip().encode('utf-8')).hexdigest()
@@ -54,7 +70,7 @@ def convert_text_into_n_gram(n: int, text: str) -> set[tuple[str, ...]]:
                              每个n-gram本身是一个长度为n的字符串元组。
                               如果分词后的单词数少于n，则返回一个空集合。
     """
-    clean_words = text.replace('\n', ' ').replace('\r', ' ').lower().split()
+    clean_words = normalize_text_for_duplication(text).split()
     if len(clean_words) < n:
         return set()
     
@@ -103,8 +119,8 @@ def generate_hash_functions(num_hashes: int, max_hash: int = 2**32 - 1) -> List[
 
 def generate_signature_for_texts(input_files: List[os.PathLike],
                                  n: int,
-                                 num_hashed:int,
-                                 ) -> Tuple[Dict[int, np.ndarray], Dict[int, os.PathLike]]:
+                                 num_hashes:int,
+                                 ) -> Tuple[Dict[int, np.ndarray], Dict[int, os.PathLike], Dict[int, tuple[tuple[str, ...]]], List[int]]:
     """
     为输入文本文件生成MinHash签名。
     Args:
@@ -114,20 +130,23 @@ def generate_signature_for_texts(input_files: List[os.PathLike],
     Returns:
         Dict[str, np.ndarray]: 包含每个文件MinHash签名的字典，键为文件路径，值为对应的MinHash签名数组。
     """
-    hash_functions = generate_hash_functions(num_hashed)
-    id_signatures_dict = {}
-    path_ids_dict = {}
+    hash_functions = generate_hash_functions(num_hashes)
+    all_doc_ids = []
+    id_signatures_map = {}
+    id_paths_map = {}
+    id_n_gram_map = {}
     for i, input_file in tqdm(enumerate(input_files), desc="正在为文本生成MinHash签名"):
         doc_id = i
+        all_doc_ids.append(doc_id)
         with open(input_file, 'r', encoding='utf-8') as f:
             text = f.read()
             n_gram_set = convert_text_into_n_gram(n, text)
             signature = compute_minhash_signature(n_gram_set, hash_functions)
-            id_signatures_dict[doc_id] = signature
-            path_ids_dict[doc_id] = input_file
+            id_signatures_map[doc_id] = signature
+            id_paths_map[doc_id] = input_file
+            id_n_gram_map[doc_id] = tuple(n_gram_set)
 
-    return id_signatures_dict, path_ids_dict
-
+    return id_signatures_map, id_paths_map, id_n_gram_map, all_doc_ids
 
 def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: dict[int, np.ndarray]) -> set[tuple[int, ...]]:
     assert num_hashes % num_band == 0
@@ -150,8 +169,54 @@ def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: 
 
     return candidate_pairs
 
+def find_true_duplicate_pair(candidate_pairs: set[tuple[int,...]], id_n_gram_map: Dict[int, tuple[tuple[str,...]]], jaccard_threshold: float = 0.8) -> list[tuple[int, int]]:
+    true_duplicate_pairs = []
+    for pair in candidate_pairs:
+        doc_id1, doc_id2 = pair
+        ngrams_1_set, ngrams_2_set = set(id_n_gram_map[doc_id1]), set(id_n_gram_map[doc_id2])
 
+        intersection_set = ngrams_1_set & ngrams_2_set
+        union_set = ngrams_1_set | ngrams_2_set
+        jacccard_similiarity = len(intersection_set) / len(union_set)
+        if(jacccard_similiarity >= jaccard_threshold):
+            true_duplicate_pairs.append((doc_id1, doc_id2))
 
+    return true_duplicate_pairs
+
+def get_similar_cluster(all_doc_ids: List[Hashable], true_duplicate_pairs: List[Tuple[int, int]]) -> List[Set[int]]:
+    uf = UnionFind(all_doc_ids)
+    for (doc_id_1, doc_id_2) in true_duplicate_pairs:
+        uf.union(doc_id_1, doc_id_2)
+    
+    all_clusters = uf.get_clusters()
+    duplicate_clusters = [cluster for cluster in all_clusters if len(cluster) > 1]
+
+    return cast(List[Set[int]], duplicate_clusters)
+
+def remove_duplicate_ids(all_doc_ids: List[int], duplicate_clusters: List[Set[int]]) -> Set[int]:
+    all_doc_id_set = set(all_doc_ids)
+    remove_id_set = set()
+    for cluster in duplicate_clusters:
+        doc_list = sorted(list(cluster))
+        remove_id_set.update(doc_list[1:])
+
+    keep_id_set = all_doc_id_set - remove_id_set
+    return keep_id_set
+
+def minhash_deduplication(input_files: list[os.PathLike], num_hashes: int, num_bands: int, n: int, output_dir: os.PathLike, jaccard_threshold: float = 0.8):
+    id_signatures_map, id_paths_map, id_n_gram_map, all_doc_list = generate_signature_for_texts(input_files, n, num_hashes)
+    all_doc_hashable_list = cast(List[Hashable], all_doc_list)
+    candidate_pairs = get_lsh_candidate_pairs(num_hashes=num_hashes, num_band=num_bands, id_signatures_dict=id_signatures_map)
+    duplicate_pairs = find_true_duplicate_pair(candidate_pairs, id_n_gram_map, jaccard_threshold)
+    doc_id_to_keep = remove_duplicate_ids(all_doc_list, get_similar_cluster(all_doc_hashable_list, duplicate_pairs))
+
+    for doc_id in doc_id_to_keep:
+        input_file = id_paths_map[doc_id]
+        output_base_name = os.path.basename(input_file)
+        output_file = os.path.join(output_dir, output_base_name)
+        with open(input_file, 'r', encoding='utf-8') as in_file, open(output_file, 'w', encoding='utf-8') as out_file:
+            content = in_file.read()
+            out_file.write(content)
 
 
 # if __name__ == '__main__':
