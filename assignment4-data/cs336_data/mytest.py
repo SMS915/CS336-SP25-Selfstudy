@@ -1,9 +1,8 @@
 import random
 from tqdm import tqdm
 from fastwarc.warc import ArchiveIterator, WarcRecordType
-from cs336_data.extraction import extract_text
-from cs336_data.content_filter import identify_language, classify_nsfw
-from cs336_data.quality_filter import gopher_quality_filter
+from .extraction import extract_text
+from .filter import identify_language, classify_nsfw, gopher_quality_filter
 
 def analyze_languages_in_warc(warc_file_path: str, sample_size: int = 20, sample_factor: float = 5) -> None:
     """

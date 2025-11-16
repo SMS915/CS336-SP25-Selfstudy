@@ -2,8 +2,7 @@ import csv
 from typing import Optional
 from tqdm import tqdm
 from cs336_data.extraction import extract_text
-from cs336_data.content_filter import identify_language, classify_nsfw, classify_toxic_speech
-from cs336_data.quality_filter import gopher_quality_filter
+from .filter import identify_language, classify_nsfw, classify_toxic_speech, gopher_quality_filter
 from fastwarc.warc import ArchiveIterator, WarcRecordType
 
 def process_warc_to_csv(warc_path: str, csv_base_name: str, source_type: str,sample_size: Optional[int] = None, gopher_prefilter: bool = False) -> None:

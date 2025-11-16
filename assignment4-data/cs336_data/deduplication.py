@@ -8,7 +8,7 @@ import regex
 from nltk import ngrams
 from tqdm import tqdm
 from hashlib import md5
-from cs336_data.UF import UnionFind
+from .UF import UnionFind
 from functools import partial
 from typing import Optional, List, Dict, Tuple, Set, List, Callable, Hashable, cast
 from itertools import combinations
@@ -126,7 +126,7 @@ def generate_signature_for_texts(input_files: List[os.PathLike],
     Args:
         input_files (List[os.PathLike]): 输入文本文件路径列表。
         n (int): n-gram中单词的数量(n > 0)。
-        num_hashed (int): 用于MinHash签名计算的哈希函数数量。
+        num_hashes (int): 用于MinHash签名计算的哈希函数数量。
     Returns:
         Dict[str, np.ndarray]: 包含每个文件MinHash签名的字典，键为文件路径，值为对应的MinHash签名数组。
     """
@@ -218,10 +218,4 @@ def minhash_deduplication(input_files: list[os.PathLike], num_hashes: int, num_b
             content = in_file.read()
             out_file.write(content)
 
-
-# if __name__ == '__main__':
-#     test_n_gram_set = convert_text_into_n_gram(3, 'test converting \nthis string into n-gram test converting this')
-#     for n_gram in test_n_gram_set:
-#         print(type(n_gram))
-#         print(n_gram[i] for i in range(len(n_gram)))
 

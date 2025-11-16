@@ -3,11 +3,8 @@ from __future__ import annotations
 import os
 from typing import Any
 from cs336_data.extraction import extract_text
-from cs336_data.content_filter import  mask_email, mask_phone_number, mask_ip_address
-from cs336_data.content_filter import identify_language, classify_nsfw, classify_toxic_speech
-
-from cs336_data.quality_filter import gopher_quality_filter
-from cs336_data.quality_classifier import classify_quality
+from cs336_data.filter import *
+from cs336_data.quality_classifier import QualityClassifier
 from cs336_data.deduplication import exact_line_deduplication, minhash_deduplication
 
 
@@ -41,7 +38,13 @@ def run_classify_toxic_speech(text: str) -> tuple[Any, float]:
 
 
 def run_classify_quality(text: str) -> tuple[Any, float]:
-    return classify_quality('data/my_classifiers/quality_classifier_3gram.bin', text)
+    file_path = 'data/my_classifiers/quality_classifier_3gram.bin'
+    mapping = {
+                '__label__low_quality': 'cc',
+                '__label__high_quality': 'wiki'
+            }
+    classifier = QualityClassifier(file_path, mapping)
+    return classifier.predict(text)
 
 
 def run_gopher_quality_filter(text: str) -> bool:

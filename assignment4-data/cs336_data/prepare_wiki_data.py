@@ -3,11 +3,8 @@ import random
 from pathlib import Path
 random.seed(42)  # 设置随机种子以确保可重复性
 
-# --- 配置参数 ---
-# 输入文件：下载的维基百科URL列表
 INPUT_URL_GZ_FILE = Path("data/wiki/enwiki-20240420-extracted_urls.txt.gz")
 
-# 输出文件：抽样后用于wget的URL列表
 NUM_SAMPLES = 15000
 
 def sample_urls_from_gz(input_path: Path, k: int) -> None:
@@ -33,7 +30,7 @@ def sample_urls_from_gz(input_path: Path, k: int) -> None:
         for line in f:
             lines_seen += 1
             
-            # 水塘抽样核心逻辑
+            # 水塘抽样
             if len(reservoir) < k:
                 reservoir.append(line.strip())
             else:
@@ -41,7 +38,7 @@ def sample_urls_from_gz(input_path: Path, k: int) -> None:
                 if j < k:
                     reservoir[j] = line.strip()
 
-            # 打印进度，因为文件很大，给用户一些反馈
+            # 打印进度
             if lines_seen % 1_000_000 == 0:
                 print(f"  ...已处理 {lines_seen // 1_000_000}M 行...")
 
