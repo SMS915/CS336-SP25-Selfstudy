@@ -4,11 +4,11 @@ from resiliparse.parse import encoding
 
 def extract_text(byte_string: bytes) -> str:
     """
-    A function that takes a byte string containing HTML and returns a string containing the extracted text.
+    接受一个包含html内容的字节流，输出提取后的文本
     Args:
-        byte_string (bytes): A byte string containing HTML content.
+        byte_string (bytes): 一个包含html内容的字节流.
     Returns:
-        str: A string containing the extracted text.
+        str: 从html中提取出的文本.
     """
     if not byte_string:
         return ""

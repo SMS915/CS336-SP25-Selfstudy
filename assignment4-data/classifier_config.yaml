@@ -1,6 +1,6 @@
 data:
-  train_file: "data/classifiers_dataset/quality_classifier_remixed_2114.train_split"
-  valid_file: "data/classifiers_dataset/quality_classifier_remixed_2114.valid_split"
+  train_file: "data/classifiers_dataset/quality_classifier_remixed_2114.train" # 在这里修改路径指向 dataset_builder 筛选出的训练数据
+  test_file: "data/classifiers_dataset/quality_classifier_remixed_2114.valid"
   output_dir: "data/my_classifiers"
 
 
@@ -16,6 +16,6 @@ training:
   # ws: 5
 
 experiment:
-  name: "quality_classifier_remixed"
+  name: "quality_classifier"
   description: "A proper scale fast quality classifier for judging text quality at high speed"
   version: "v1.0"

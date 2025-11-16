@@ -31,7 +31,7 @@ def train_classifier(config, args):
     relative_train_file = args.input_file or config['data']['train_file']
     relative_output_dir = args.output_dir or config['model']['output_dir']
     train_file = config.get('data', {}).get('train_file')
-    valid_file = config.get('data', {}).get('valid_file')
+    test_file = config.get('data', {}).get('test_file')
     output_dir = str((SCRIPT_DIR / relative_output_dir).resolve())
     try:
         with open(train_file, 'r', encoding='utf-8') as f:
@@ -63,7 +63,7 @@ def train_classifier(config, args):
     )
 
     print("\n--- 训练完成！ ---")
-    result = model.test(valid_file)
+    result = model.test(test_file)
     accuracy, f1_score = result[1], result[2]
     print(f"样本数: {result[0]}")
     print(f"准确率: {result[1]}")

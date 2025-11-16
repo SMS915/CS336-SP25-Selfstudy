@@ -5,6 +5,7 @@ from typing import List, Literal, Optional, Tuple
 from fastwarc.warc import ArchiveIterator, WarcRecordType
 from .extraction import extract_text
 from .filter import judge_high_quality
+
 random.seed(42)
 
 
