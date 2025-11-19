@@ -64,6 +64,7 @@ def train_classifier(config, args):
 
     print("\n--- 训练完成！ ---")
     result = model.test(test_file)
+    fasttext.load_model
     accuracy, f1_score = result[1], result[2]
     print(f"样本数: {result[0]}")
     print(f"准确率: {result[1]}")
@@ -88,13 +89,3 @@ def train_classifier(config, args):
 
     model.save_model(model_path)
     print(f"模型已保存到: {model_path}")
-
-# if __name__ == "__main__":
-#     args = parse_arguments()
-#     try:
-#         config = load_config(args.config)
-#     except FileNotFoundError:
-#         print(f"错误：配置文件 {args.config} 未找到！")
-#         exit(1)
-
-#     train_classifier(config, args)

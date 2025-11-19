@@ -13,8 +13,7 @@ def process_warc_to_csv(warc_path: str, csv_base_name: str, source_type: str,sam
 
     具体来说，遍历指定的WARC文件，对每个有效文档执行所有已实现的质量评估函数
     （语言识别、NSFW/Toxic分类、Gopher规则等），并捕获每一个评估的原始输出
-    （包括标签和置信度分数）。所有这些信息，连同原始文本，都被结构化地
-    写入一个CSV行中。
+    （包括标签和置信度分数），连同原始文本结构化地写入一个CSV行中。
 
     生成CSV文件旨在被加载到数据分析环境中，以便
     可视化不同数据源（例如'wiki' vs 'cc'）下，各项质量分数的数据分布。

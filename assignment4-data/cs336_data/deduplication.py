@@ -10,7 +10,7 @@ from tqdm import tqdm
 from hashlib import md5
 from .UF import UnionFind
 from functools import partial
-from typing import Optional, List, Dict, Tuple, Set, List, Callable, Hashable, cast
+from typing import List, Dict, Tuple, Set, List, Callable, Hashable, cast
 from itertools import combinations
 from collections import defaultdict
 random_seed = 42

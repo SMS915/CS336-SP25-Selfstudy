@@ -110,16 +110,33 @@ def contains_alphabetic(word: str) -> bool:
     return any(char.isalpha() for char in word)
 
 def mask_email(text: str, replace_str: str = '|||EMAIL_ADDRESS|||') -> tuple[str, int]:
-    pattern = regex.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}') # {一串大于0长度的字母/数字/特定符号组合}@{一串大于0长度的字母/数字}.{长度大于1的字母串, 如co, com等}
+    # [a-zA-Z0-9._%+-]+   - 匹配用户名部分：一个或多个字母、数字或特殊符号(._%+-)。
+    # @                  - 匹配'@'符号。
+    # [a-zA-Z0-9.-]+     - 匹配域名部分：一个或多个字母、数字、点或连字符。
+    # \.                 - 匹配域名和顶级域名之间的点。
+    # [a-zA-Z]{2,}       - 匹配顶级域名：至少两个字母。
+    pattern = regex.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
     masked_text, num_subs = pattern.subn(replace_str, text)
     return masked_text, num_subs
 
 def mask_phone_number(text: str, replace_str: str = '|||PHONE_NUMBER|||') -> tuple[str, int]:
+    # (?<!\d)                        边界检查:负向后顾，要求匹配的号码前没有数字，避免从长数字中间匹配。
+    # (?: \+?1 [-\s\.]* )?           逻辑段1 (可选): 匹配美国国家代码 (+1 或 1) 和其后的分隔符。
+    # (?: \(\d{3}\) | \d{3} )        逻辑段2: 匹配区号, 格式为 "(123)" 或 "123"。
+    # [-\s\.]*                       逻辑段3: 匹配区号和号码主体之间的分隔符。
+    # \d{3}                          逻辑段4: 匹配号码主体的前三位数字。
+    # [-\s\.]*                       逻辑段5: 匹配号码主体中间的分隔符。
+    # \d{4}                          逻辑段6: 匹配号码主体的后四位数字。
+    # \b                             边界检查: 确保号码在此处结束，是一个完整的数字块。
     pattern = regex.compile(r'(?<!\d)(?:\+?1[-\s\.]*)?(?:\(\d{3}\)|\d{3})[-\s\.]*\d{3}[-\s\.]*\d{4}\b')
     masked_text, num_subs = pattern.subn(replace_str, text)
     return masked_text, num_subs
 
 def mask_ip_address(text:str, replace_str: str = '|||IP_ADDRESS|||') -> tuple[str, int]:
+    # \b               边界检查
+    # (?:\d{1,3}\.){3} 匹配 ip地址前面的三个 数字. 模式
+    # \d{1,3}          匹配最后的数字
+    # \b               边界检查,确保结尾是一个完整的数字块
     pattern = regex.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
     masked_text, num_subs = pattern.subn(replace_str, text)
     return masked_text, num_subs
