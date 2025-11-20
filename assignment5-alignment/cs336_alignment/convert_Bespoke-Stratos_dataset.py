@@ -103,7 +103,7 @@ def check_sft_data(output_path : str):
      with open(output_path, "r") as f:
             first_line = json.loads(f.readline())
             print("Prompt: ", end='  ')
-            print(first_line["prompt"][:200])
+            print(first_line["prompt"][-100:])
             print('Response: ', end="  ")
             print(first_line["response"][:200] + "...")
             f.close()

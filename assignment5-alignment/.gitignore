@@ -1,7 +1,8 @@
 *.bin
 models/
 data/
-
+checkpoints/
+wandb/
 nav
 tags
 
