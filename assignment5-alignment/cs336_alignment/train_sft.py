@@ -119,8 +119,6 @@ def train(config_path: str):
     # 加载验证集用于 Log Generation
     val_prompts = []
     for ex in valid_examples:
-        # 这里假设你在函数开头已经加载了 prompt_template 字符串
-        # 如果 prompt_template 是 None，请确保先读取它
         formatted_prompt = prompt_template.replace("{question}", ex["problem"])
         val_prompts.append(formatted_prompt)
         
@@ -191,16 +189,16 @@ def train(config_path: str):
 
                 # 5. 评估 (抽查生成)
                 if global_step % eval_every == 0:
-                    # 临时释放显存压力（如果有必要的话，但在 4090 上 pytorch 原生生成应该还好）
                     # torch.cuda.empty_cache()
-                    
+                    eval_max_tokens = config["evaluation"].get("max_new_tokens", 1024)
                     eval_stats = log_generations(
                         model=model,
                         tokenizer=tokenizer,
                         prompts=val_prompts,
                         ground_truths=val_truths,
                         reward_fn=r1_zero_reward_fn,
-                        num_examples_to_log=config["evaluation"]["num_examples_to_log"]
+                        num_examples_to_log=config["evaluation"]["num_examples_to_log"],
+                        max_new_tokens=eval_max_tokens
                     )
                     
                     # 合并日志

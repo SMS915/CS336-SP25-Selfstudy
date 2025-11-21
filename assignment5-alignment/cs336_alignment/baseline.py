@@ -79,8 +79,8 @@ def run_evalute(example_path: str, prompt_path: str, output_path: str, model_pat
 if __name__ == '__main__':
     EXAMPLE_PATH = 'data/MATH/validation.jsonl'
     PROMPT_PATH = 'cs336_alignment/prompts/r1_zero.prompt'
-    OUTPUT_PATH = 'results/baseline_result.jsonl'
-    MODEL_PATH = 'models/Qwen2.5-Math-1.5B'
+    OUTPUT_PATH = 'results/sft_v1_result.jsonl'
+    MODEL_PATH = 'checkpoints/sft_v1'
     os.makedirs('results', exist_ok=True)
     run_evalute(EXAMPLE_PATH, PROMPT_PATH, OUTPUT_PATH, MODEL_PATH)
 

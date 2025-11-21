@@ -3,13 +3,14 @@
 model:
   model_path: "models/Qwen2.5-Math-1.5B"
   dtype: "bfloat16"
-  attn_implementation: "flash_attention_2"
+  # attn_implementation: "flash_attention_2"
+  attn_implementation: "sdpa"
 
 data:
   train_path: "data/MATH/sft.jsonl"
   valid_path: "data/MATH/validation.jsonl"
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
-  max_seq_length: 2048  # 虽然代码里自动padding，但心里要有数
+  max_seq_length: 4096  # 虽然代码里自动padding，但心里要有数
   max_samples: 4000
 
 training:
@@ -28,6 +29,7 @@ training:
 evaluation:
   eval_every_steps: 5
   num_examples_to_log: 4
+  max_new_tokens: 2048
 
 wandb:
   project: "CS336-Assignment5-Alignment"
