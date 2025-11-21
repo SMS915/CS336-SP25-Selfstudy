@@ -65,8 +65,7 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
 def get_response_log_probs(model: torch.nn.Module, input_ids:torch.Tensor, labels: torch.Tensor, return_token_entropy: bool = False) -> Dict[str, torch.Tensor]:
     """
     Args:
-        model: PreTrainedModel, HuggingFace model used for scoring (placed on the correct device
-            and in inference mode if gradients should not be computed).
+        model: PreTrainedModel, HuggingFace model used for scoring (placed on the correct device and in inference mode if gradients should not be computed).
         input_ids: torch.Tensor, shape (batch_size, sequence_length), concatenated prompt +
                 response tokens as produced by your tokenization method.
         labels: torch.Tensor, shape (batch_size, sequence_length), labels as produced by your

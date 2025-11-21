@@ -1,0 +1,46 @@
+# configs/grop_config.yaml
+
+model:
+  model_path: "checkpoints/stf_v1"
+  dtype: "bfloat16"
+  # attn_implementation: "flash_attention_2"
+  attn_implementation: "sdpa"
+
+data:
+  train_path: "data/MATH/sft.jsonl"
+  valid_path: "data/MATH/validation.jsonl"
+  prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
+  max_seq_length: 4096  # 虽然代码里自动padding，但心里要有数
+  max_samples: 4000
+
+training:
+  output_dir: "checkpoints/grpo_v1"
+  n_grpo_steps: 200
+  learning_rate: 1.0e-5
+  advantage_eps: 1e-6
+  rollout_batch_size: 256
+  group_size: 8
+  sampling_temperature: 1.0
+  sampling_min_tokens: 4
+  sampling_max_tokens: 1024
+  epochs_per_rollout_batch: 1
+  train_batch_size: 256
+  
+  # 显存优化关键参数 (Target Total Batch Size = 128)
+  # 4090 (24G) 建议: micro=4, accum=32 -> 4*32=128
+  micro_batch_size: 1
+  gradient_accumulation_steps: 128
+  gpu_memory_utlization: 0.4
+  loss_type: "reinforce_with_baseline"
+  max_grad_norm: 1.0
+  save_steps: 1000  # 或者设大一点只存最后
+
+evaluation:
+  eval_every_steps: 5
+  num_examples_to_log: 4
+  max_new_tokens: 2048
+
+wandb:
+  project: "CS336-Assignment5-Alignment"
+  run_name: "grpo-qwen-1.5b-baseline"
+  entity: null 
