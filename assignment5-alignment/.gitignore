@@ -4,6 +4,7 @@ data/
 checkpoints/
 results/
 wandb/
+libs/
 nav
 tags
 

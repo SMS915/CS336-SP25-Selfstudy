@@ -63,9 +63,12 @@ def compute_grpo_clip_loss(advantages: torch.Tensor,
     with torch.no_grad():
         clipped_mask = (ratio > 1 + cliprange) | (ratio < 1 - cliprange)
         clipped_ratio = clipped_mask.float().mean()
+        log_ratio = policy_log_probs - old_log_probs
+        approx_kl = (log_ratio ** 2).mean() * 0.5
     metadata = {
         "clip_mask": clipped_mask,
-        "clip_ratio": clipped_ratio
+        "clip_ratio": clipped_ratio,
+        "approx_kl": approx_kl,
     }
     return loss, metadata
 
