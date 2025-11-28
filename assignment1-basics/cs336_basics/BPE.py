@@ -142,7 +142,7 @@ class BPETokenizer:
 
         # 2. 加载 merges.txt
         with open(merges_filepath, 'r', encoding='utf-8') as f:
-            lines = f.readlines()  # 跳过第一行
+            lines = f.readlines()
 
         merges = []
         for line in lines:
@@ -229,6 +229,10 @@ def train_bpe_run(input_path : str,
 
     # 训练bpe
     while len(vocab) < vocab_size:
+        count_it = pair_counts.get((b'i', b't'), 0)
+        count_ou = pair_counts.get((b'o', b'u'), 0)
+        if count_it != 0 or count_ou != 0:
+            print(f"DEBUG: 'it' freq: {count_it}, 'ou' freq: {count_ou}") 
         if not pair_counts:
             break
         max_count = max(pair_counts.values())
@@ -278,11 +282,11 @@ def train_bpe_run(input_path : str,
 
         del pair_counts[greatest_pair]
 
-    with open("vocab.pkl", "wb") as f:
-        pickle.dump(vocab, f)
+    # with open("vocab.pkl", "wb") as f:
+    #     pickle.dump(vocab, f)
 
-    with open("merges.pkl", "wb") as f:
-        pickle.dump(merges, f)
+    # with open("merges.pkl", "wb") as f:
+    #     pickle.dump(merges, f)
 
     return vocab, merges
 
