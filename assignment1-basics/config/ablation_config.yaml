@@ -23,10 +23,12 @@ rope_theta: 10000.0
 token_dtype: "uint16"
 post_norm: False
 no_norm: False
-use_silu: False
+gated_ffn: True
+activation: 'silu'
 Weight_Tying: False
 lr_schedule: 'cosine'
 gated_attn: True
+
 
 # Training Setting
 

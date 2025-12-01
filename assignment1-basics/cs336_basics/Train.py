@@ -74,7 +74,8 @@ def main():
         rope_theta=config['rope_theta'],
         post_norm=config.get('post_norm', False),
         no_norm = config.get('no_norm', False),
-        use_silu=config.get('use_silu', False),
+        gated_ffn=config.get('gated_ffn', True),
+        activation=config.get('activation', 'silu'),
         tie_weights=config.get('Weight_Tying', False),
         num_kv_heads=config.get('n_kv_heads', None),
         gated_attn=config.get('gated_attn', False)

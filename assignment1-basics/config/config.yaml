@@ -23,6 +23,8 @@ rope_theta: 10000.0
 token_dtype: "uint16"
 lr_schedule: 'wsd'
 Weight_Tying: True
+gated_ffn: True
+activation: "silu"
 # Training Setting
 
 max_learning_rate: 6e-4

@@ -150,7 +150,7 @@ def run_multihead_self_attention(
         implementation with the given QKV projection weights and input features.
     """
     # raise NotImplementedError
-    multi_head_attention_module = MultiHeadSelfAttention(d_model, num_heads)
+    multi_head_attention_module = MultiHeadSelfAttention(d_model, num_heads, flash_attn=False)
     state_dict = {'q_proj.W': q_proj_weight, 'k_proj.W': k_proj_weight, 'v_proj.W': v_proj_weight, 'out_proj.W': o_proj_weight}
     multi_head_attention_module.load_state_dict(state_dict)
     return multi_head_attention_module(in_features)
@@ -193,7 +193,7 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    multi_head_attention_module = MultiHeadSelfAttention(d_model, num_heads, max_seq_len, theta)
+    multi_head_attention_module = MultiHeadSelfAttention(d_model, num_heads, max_seq_len, theta, flash_attn=False)
     state_dict = {'q_proj.W': q_proj_weight, 'k_proj.W': k_proj_weight, 'v_proj.W': v_proj_weight,
                   'out_proj.W': o_proj_weight}
     multi_head_attention_module.load_state_dict(state_dict)
@@ -294,7 +294,7 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    transformer_block = TransformerBlock(d_model, num_heads, d_ff, theta, max_seq_len)
+    transformer_block = TransformerBlock(d_model, num_heads, d_ff, theta, max_seq_len, gated_ffn=True)
     state_dict = {"attn.q_proj.W": weights["attn.q_proj.weight"],
                   "attn.k_proj.W": weights["attn.k_proj.weight"],
                   "attn.v_proj.W": weights["attn.v_proj.weight"],
@@ -390,7 +390,7 @@ def run_transformer_lm(
         next-word distribution for each token.
     """
     transformer_lm = TransformerLM(vocab_size, context_length, d_model,
-                                   num_layers, num_heads, rope_theta, d_ff)
+                                   num_layers, num_heads, rope_theta, d_ff, gated_ffn=True)
     state_dict = {"embed.embed_matrix": weights["token_embeddings.weight"],
                   "norm_final.gamma": weights["ln_final.weight"],
                   "lm_head.W": weights["lm_head.weight"]}
