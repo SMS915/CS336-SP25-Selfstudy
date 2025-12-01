@@ -1,25 +1,82 @@
+from typing import Literal, Optional
 import torch
 from math import cos, pi
 from jaxtyping import Float
+import torch.nn.functional as F
 
 
 def Softmax(x: torch.Tensor, i: int = 0) -> torch.Tensor:
     scaled_x = x - torch.max(x, dim = i, keepdim=True)[0]
     return torch.exp(scaled_x) / torch.sum(torch.exp(scaled_x), dim = i, keepdim=True)
 
-def cross_entropy_loss(inputs: Float[torch.Tensor, " batch_size vocab_size"], target: Float[torch.Tensor, " batch_size"]) -> torch.Tensor:
-    max_logit = torch.max(inputs, dim = 1, keepdim = True)[0]
-    log_sum_exp = torch.log(torch.sum(torch.exp(inputs - max_logit), dim = 1, keepdim = True))
-    correct_log = torch.gather(inputs, -1, target.unsqueeze(-1))
-    return (max_logit + log_sum_exp - correct_log).mean()
+# def cross_entropy_loss(inputs: Float[torch.Tensor, " batch_size vocab_size"], target: Float[torch.Tensor, " batch_size"]) -> torch.Tensor:
+#     max_logit = torch.max(inputs, dim = 1, keepdim = True)[0]
+#     log_sum_exp = torch.log(torch.sum(torch.exp(inputs - max_logit), dim = 1, keepdim = True))
+#     correct_log = torch.gather(inputs, -1, target.unsqueeze(-1))
+#     return (max_logit + log_sum_exp - correct_log).mean()
 
-def get_lr_schedule(t: int, t_warm: int, t_cycle: int, lr_max: float, lr_min: float) -> Float:
-    if t < t_warm:
-        return t * lr_max / t_warm
-    elif t > t_cycle:
-        return lr_min
-    else:
-        return lr_min + (lr_max - lr_min) * (1 + cos((t - t_warm) * pi / (t_cycle - t_warm))) / 2
+# def cross_entropy_loss(inputs: Float[torch.Tensor, "batch_total vocab_size"], 
+#                        target: Float[torch.Tensor, "batch_total"], 
+#                        chunk_size: int = 4096) -> torch.Tensor:
+#     """
+#     内存高效的分块 Cross Entropy Loss 实现。
+#     避免一次性实例化巨大的 exp(logits) 矩阵。
+#     """
+#     n_samples = inputs.shape[0]
+#     total_loss = 0.0
+    
+#     # 将巨大的 (B*T, V) 矩阵切分成小块处理
+#     # chunk_size 4096 是一个经验值，既能利用 GPU 并行，又不会爆显存
+#     for i in range(0, n_samples, chunk_size):
+#         end = min(i + chunk_size, n_samples)
+        
+#         # Slicing 创建的是 View，不会复制数据，开销极小
+#         inputs_chunk = inputs[i:end]
+#         target_chunk = target[i:end]
+        
+#         # === 原始逻辑，但在小矩阵上运行 ===
+#         # 1. 获取最大值用于数值稳定 (Max Trick)
+#         max_logit = torch.max(inputs_chunk, dim=1, keepdim=True)[0]
+        
+#         # 2. 计算 LogSumExp
+#         # 这里的 exp 临时变量只占用 chunk_size * vocab 的显存 (约 400MB)，非常安全
+#         exp_logits = torch.exp(inputs_chunk - max_logit)
+#         log_sum_exp = torch.log(torch.sum(exp_logits, dim=1, keepdim=True))
+        
+#         # 3. 获取目标类别的 Logit
+#         correct_logit = torch.gather(inputs_chunk, -1, target_chunk.unsqueeze(-1))
+        
+#         # 4. 计算当前块的 Sum Loss
+#         # Loss = log(sum(exp)) - (target_logit - max_logit)
+#         #      = log_sum_exp + max_logit - correct_logit
+#         chunk_loss = log_sum_exp + max_logit - correct_logit
+        
+#         # 累加 Loss (注意要 sum，最后再除以总数)
+#         total_loss = total_loss + chunk_loss.sum()
+        
+#     return total_loss / n_samples
+
+def cross_entropy_loss(inputs, target):
+    return F.cross_entropy(inputs, target)
+
+def get_lr_schedule(t: int, t_warm: int, t_cycle: int, lr_max: float, lr_min: float, choice: Literal['cosine', 'wsd'] = 'cosine', t_max: Optional[int] = None) -> Float:
+    if choice == 'cosine':
+        if t < t_warm:
+            return t * lr_max / t_warm
+        elif t > t_cycle:
+            return lr_min
+        else:
+            return lr_min + (lr_max - lr_min) * (1 + cos((t - t_warm) * pi / (t_cycle - t_warm))) / 2
+    elif choice == 'wsd':
+        assert t_max is not None
+        if t < t_warm:
+            return t * lr_max / t_warm
+        elif t < t_cycle:
+            return lr_max
+        elif t < t_max:
+            return lr_max - (t - t_cycle) * (lr_max - lr_min) / (t_max - t_cycle)
+        else:
+            return lr_min 
 
 def clip_gradient(parameter: torch.nn.parameter, max_norm: float, eps: float = 1e-6):
     total_norm = 0
@@ -34,3 +91,5 @@ def clip_gradient(parameter: torch.nn.parameter, max_norm: float, eps: float = 1
         for p in parameter:
             if p.grad is not None:
                 p.grad.data.mul_(scale_factor)
+
+    return total_norm

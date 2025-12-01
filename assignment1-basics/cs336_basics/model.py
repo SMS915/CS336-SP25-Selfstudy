@@ -4,10 +4,12 @@ from typing import Optional
 import einx
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from einops import rearrange, einsum
 from jaxtyping import Float, Bool, Int
 
 from cs336_basics.utils import Softmax
+from torch.backends.cuda import SDPBackend
 
 
 class Linear(nn.Module):
@@ -18,7 +20,7 @@ class Linear(nn.Module):
         out_features (int): 每个输出样本的大小。
         W (nn.Parameter): 模块的可学习权重，形状为 (out_features, in_features)。
     """
-    def __init__(self, in_features : int, out_features : int, device : torch.device | None =None, dtype : torch.dtype | None =None):
+    def __init__(self, in_features : int, out_features : int, device : torch.device | None = None, dtype : torch.dtype | None = None):
         """
         Args:
            in_features (int): 输入特征的数量。
@@ -57,7 +59,7 @@ class Embedding(nn.Module):
         embedding_dim (int): 每个嵌入向量的维度。
         embed_matrix (nn.Parameter): 嵌入层的可学习权重。
     """
-    def __init__(self, num_embeddings: int, embedding_dim: int, device=None, dtype=None):
+    def __init__(self, num_embeddings: int, embedding_dim: int, device=None, dtype=None, weight_tying = False):
         """
         初始化 Embedding 模块。
 
@@ -73,8 +75,13 @@ class Embedding(nn.Module):
         self.device = device
         self.dtype = dtype
 
+
         self.embed_matrix = nn.Parameter(torch.empty(self.num_embeddings, self.embedding_dim, device = self.device, dtype = self.dtype, requires_grad=True))
-        nn.init.trunc_normal_(self.embed_matrix, mean = 0, std = 1, a = -3, b = 3)
+        if not weight_tying:
+            nn.init.trunc_normal_(self.embed_matrix, mean = 0, std = 1, a = -3, b = 3)
+        else:
+            std = (2 / (self.embedding_dim + self.num_embeddings)) ** 0.5
+            nn.init.trunc_normal_(self.embed_matrix, mean = 0, std = std, a = -3 * std, b = 3 * std)
 
     def forward(self, token_ids : torch.Tensor) -> torch.Tensor:
         """
@@ -141,7 +148,7 @@ class SwiGLU(nn.Module):
     SwiGLU 前馈网络模块，遵循 LLaMA 等现代Transformer架构。
     公式: FFN(x) = W2( SiLU(x @ W1) ⊙ (x @ W3) )
     """
-    def __init__(self, d_model: int, d_ff: int = None):
+    def __init__(self, d_model: int, d_ff: int = None, use_silu = False):
         """
         Args:
             d_model (int): 输入和输出维度。
@@ -152,7 +159,9 @@ class SwiGLU(nn.Module):
         self.d_ff = 64 *  ((round(self.d_model * 8/3) + 63) // 64) if d_ff is None else d_ff
         self.W1 = Linear(self.d_model, self.d_ff)
         self.W2 = Linear(self.d_ff, self.d_model)
-        self.W3 = Linear(self.d_model, self.d_ff)
+        self.use_silu = use_silu
+        if not self.use_silu:
+            self.W3 = Linear(self.d_model, self.d_ff)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -162,7 +171,7 @@ class SwiGLU(nn.Module):
         Returns:
             torch.Tensor: 输出张量。Shape: (..., d_model)
         """
-        return self.W2(SiLU(self.W1(x)) * self.W3(x))
+        return self.W2(SiLU(self.W1(x)) * self.W3(x)) if not self.use_silu else self.W2(SiLU(self.W1(x)))
 
 class RoPE(nn.Module):
     """
@@ -199,8 +208,8 @@ class RoPE(nn.Module):
         Returns:
             torch.Tensor: 应用RoPE后的张量。Shape: (batch_size, seq_len, d_k)
         """
-        # cos, sin = self.cos_table[token_positions].unsqueeze(1), self.sin_table[token_positions].unsqueeze(1)
-        cos, sin = self.cos_table[token_positions], self.sin_table[token_positions]
+        cos, sin = self.cos_table[token_positions].unsqueeze(1), self.sin_table[token_positions].unsqueeze(1)
+        # cos, sin = self.cos_table[token_positions], self.sin_table[token_positions]
         even_x, odd_x = rearrange(x, '... (d_half odd_even) -> odd_even ... d_half', odd_even=2)
         x1_rot = even_x * cos - odd_x * sin
         x2_rot = even_x * sin + odd_x * cos
@@ -241,7 +250,7 @@ class MultiHeadSelfAttention(nn.Module):
         num_heads (int): 注意力头的数量。
         rope (RoPE | None): 旋转位置编码模块。
     """
-    def __init__(self, d_model: int, num_heads: int, max_seq_len: int = None, theta: float = None):
+    def __init__(self, d_model: int, num_heads: int, max_seq_len: int = None, theta: float = None, num_kv_heads: int = None, gated_attn: bool = False):
         """
         初始化多头自注意力模块。
 
@@ -256,15 +265,29 @@ class MultiHeadSelfAttention(nn.Module):
         self.d_model = d_model
         self.num_heads = num_heads
         self.max_seq_len = max_seq_len
+        self.num_kv_heads = self.num_heads if num_kv_heads is None else num_kv_heads
+        self.gated_attn = gated_attn
+        # print(f"kv_heads_dim: {self.num_kv_heads}")
+
+        assert self.num_heads % self.num_kv_heads == 0
+        self.num_rep = self.num_heads // self.num_kv_heads
+        self.head_dim = self.d_model // self.num_heads
 
         self.d_k = self.d_v = self.d_model // self.num_heads
+
         self.q_proj = Linear(self.d_model, self.d_model)
-        self.k_proj = Linear(self.d_model, self.d_model)
-        self.v_proj = Linear(self.d_model, self.d_model)
+        self.k_proj = Linear(self.d_model, self.head_dim * self.num_kv_heads)
+        self.v_proj = Linear(self.d_model, self.head_dim * self.num_kv_heads)
 
         self.out_proj = Linear(self.d_model, self.d_model)
 
         self.rope = RoPE(theta, self.d_k, self.max_seq_len) if theta is not None and max_seq_len is not None else None
+
+        if self.gated_attn:
+            # Gating 投影层 (对应论文中的 W_theta)
+            self.gate_proj = nn.Linear(self.d_model, self.d_model, True)
+            nn.init.zeros_(self.gate_proj.weight)
+            nn.init.constant_(self.gate_proj.bias, 2.0)
 
     def forward(self, x : torch.Tensor, token_positions: torch.Tensor = None) -> torch.Tensor:
         """
@@ -285,22 +308,40 @@ class MultiHeadSelfAttention(nn.Module):
         value = self.v_proj(x)
         context_length = query.shape[1]
         queries_multi_head = rearrange(query, "b s (h d) -> b h s d", h=self.num_heads)
-        keys_multi_head = rearrange(key, "b s (h d) -> b h s d", h=self.num_heads)
-        values_multi_head = rearrange(value, "b s (h d) -> b h s d", h=self.num_heads)
+        # 注意, GQA情况下，reshape需要按照kv_head的维度进行调整, 进行分组投影
+        keys_multi_head = rearrange(key, "b s (h d) -> b h s d", h=self.num_kv_heads)
+        values_multi_head = rearrange(value, "b s (h d) -> b h s d", h=self.num_kv_heads)
 
-        mask = torch.tril(torch.ones(context_length, context_length, device=x.device, dtype=torch.bool), diagonal=0)
-        mask.unsqueeze_(0).unsqueeze_(0)
+        # mask = torch.tril(torch.ones(context_length, context_length, device=x.device, dtype=torch.bool), diagonal=0)
+        # mask.unsqueeze_(0).unsqueeze_(0)
         if self.rope is not None:
             if token_positions is None:
                 token_positions = torch.arange(context_length, device=x.device).unsqueeze(0).expand(query.shape[0], -1)
                 # token_positions = repeat(torch.arange(context_length, device=x.device), 's -> b s', b=x.shape[0])  # einops 版本
-            q_rope = self.rope(queries_multi_head, token_positions)
-            k_rope = self.rope(keys_multi_head, token_positions)
-            out = ScaledDotProductAttention(q_rope, k_rope, values_multi_head, mask) # b h s d
-        else:
-            out = ScaledDotProductAttention(queries_multi_head, keys_multi_head, values_multi_head, mask)
+            queries_multi_head = self.rope(queries_multi_head, token_positions)
+            keys_multi_head = self.rope(keys_multi_head, token_positions)
+        #     out = ScaledDotProductAttention(q_rope, k_rope, values_multi_head, mask) # b h s d
+        # else:
+        #     out = ScaledDotProductAttention(queries_multi_head, keys_multi_head, values_multi_head, mask)
+        if self.num_rep > 1:
+            # 将kv沿着head维度复制
+            keys_multi_head = keys_multi_head.repeat_interleave(self.num_rep, dim = 1)
+            values_multi_head = values_multi_head.repeat_interleave(self.num_rep, dim = 1)
+
+        out = F.scaled_dot_product_attention(
+            queries_multi_head, 
+            keys_multi_head, 
+            values_multi_head, 
+            attn_mask=None, 
+            dropout_p=0.0, 
+            is_causal=True 
+        )
+    
 
         out = rearrange(out, "b h s d -> b s (h d)", h=self.num_heads, d=self.d_v)
+        if self.gated_attn:
+            gate_score = torch.sigmoid(self.gate_proj(x))
+            out = gate_score * out
 
         return self.out_proj(out)
 
@@ -317,7 +358,8 @@ class TransformerBlock(nn.Module):
         attn (MultiHeadSelfAttention): 多头自注意力模块。
         ffn (SwiGLU): SwiGLU 前馈网络模块。
     """
-    def __init__(self, d_model: int, num_heads: int, d_ff: int = None,theta: float = None, max_seq_len: int = None):
+    def __init__(self, d_model: int, num_heads: int, d_ff: int = None,theta: float = None, max_seq_len: int = None, 
+                 post_norm = False, no_norm: bool = False, use_silu = False, num_kv_heads: int = None, gated_attn: bool = False):
         """
         初始化 TransformerBlock。
 
@@ -334,11 +376,20 @@ class TransformerBlock(nn.Module):
         self.d_ff = d_ff
         self.max_seq_len = max_seq_len
         self.theta = theta
+        self.post_norm = post_norm
+        self.use_silu = use_silu
+        self.num_kv_heads = num_kv_heads
+        self.gated_attn = gated_attn
 
-        self.norm1 = RMSNorm(self.d_model)
-        self.norm2 = RMSNorm(self.d_model)
-        self.attn = MultiHeadSelfAttention(self.d_model, self.num_heads, self.max_seq_len, self.theta)
-        self.ffn = SwiGLU(self.d_model, self.d_ff)
+        if not no_norm:
+            self.norm1 = RMSNorm(self.d_model)
+            self.norm2 = RMSNorm(self.d_model)
+        else:
+            self.norm1 = nn.Identity()
+            self.norm2 = nn.Identity()
+
+        self.attn = MultiHeadSelfAttention(self.d_model, self.num_heads, self.max_seq_len, self.theta, self.num_kv_heads, self.gated_attn)
+        self.ffn = SwiGLU(self.d_model, self.d_ff, self.use_silu)
 
     def forward(self, x: Float[torch.Tensor, "batch_size seq_len d_model"], token_positions: Float[torch.Tensor, "batch_size seq_len"] = None) -> torch.Tensor:
         """
@@ -354,8 +405,12 @@ class TransformerBlock(nn.Module):
             torch.Tensor: 输出张量。
                 形状: `(batch_size, seq_len, d_model)`。
         """
-        x = x + self.attn(self.norm1(x), token_positions)
-        x = x + self.ffn(self.norm2(x))
+        if self.post_norm:
+            x = self.norm1(x + self.attn(x, token_positions))
+            x = self.norm2(x + self.ffn(x))
+        else:    
+            x = x + self.attn(self.norm1(x), token_positions)
+            x = x + self.ffn(self.norm2(x))
 
         return x
 
@@ -371,7 +426,9 @@ class TransformerLM(nn.Module):
         num_heads (int): 注意力头的数量。
     """
     def __init__(self, vocab_size: int, context_length: int, d_model: int,
-                 num_layers: int, num_heads: int, rope_theta: float, d_ff: int = None):
+                 num_layers: int, num_heads: int, rope_theta: float, d_ff: int = None, tie_weights: bool = False,
+                 post_norm: bool = False, no_norm: bool = False, use_silu = False, num_kv_heads: int = None,
+                 gated_attn: bool = False):
         """
         初始化 TransformerLM 模型。
 
@@ -390,15 +447,33 @@ class TransformerLM(nn.Module):
         self.d_model = d_model
         self.num_layers = num_layers
         self.num_heads = num_heads
-        self.d_ff = d_ff
+        self.num_kv_heads = num_kv_heads
+        self.d_ff = d_ff if not use_silu else 4 * d_model
         self.rope_theta = rope_theta
+        self.post_norm = post_norm
+        self.no_norm = no_norm
+        self.use_silu = use_silu
+        self.gated_attn = gated_attn
 
-        self.embed = Embedding(self.vocab_size, self.d_model)
+
+        self.embed = Embedding(self.vocab_size, self.d_model, weight_tying=tie_weights)
         self.blocks = nn.ModuleList()
         for i in range(self.num_layers):
-            self.blocks.append(TransformerBlock(self.d_model, self.num_heads, self.d_ff, self.rope_theta, self.context_length))
-        self.norm_final = RMSNorm(self.d_model)
+            self.blocks.append(TransformerBlock(self.d_model, self.num_heads, self.d_ff, self.rope_theta, self.context_length, 
+                                                self.post_norm, self.no_norm, self.use_silu, self.num_kv_heads, self.gated_attn))
+        if not self.no_norm:
+            if not self.post_norm:
+                self.norm_final = RMSNorm(self.d_model)
+            else:
+                self.norm_final = nn.Identity()
+        else:
+            self.norm_final = nn.Identity()
+        
         self.lm_head = Linear(d_model, vocab_size)
+
+        if tie_weights:
+            self.lm_head.W = self.embed.embed_matrix
+            print("启用权重绑定")
 
     def forward(self, tokens: Int[torch.Tensor, "batch_size seq_len"], token_positions: Optional[Int[torch.Tensor, "batch_size seq_len"]] = None) -> torch.Tensor:
         """

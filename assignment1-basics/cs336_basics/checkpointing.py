@@ -24,13 +24,45 @@ def load_checkpoint(src: str | os.PathLike, model: torch.nn.Module, optimizer: t
     iteration = checkpoint['iteration']
     return iteration
 
-def load_amp_checkpoint(src: str | os.PathLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer,scaler: torch.cuda.amp.GradScaler):
-    checkpoint = torch.load(src)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    scaler.load_state_dict(checkpoint['scaler_state_dict'])
-    iteration = checkpoint['iteration']
-    return iteration
+# def load_amp_checkpoint(src: str | os.PathLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer,scaler: torch.cuda.amp.GradScaler):
+#     checkpoint = torch.load(src)
+#     model.load_state_dict(checkpoint['model_state_dict'])
+#     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+#     scaler.load_state_dict(checkpoint['scaler_state_dict'])
+#     iteration = checkpoint['iteration']
+#     return iteration
+
+def load_amp_checkpoint(path, model, optimizer=None, scaler=None):
+    checkpoint = torch.load(path, map_location='cpu')
+    
+    state_dict = checkpoint['model_state_dict']
+    
+    # 前缀清洗
+    is_model_compiled = hasattr(model, "_orig_mod") or "OptimizedModule" in type(model).__name__
+
+    new_state_dict = {}
+    
+    for k, v in state_dict.items():
+        if k.startswith("_orig_mod.") and not is_model_compiled:
+            new_key = k[10:]
+
+        elif not k.startswith("_orig_mod.") and is_model_compiled:
+            new_key = "_orig_mod." + k
+
+        else:
+            new_key = k
+            
+        new_state_dict[new_key] = v
+
+    model.load_state_dict(new_state_dict, strict=True)
+    
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    if scaler is not None and 'scaler_state_dict' in checkpoint:
+        scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        
+    return checkpoint['iteration']
 
 CKPT_PATTERN = re.compile(r"ckpt_step_(\d+)_loss_([\d\.]+)\.pt")
 

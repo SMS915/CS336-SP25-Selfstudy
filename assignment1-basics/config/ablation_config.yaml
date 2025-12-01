@@ -1,0 +1,51 @@
+# General Setting
+project_name: "CS336-TransformerLM-OpenWebText-ablation"
+seed: 42
+device: "cuda"  # options: "cuda" or "cpu"
+load_ckpt: False
+save_ckpt: False
+
+# Data Setting
+train_data_path: "data/owt_train.bin"
+val_data_path: "data/owt_valid.bin"
+
+batch_size: 64
+context_length: 256
+
+# Model Setting
+vocab_size: 50257
+n_layers: 4
+n_heads: 4
+n_kv_heads: null
+d_model: 256
+d_ff: null
+rope_theta: 10000.0
+token_dtype: "uint16"
+post_norm: False
+no_norm: False
+use_silu: False
+Weight_Tying: False
+lr_schedule: 'cosine'
+gated_attn: True
+
+# Training Setting
+
+max_learning_rate: 3e-4
+min_learning_rate: 3e-5
+max_steps: 20000
+weight_decay: 0.01
+max_grad_norm: 1.0
+warmup_steps: 2000
+cycle_steps: 18000
+log_interval: 100
+eval_interval: 500
+eval_steps: 50
+checkpoint_interval: 4000
+steps_per_epoch: 1000
+checkpoint_path: "./checkpoints/"
+
+# Optimizer_Setting
+beta1: 0.9
+beta2: 0.95
+eps: 1e-8
+
