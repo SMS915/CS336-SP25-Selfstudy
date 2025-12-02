@@ -4,7 +4,7 @@ import os
 import time
 import datetime
 from tqdm import tqdm
-from cs336_basics.FastBPE import BPETrainer
+from cs336_basics.FastBPE import BPETokenizer
 
 
 def main():
@@ -28,15 +28,15 @@ def main():
     print(f"--------------------------------")
 
     # 1. 实例化训练器
-    trainer = BPETrainer()
-
-    # 2. 开始训练 (你的代码中 train 方法返回了 vocab, merges)
-    # 注意：确保你的 train 方法签名与这里匹配
-    trainer.train(
+    trainer = BPETokenizer.train(
         input_path=args.input_path,
         vocab_size=args.vocab_size,
         special_tokens=args.special_tokens
     )
+
+    # 2. 开始训练 (你的代码中 train 方法返回了 vocab, merges)
+    # 注意：确保你的 train 方法签名与这里匹配
+
 
     # 3. 保存结果
     # 如果你已经在 train() 内部调用了 save()，这一步可以省略

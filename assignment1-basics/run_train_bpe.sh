@@ -6,10 +6,10 @@
 INPUT_DATA="data/owt_train.txt"
 
 # 2. 设置目标词表大小 (GPT-2 标准是 50257)
-VOCAB_SIZE=50257
+VOCAB_SIZE=32000
 
-# 3. 设置保存的文件名前缀 (会生成 gpt2_vocab.json 和 gpt2_merges.txt)
-SAVE_PREFIX="BPE_File/self_gpt"
+# 3. 设置保存的文件名前缀 (会生成 ..._vocab.json 和 ..._merges.txt)
+SAVE_PREFIX="BPE_File/self_gpt_owt"
 
 # 4. 设置特殊 Token (用空格分隔)
 SPECIAL_TOKENS="<|endoftext|>"
@@ -23,7 +23,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
 # 如果使用 uv 管理环境，确保已激活
-# source .venv/bin/activate
+source .venv/bin/activate
 
 # ================= 执行命令 =================
 
