@@ -31,7 +31,7 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     linear_layer = Linear(d_in, d_out)
-    weight_dict = {'W': weights}
+    weight_dict = {'weight': weights}
     linear_layer.load_state_dict(weight_dict)
     return linear_layer.forward(in_features)
 
@@ -90,7 +90,7 @@ def run_swiglu(
     # swiglu.w3.weight.data = w3_weight
     # raise NotImplementedError
     swiglu_module = SwiGLU(d_model, d_ff)
-    state_dict = {"W1.W" : w1_weight, "W2.W" : w2_weight, "W3.W" : w3_weight}
+    state_dict = {"ffn.W1.weight" : w1_weight, "ffn.W2.weight" : w2_weight, "ffn.W3.weight" : w3_weight}
     swiglu_module.load_state_dict(state_dict)
     return swiglu_module(in_features)
 
@@ -151,7 +151,7 @@ def run_multihead_self_attention(
     """
     # raise NotImplementedError
     multi_head_attention_module = MultiHeadSelfAttention(d_model, num_heads, flash_attn=False)
-    state_dict = {'q_proj.W': q_proj_weight, 'k_proj.W': k_proj_weight, 'v_proj.W': v_proj_weight, 'out_proj.W': o_proj_weight}
+    state_dict = {'q_proj.weight': q_proj_weight, 'k_proj.weight': k_proj_weight, 'v_proj.weight': v_proj_weight, 'out_proj.weight': o_proj_weight}
     multi_head_attention_module.load_state_dict(state_dict)
     return multi_head_attention_module(in_features)
 
@@ -194,8 +194,8 @@ def run_multihead_self_attention_with_rope(
         implementation with the given QKV projection weights and input features.
     """
     multi_head_attention_module = MultiHeadSelfAttention(d_model, num_heads, max_seq_len, theta, flash_attn=False)
-    state_dict = {'q_proj.W': q_proj_weight, 'k_proj.W': k_proj_weight, 'v_proj.W': v_proj_weight,
-                  'out_proj.W': o_proj_weight}
+    state_dict = {'q_proj.weight': q_proj_weight, 'k_proj.weight': k_proj_weight, 'v_proj.weight': v_proj_weight,
+                  'out_proj.weight': o_proj_weight}
     multi_head_attention_module.load_state_dict(state_dict)
     return multi_head_attention_module(in_features, token_positions)
 
@@ -295,15 +295,12 @@ def run_transformer_block(
         running the Transformer block on the input features while using RoPE.
     """
     transformer_block = TransformerBlock(d_model, num_heads, d_ff, theta, max_seq_len, gated_ffn=True)
-    state_dict = {"attn.q_proj.W": weights["attn.q_proj.weight"],
-                  "attn.k_proj.W": weights["attn.k_proj.weight"],
-                  "attn.v_proj.W": weights["attn.v_proj.weight"],
-                  "attn.out_proj.W": weights["attn.output_proj.weight"],
-                  "norm1.gamma": weights["ln1.weight"],
-                  "norm2.gamma": weights["ln2.weight"],
-                  "ffn.W1.W": weights["ffn.w1.weight"],
-                  "ffn.W2.W": weights["ffn.w2.weight"],
-                  "ffn.W3.W": weights["ffn.w3.weight"]}
+    state_dict = weights
+    state_dict["norm1.weight"] = state_dict.pop("ln1.weight")
+    state_dict["norm2.weight"] = state_dict.pop("ln2.weight")
+    state_dict["attn.out_proj.weight"] = state_dict.pop("attn.output_proj.weight")
+    for i in range(1, 4):
+        state_dict[f"ffn.W{i}.weight"] = state_dict.pop(f"ffn.w{i}.weight")
     transformer_block.load_state_dict(state_dict)
     return transformer_block(in_features)
 
@@ -391,19 +388,20 @@ def run_transformer_lm(
     """
     transformer_lm = TransformerLM(vocab_size, context_length, d_model,
                                    num_layers, num_heads, rope_theta, d_ff, gated_ffn=True)
+    
     state_dict = {"embed.embed_matrix": weights["token_embeddings.weight"],
-                  "norm_final.gamma": weights["ln_final.weight"],
-                  "lm_head.W": weights["lm_head.weight"]}
+                  "norm_final.weight": weights["ln_final.weight"],
+                  "lm_head.weight": weights["lm_head.weight"]}
 
     for i in range(num_layers):
-        state_dict[f"blocks.{i}.norm1.gamma"] = weights[f"layers.{i}.ln1.weight"]
-        state_dict[f"blocks.{i}.norm2.gamma"] = weights[f"layers.{i}.ln2.weight"]
-        state_dict[f"blocks.{i}.attn.q_proj.W"] = weights[f"layers.{i}.attn.q_proj.weight"]
-        state_dict[f"blocks.{i}.attn.k_proj.W"] = weights[f"layers.{i}.attn.k_proj.weight"]
-        state_dict[f"blocks.{i}.attn.v_proj.W"] = weights[f"layers.{i}.attn.v_proj.weight"]
-        state_dict[f"blocks.{i}.attn.out_proj.W"] = weights[f"layers.{i}.attn.output_proj.weight"]
+        state_dict[f"blocks.{i}.norm1.weight"] = weights[f"layers.{i}.ln1.weight"]
+        state_dict[f"blocks.{i}.norm2.weight"] = weights[f"layers.{i}.ln2.weight"]
+        state_dict[f"blocks.{i}.attn.q_proj.weight"] = weights[f"layers.{i}.attn.q_proj.weight"]
+        state_dict[f"blocks.{i}.attn.k_proj.weight"] = weights[f"layers.{i}.attn.k_proj.weight"]
+        state_dict[f"blocks.{i}.attn.v_proj.weight"] = weights[f"layers.{i}.attn.v_proj.weight"]
+        state_dict[f"blocks.{i}.attn.out_proj.weight"] = weights[f"layers.{i}.attn.output_proj.weight"]
         for j in range(1, 4):
-            state_dict[f"blocks.{i}.ffn.W{j}.W"] = weights[f"layers.{i}.ffn.w{j}.weight"]
+            state_dict[f"blocks.{i}.ffn.W{j}.weight"] = weights[f"layers.{i}.ffn.w{j}.weight"]
 
     transformer_lm.load_state_dict(state_dict)
     return transformer_lm(in_indices)
@@ -430,8 +428,7 @@ def run_rmsnorm(
     """
     # raise NotImplementedError
     rms_norm_layer = RMSNorm(d_model, eps)
-    state_dict = {"gamma" : weights}
-    rms_norm_layer.load_state_dict(state_dict)
+    rms_norm_layer.load_state_dict({"weight" :weights})
     return rms_norm_layer.forward(in_features)
 
 

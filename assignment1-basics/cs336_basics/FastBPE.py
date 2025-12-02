@@ -8,7 +8,6 @@ from collections import defaultdict, Counter
 
 BPAT = rb"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 Compiled_Byte_PAT = regex.compile(BPAT)
 Compiled_Str_PAT = regex.compile(PAT)
 
@@ -96,7 +95,6 @@ def _process_chunk_worker(args) -> Dict[bytes, int]:
                 #     token_bytes = token.encode('utf-8')
                 #     local_freqs[token_bytes] += 1
                 tokens_bytes = [t.encode('utf-8') for t in tokens_str]
-                # 3. 批量 update (Counter 底层是 C 实现)
                 local_freqs.update(tokens_bytes)
                     
     except Exception as e:
@@ -106,73 +104,119 @@ def _process_chunk_worker(args) -> Dict[bytes, int]:
 
 
 class Word:
-    """编码单词的当前状态，包括组成的token id,该单词的id和频率"""
+    """编码单词在BPE训练中的状态。
+    
+    Attribute:
+        id(int): 单词在词表中的索引
+    包括组成的token id,该单词的id和频率"""
     def __init__(self, token_ids: List[int], frequency: int, index: int):
         self.id = index
         self.freq = frequency
         self.tokens = token_ids
 
     def get_pairs(self) -> set[tuple[int, int]]:
+        """获取当前单词中所有相邻的token对"""
         return set(zip(self.tokens[:-1], self.tokens[1:]))
-    def merge(self, pair: tuple[int, int], new_token_id: int) -> tuple[Dict, Dict, Set]:
+    
+    def merge(self, target_pair: tuple[int, int], new_token_id: int) -> tuple[Dict, Dict, Set]:
+        """
+        在单词序列中执行合并操作，并计算产生的Pair变化
+
+        执行单次线性扫描，将序列中的所有对应pair替换成new_token_id
+        同时计算合并导致的断裂的对和生成的对，存入removed 和 add
+
+        Args:
+            pair (tuple[int, int]): 需要被合并的token_id对
+            new_token_id: 合并后新的token_id
+
+        Returns:
+            tuple[Dict, Dict, Set[Tuple[int, int]]]
+            包含三个元素的元组
+            1. removed (Dict[Tuple, int])
+               记录减少的Pair与减少的数量
+            2. added (Dict[Tuple, int])
+               记录新增的Pair和增加的数量
+            3. new_pairs (Set[Tuple[int, int]])
+               单词更新后的所有pair集合，用于更新倒排索引
+        """
         if len(self.tokens) < 2:
             return {}, {}, set(zip(self.tokens[:-1], self.tokens[1:]))
 
-        # 存储频率变化量: pair: delta
-        changes = defaultdict(int)
+        # 存储频率变化量: key=pair, value=变化次数delta
+        freq_deltas = defaultdict(int)
         
-        new_tokens = []
+        generated_tokens = []
         i = 0
         n = len(self.tokens)
-        p0, p1 = pair
-        # 记录上一个处理完的片段在"旧列表"中的最后一个 token
-        prev_old_tail = None
+        target_left, target_right = target_pair
+        # last_orig_suffix: 上一个处理完的片段在"原序列"中的最后一个 Token。
+        # 用于与"当前片段"的原序列头部进行连接检查。
+        last_orig_suffix = None
 
         while i < n:
-            # 判断是否是合并目标
-            is_merge = (i < n - 1 and self.tokens[i] == p0 and self.tokens[i+1] == p1)
+            # 检查当前位置是否匹配目标 Pair
+            # 只有不越界且左右都匹配时，才判定为合并
+            is_merge = (i < n - 1 and self.tokens[i] == target_left and self.tokens[i+1] == target_right)
             
             if is_merge:
-                current_new_token = new_token_id # 下一次merge的现有列表末为new_token
-                current_old_head = p0 # 记录当前列表头，以实现断裂逻辑
-                current_old_tail = p1 # 下一次merge的原有列表末为p1
+                # case1: 合并
+                # [target_left, target_right] -> 生成 Token: [new_token_id]
+                token_to_append = new_token_id
+
+                # 记录该片段在原序列中的"头"和"尾"，用于后续的边界一致性检查
+                curr_orig_prefix = target_left
+                curr_orig_suffix = target_right
                 
-                # 记录 Pair 本身的消失
-                changes[pair] -= 1
+                # Pair 本身被合并掉了，频率 -1
+                freq_deltas[target_pair] -= 1
                 
-                step = 2
+                step = 2 # 消耗两个旧token
             else:
-                current_new_token = self.tokens[i]
-                current_old_head = self.tokens[i]
-                current_old_tail = self.tokens[i]
-                step = 1
+                # case2: 不合并
+                # [..., t, ...] -> [..., t, ...]
+                current_token = self.tokens[i]
 
-            # 只处理左边界
-            if new_tokens:
-                # 上一个新token, 当前新token
-                prev_new_token = new_tokens[-1]
-                if (prev_new_token != prev_old_tail) or (current_new_token != current_old_head):
-                    changes[(prev_new_token, current_new_token)] += 1 # new_tokens中实际发生的变化
-                    changes[(prev_old_tail, current_old_head)] -= 1   # 该次/上次merge带来的变化
+                token_to_append = current_token
+                curr_orig_prefix = current_token
+                curr_orig_suffix = current_token
+                step = 1 # 消耗一个旧token
 
-            # --- 更新状态 ---
-            new_tokens.append(current_new_token)
-            prev_old_tail = current_old_tail
+            # 邻居边界检查
+            # 处理当前片段与上一个片段连接处的频率更新
+            # 若generated_tokens非空，则有左邻居片段，需要检查连接
+            if generated_tokens:
+                # 取出左侧刚刚生成的 Token
+                last_gen_suffix = generated_tokens[-1]
+
+                # 对比 "新序列的连接" 与 "原序列的连接" 是否一致
+                # 新连接: (last_gen_suffix, token_to_append)
+                # 旧连接: (last_orig_suffix, curr_orig_prefix)
+                # 如果不一致，说明因为合并发生了连接变化，需要记录
+                if (last_gen_suffix != last_orig_suffix) or (token_to_append != curr_orig_prefix):
+                    freq_deltas[(last_gen_suffix, token_to_append)] += 1
+                    freq_deltas[(last_orig_suffix, curr_orig_prefix)] -= 1
+
+            # 更新状态
+            generated_tokens.append(token_to_append)
+
+            # 当前片段处理完毕，它的"原尾部"变成下一轮循环的"上一个原尾部"
+            last_orig_suffix = curr_orig_suffix
             i += step
 
-        self.tokens = new_tokens
+        # 更新单词内部的token序列表示
+        self.tokens = generated_tokens
 
-        removed = {}
-        added = {}
+        removed_counts = {}
+        added_counts = {}
 
-        new_pairs = set(zip(self.tokens[:-1], self.tokens[1:]))
-        for p, delta in changes.items():
+        current_pairs_set = set(zip(self.tokens[:-1], self.tokens[1:]))
+        for p, delta in freq_deltas.items():
             if delta < 0:
-                removed[p] = -delta
+                removed_counts[p] = -delta
             elif delta > 0:
-                added[p] = delta
+                added_counts[p] = delta
         
-        return removed, added, new_pairs
+        return removed_counts, added_counts, current_pairs_set
 
 
 def pretokenizer(text: bytes):

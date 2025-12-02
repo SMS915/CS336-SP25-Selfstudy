@@ -35,10 +35,10 @@ class Linear(nn.Module):
         self.device = device
         self.dtype = dtype
 
-        self.W = nn.Parameter(torch.empty(self.out_features, self.in_features, device=self.device, dtype=self.dtype, requires_grad=True))
+        self.weight = nn.Parameter(torch.empty(self.out_features, self.in_features, device=self.device, dtype=self.dtype, requires_grad=True))
 
         std = (2 / (self.in_features + self.out_features)) ** 0.5
-        nn.init.trunc_normal_(self.W, mean = 0, std = std, a = -3 * std, b = 3 * std)
+        nn.init.trunc_normal_(self.weight, mean = 0, std = std, a = -3 * std, b = 3 * std)
 
     def forward(self, x : torch.Tensor) -> torch.Tensor:
         """
@@ -49,7 +49,7 @@ class Linear(nn.Module):
         Returns:
             torch.Tensor: 输出张量，形状为 `(..., out_features)`。
         """
-        return x @ self.W.T
+        return x @ self.weight.T
 
 class Embedding(nn.Module):
     """
@@ -124,7 +124,7 @@ class RMSNorm(nn.Module):
         self.device = device
         self.dtype = dtype
 
-        self.gamma = nn.Parameter(torch.ones(d_model).to(self.device), requires_grad=True)
+        self.weight = nn.Parameter(torch.ones(d_model).to(self.device), requires_grad=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -142,7 +142,7 @@ class RMSNorm(nn.Module):
         rms = torch.sqrt(x.pow(2).mean(dim = -1, keepdim=True) + self.eps)
         x_norm = x / rms
 
-        return (self.gamma * x_norm).to(input_type)
+        return (self.weight * x_norm).to(input_type)
 
 class SwiGLU(nn.Module):
     """
@@ -154,10 +154,10 @@ class SwiGLU(nn.Module):
         self.d_model = d_model
         self.d_ff = d_ff
 
-        self.ffn = FFN(d_model, d_ff, gated=True, activation='silu')
+        self.ffn = GatedFeedForward(d_model=self.d_model, d_ff=self.d_ff)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return ffn(x)
+        return self.ffn(x)
 
 def get_activation_fn(name: str):
     name = name.lower()
@@ -203,6 +203,8 @@ class StandardFeedForward(nn.Module):
 
 class GatedFeedForward(nn.Module):
     def __init__(self, d_model: int, d_ff: int = None, activation: str = "silu"):
+        super().__init__()
+        self.d_model = d_model
         self.d_ff = 64 * ((round(self.d_model * 8 / 3) + 63) // 64) if d_ff is None else d_ff
         self.W1 = Linear(self.d_model, self.d_ff)
         self.W2 = Linear(self.d_ff, self.d_model)
@@ -217,6 +219,7 @@ class GatedFeedForward(nn.Module):
 
 class FFN(nn.Module):
     def __init__(self, d_model: int, gated: bool, activation: str, d_ff: int = None):
+        super().__init__()
         self.d_model = d_model
         self.d_ff = d_ff
         self.gated = gated
@@ -261,23 +264,38 @@ class RoPE(nn.Module):
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x (torch.Tensor): 输入张量。Shape: (batch_size, d_h, seq_len, d_k)
+            x (torch.Tensor): 输入张量。Shape: (batch_size, d_h, seq_len, d_k) OR (batch_size, seq_len, d_k)
             token_positions (torch.Tensor): 每个token的绝对位置。Shape: (batch_size, seq_len)
         Returns:
             torch.Tensor: 应用RoPE后的张量。Shape: (batch_size, seq_len, d_k)
         """
-        cos, sin = self.cos_table[token_positions].unsqueeze(1), self.sin_table[token_positions].unsqueeze(1) # (batch_size, 1, seq_len, d_half)
-        # 按照最后一个维度两两奇偶拆分， 并将最后一个维度移到最前面
-        even_x, odd_x = rearrange(x, '... (d_half odd_even) -> odd_even ... d_half', odd_even=2) # Shape: (batch_size, d_h, seq_len, d_half)
+        cos = self.cos_table[token_positions]
+        sin = self.sin_table[token_positions]
+
+        # 1. 如果 x 是 4 维 (B, H, S, D)，说明包含 Head 维度。
+        # 2. 如果 token_positions 是 2 维 (B, S)，得到的 cos 是 (B, S, D)。
+        #    此时必须插入 Head 维度变成 (B, 1, S, D) 才能与 x (B, H, S, D) 正确广播。
+        # 3. 如果 token_positions 是 1 维 (S,)，得到的 cos 是 (S, D)。
+        #    PyTorch 会自动右对齐广播: (S, D) -> (1, 1, S, D)。
+
+        if x.ndim == 4 and token_positions.ndim == 2:
+            cos = cos.unsqueeze(1) # (B, S, D) -> (B, 1, S, D)
+            sin = sin.unsqueeze(1)
+
+        # 执行旋转
+        # 将 x 的最后一个维度 (d_k) 拆分为 (d_k/2, 2)，并将 2 移到前面以便计算
+        even_x, odd_x = rearrange(x, '... (d_half odd_even) -> odd_even ... d_half', odd_even=2)
+        
         x1_rot = even_x * cos - odd_x * sin
         x2_rot = even_x * sin + odd_x * cos
+        
         return einx.rearrange('... d_half, ... d_half -> ... (d_half (1 + 1))', x1_rot, x2_rot).contiguous()
 
-def ScaledDotProductAttention(Q: Float[torch.Tensor, "batch_size, num_q, q_seq_len, d_q"],
-                              K: Float[torch.Tensor, "batch_size, num_k, k_seq_len, d_k"],
-                              V: Float[torch.Tensor, "batch_size, num_v, v_seq_len, d_v"],
+def ScaledDotProductAttention(Q: Float[torch.Tensor, "batch_size num_q q_seq_len d_q"],
+                              K: Float[torch.Tensor, "batch_size num_k k_seq_len d_k"],
+                              V: Float[torch.Tensor, "batch_size num_v v_seq_len d_v"],
                               mask: Bool[torch.Tensor, "batch_size q_seq_len k_seq_len"] = None)\
-                              -> Float[torch.Tensor, "*batch_size q_seq_len d_v"]:
+                              -> Float[torch.Tensor, "batch_size q_seq_len d_v"]:
     """
    计算缩放点积注意力。
    公式: Attention(Q, K, V) = softmax( (Q @ K^T) / sqrt(d_k) ) @ V
@@ -291,23 +309,33 @@ def ScaledDotProductAttention(Q: Float[torch.Tensor, "batch_size, num_q, q_seq_l
    Returns:
        注意力输出。Shape: (*batch, query_seq_len, d_v)
    """
-    num_heads_q, num_heads_k = Q.shape[1], K.shape[1]
-    if num_heads_q != num_heads_k:
-        # GQA情况, Q 头与 K 头的数量不一致, 需要调整形状
-        n_rep = num_heads_q // num_heads_k
-        Q = rearrange(Q, 'b (h_kv n_rep) l d -> b h_kv n_rep l d', n_rep=n_rep)
-        K = rearrange(K, 'b h_kv l d -> b h_kv 1 l d', n_rep=n_rep)
-        V = rearrange(V, 'b h_kv l d -> b h_kv 1 l d', n_rep=n_rep)
+    is_gqa = False
+    if Q.ndim == 4:
+        num_heads_q, num_heads_k = Q.shape[1], K.shape[1]
+        if num_heads_q != num_heads_k:
+            # Q 的头数多于 K/V 的头数 (例如 Q=32, K=8, n_rep=4)
+            # 需要将 Q 的 Heads 维度拆解为 (Kv_Heads, Group_Size)。
+            # 同时将 K, V 的 Group 维度广播为 1，以便后续通过广播机制进行计算。
+            # 变换后: Q -> (B, H_kv, n_rep, L, D), K/V -> (B, H_kv, 1, L, D)
+            is_gqa = True
+            n_rep = num_heads_q // num_heads_k
+            Q = rearrange(Q, 'b (h_kv n_rep) l d -> b h_kv n_rep l d', n_rep=n_rep)
+            K = rearrange(K, 'b h_kv l d -> b h_kv 1 l d', n_rep=n_rep)
+            V = rearrange(V, 'b h_kv l d -> b h_kv 1 l d', n_rep=n_rep)
 
     d_k = K.shape[-1]
+
+    # einsum 自动处理广播。
+    # 标准 MHA: b h q d, b h k d -> b h q k
+    # GQA: b h_kv n_rep q d, b h_kv 1 k d -> b h_kv n_rep q k (K 的维度 1 自动广播匹配 n_rep)
     attn_scores = einsum(Q, K, "b ... q d, b ... k d -> b ... q k") / sqrt(d_k) # 计算缩放后的注意力分数
     if mask is not None: # 应用掩码
         attn_scores = torch.where(mask, attn_scores, float('-inf'))
     attn_weights = Softmax(attn_scores, -1) # 计算注意力权重
     output =  einsum(attn_weights, V, "b ... q k, b ... k d -> b ... q d")
 
-    if num_heads_q != num_heads_k:
-        # 如果是GQA情况，还原回去
+    if is_gqa:
+        # 计算完成后，将 (Kv_Heads, Group_Size) 重新合并回 (Total_Heads)
         output = rearrange(output, "b h_kv n_rep l d -> b (h_kv n_rep) l d")
 
     return output
@@ -401,8 +429,8 @@ class MultiHeadSelfAttention(nn.Module):
         context_length = query.shape[1]
         queries_multi_head = rearrange(query, "b l (h d) -> b h l d", h=self.num_heads)
         # GQA情况下，reshape按照kv_head的维度进行调整, 进行分组投影
-        keys_multi_head = rearrange(key, "b l (h_kv d) -> b h_kv l d", h=self.num_kv_heads) # H_kv 而不是 H
-        values_multi_head = rearrange(value, "b l (h_kv d) -> b h_kv l d", h=self.num_kv_heads)
+        keys_multi_head = rearrange(key, "b l (h_kv d) -> b h_kv l d", h_kv=self.num_kv_heads) # H_kv 而不是 H
+        values_multi_head = rearrange(value, "b l (h_kv d) -> b h_kv l d", h_kv=self.num_kv_heads)
 
         if self.rope is not None:
             if token_positions is None:
@@ -415,7 +443,7 @@ class MultiHeadSelfAttention(nn.Module):
 
         if not self.flash_attn:
             mask = torch.tril(torch.ones(context_length, context_length, device=x.device, dtype=torch.bool), diagonal=0)
-            mask = mask.view(1, 1, 1, context_length, context_length)
+            mask = mask.view(1, 1, context_length, context_length)
             out = ScaledDotProductAttention(queries_multi_head, keys_multi_head, values_multi_head, mask)
         else:
             out = F.scaled_dot_product_attention(
@@ -482,8 +510,10 @@ class TransformerBlock(nn.Module):
             self.norm2 = nn.Identity()
 
         self.attn = MultiHeadSelfAttention(self.d_model, self.num_heads, self.max_seq_len, self.theta, self.num_kv_heads, self.gated_attn, self.flash_attn)
-
-        self.ffn = FFN(self.d_model, self.d_ff, self.gated_ffn, self.activation)
+        if self.gated_ffn:
+            self.ffn = GatedFeedForward(d_model=self.d_model, d_ff=self.d_ff, activation=self.activation)
+        else:
+            self.ffn = StandardFeedForward(d_model=self.d_model, d_ff=self.d_ff, activation=self.activation)
 
     def forward(self, x: Float[torch.Tensor, "batch_size seq_len d_model"], token_positions: Float[torch.Tensor, "batch_size seq_len"] = None) -> torch.Tensor:
         """
@@ -571,7 +601,7 @@ class TransformerLM(nn.Module):
         self.lm_head = Linear(d_model, vocab_size)
 
         if tie_weights:
-            self.lm_head.W = self.embed.embed_matrix
+            self.lm_head.weight = self.embed.embed_matrix
             print("启用权重绑定")
 
     def forward(self, tokens: Int[torch.Tensor, "batch_size seq_len"], token_positions: Optional[Int[torch.Tensor, "batch_size seq_len"]] = None) -> torch.Tensor:

@@ -10,7 +10,7 @@ def generate_text(model: TransformerLM, tokenizer: BPETokenizer, prompt: str, ma
     model.eval()
     input_ids = tokenizer.encode(prompt)
     input_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)  # Shape: (1, seq_len)
-    input_tensor = input_tensor.to(model.lm_head.W.device)
+    input_tensor = input_tensor.to(model.lm_head.weight.device)
 
     with torch.no_grad():
         for _ in range(max_new_tokens):
@@ -31,7 +31,7 @@ def generate_text(model: TransformerLM, tokenizer: BPETokenizer, prompt: str, ma
                 next_token_logits[next_token_logits < kth_value] = -float('Inf')
             probabilities = Softmax(next_token_logits,-1)
             next_token_id = torch.multinomial(probabilities, num_samples=1).item()
-            input_tensor = torch.cat([input_tensor, torch.tensor([[next_token_id]], dtype=torch.long).to(model.lm_head.W.device)], dim=1)
+            input_tensor = torch.cat([input_tensor, torch.tensor([[next_token_id]], dtype=torch.long).to(model.lm_head.weight.device)], dim=1)
 
     generated_text = tokenizer.decode(input_tensor[0].tolist())
     return generated_text
