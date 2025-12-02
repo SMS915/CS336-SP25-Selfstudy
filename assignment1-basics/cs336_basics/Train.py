@@ -47,7 +47,6 @@ def main():
         config['eval_interval'] = int(config['eval_interval'])
         config['eval_steps'] = int(config['eval_steps'])
         config['checkpoint_interval'] = int(config['checkpoint_interval'])
-        config['steps_per_epoch'] = int(config['steps_per_epoch'])
         config['warmup_steps'] = int(config['warmup_steps'])
         config['cycle_steps'] = int(config['cycle_steps'])
     except (ValueError, TypeError, KeyError) as e:
@@ -78,6 +77,9 @@ def main():
         activation=config.get('activation', 'silu'),
         tie_weights=config.get('Weight_Tying', False),
         num_kv_heads=config.get('n_kv_heads', None),
+        pos_emb_type=config.get('pos_emb_type', 'rope'),
+        layer_norm=config.get('layer_norm', False),
+        bias=config.get('bias', False),
         gated_attn=config.get('gated_attn', False)
     ).to(device)
     model.count_params()

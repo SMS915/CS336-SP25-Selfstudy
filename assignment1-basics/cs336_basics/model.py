@@ -1,4 +1,4 @@
-from math import sqrt
+from math import sqrt, log
 from typing import Optional
 
 import einx
@@ -10,7 +10,6 @@ from jaxtyping import Float, Bool, Int
 from typing import Literal
 
 from cs336_basics.utils import Softmax
-from torch.backends.cuda import SDPBackend
 
 
 class Linear(nn.Module):
@@ -21,7 +20,7 @@ class Linear(nn.Module):
         out_features (int): 每个输出样本的大小。
         W (nn.Parameter): 模块的可学习权重，形状为 (out_features, in_features)。
     """
-    def __init__(self, in_features : int, out_features : int, device : torch.device | None = None, dtype : torch.dtype | None = None):
+    def __init__(self, in_features : int, out_features : int,bias: bool = False, device : torch.device | None = None, dtype : torch.dtype | None = None):
         """
         Args:
            in_features (int): 输入特征的数量。
@@ -37,8 +36,16 @@ class Linear(nn.Module):
 
         self.weight = nn.Parameter(torch.empty(self.out_features, self.in_features, device=self.device, dtype=self.dtype, requires_grad=True))
 
+        if bias:
+            self.bias = nn.Parameter(torch.empty(self.out_features, device=self.device, dtype=self.dtype))
+        else:
+            self.register_parameter('bias', None)
+
         std = (2 / (self.in_features + self.out_features)) ** 0.5
         nn.init.trunc_normal_(self.weight, mean = 0, std = std, a = -3 * std, b = 3 * std)
+
+        if self.bias is not None:
+            nn.init.zeros_(self.bias)
 
     def forward(self, x : torch.Tensor) -> torch.Tensor:
         """
@@ -49,7 +56,10 @@ class Linear(nn.Module):
         Returns:
             torch.Tensor: 输出张量，形状为 `(..., out_features)`。
         """
-        return x @ self.weight.T
+        output = x @ self.weight.T
+        if self.bias is not None:
+            output = output + self.bias
+        return output
 
 class Embedding(nn.Module):
     """
@@ -161,77 +171,36 @@ class SwiGLU(nn.Module):
 
 def get_activation_fn(name: str):
     name = name.lower()
-    if name == 'relu':
-        return F.relu
-    elif name == 'gelu':
-        return F.gelu
-    elif name == 'silu' or name == 'swish':
-        return F.silu
-    elif name == 'identity':
-        return lambda x: x
-    else:
-        raise NotImplementedError(f"未实现的激活函数: {name}")
+    if name == 'relu': return F.relu
+    elif name == 'gelu': return F.gelu
+    elif name == 'silu': return F.silu
+    elif name == 'identity': return lambda x: x
+    else: raise NotImplementedError(f"Unknown activation: {name}")
 
 class StandardFeedForward(nn.Module):
-    """
-    使用SiLU的前馈网络模块， 用于对比试验
-    公式: FFN(x) = W2(SiLU(x @ W1))
-    """
-
-    def __init__(self, d_model: int, d_ff: int = None, activation: str = 'silu'):
-        """
-        Args:
-            d_model (int): 输入和输出维度。
-            d_ff (int, optional): 隐藏层维度。若为None，则自动计算并对齐到64的倍数。
-        """
+    def __init__(self, d_model: int, d_ff: int = None, activation: str = 'silu', bias: bool = False):
         super().__init__()
         self.d_model = d_model
         self.d_ff = 4 * d_model if d_ff is None else d_ff
-        self.W1 = Linear(self.d_model, self.d_ff)
-        self.W2 = Linear(self.d_ff, self.d_model)
+        self.W1 = Linear(self.d_model, self.d_ff, bias=bias)
+        self.W2 = Linear(self.d_ff, self.d_model, bias=bias)
         self.act_fn = get_activation_fn(activation)
-        self.act_name = activation
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x (torch.Tensor): 输入张量。Shape: (..., d_model)
-        Returns:
-            torch.Tensor: 输出张量。Shape: (..., d_model)
-        """
         return self.W2(self.act_fn(self.W1(x)))
 
 class GatedFeedForward(nn.Module):
-    def __init__(self, d_model: int, d_ff: int = None, activation: str = "silu"):
+    def __init__(self, d_model: int, d_ff: int = None, activation: str = "silu", bias: bool = False):
         super().__init__()
         self.d_model = d_model
         self.d_ff = 64 * ((round(self.d_model * 8 / 3) + 63) // 64) if d_ff is None else d_ff
-        self.W1 = Linear(self.d_model, self.d_ff)
-        self.W2 = Linear(self.d_ff, self.d_model)
-        self.W3 = Linear(self.d_model, self.d_ff)
-
+        self.W1 = Linear(self.d_model, self.d_ff, bias=bias)
+        self.W2 = Linear(self.d_ff, self.d_model, bias=bias)
+        self.W3 = Linear(self.d_model, self.d_ff, bias=bias)
         self.act_fn = get_activation_fn(activation)
-        self.act_name = activation
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.W2(self.act_fn(self.W1(x)) * self.W3(x))
-
-
-class FFN(nn.Module):
-    def __init__(self, d_model: int, gated: bool, activation: str, d_ff: int = None):
-        super().__init__()
-        self.d_model = d_model
-        self.d_ff = d_ff
-        self.gated = gated
-        self.activation = activation
-
-        if self.gated:
-            self.ffn = GatedFeedForward(self.d_model, self.d_ff, self.activation)
-        else:
-            self.ffn = StandardFeedForward(self.d_model, self.d_ff, self.activation)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.ffn(x)
 
 
 class RoPE(nn.Module):
@@ -290,6 +259,32 @@ class RoPE(nn.Module):
         x2_rot = even_x * sin + odd_x * cos
         
         return einx.rearrange('... d_half, ... d_half -> ... (d_half (1 + 1))', x1_rot, x2_rot).contiguous()
+    
+class SinusoidalPositionalEncoding(nn.Module):
+    """
+    原版 Transformer 使用的固定正余弦位置编码。
+    不需要学习，直接相加。
+    """
+    def __init__(self, d_k: int, max_seq_len: int, device = None):
+        super().__init__()
+        # 创建一个足够长的 PE 矩阵
+        pe = torch.zeros(max_seq_len, d_k)
+        position = torch.arange(0, max_seq_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_k, 2).float() * (-log(10000.0) / d_k))
+        
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        
+        # 注册为 buffer
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [batch_size, seq_len, d_model]
+        # 截取对应长度的位置编码并相加
+        seq_len = x.size(1)
+        if seq_len > self.pe.size(0):
+            raise ValueError(f"输入序列长度{seq_len}大于最大序列长度{self.pe.size(0)}")
+        return x + self.pe[:seq_len, :].unsqueeze(0)
 
 def ScaledDotProductAttention(Q: Float[torch.Tensor, "batch_size num_q q_seq_len d_q"],
                               K: Float[torch.Tensor, "batch_size num_k k_seq_len d_k"],
@@ -353,7 +348,8 @@ class MultiHeadSelfAttention(nn.Module):
         rope (RoPE | None): 旋转位置编码模块实例。
         gated_attn (bool): 是否启用门控机制。
     """
-    def __init__(self, d_model: int, num_heads: int, max_seq_len: int = None, theta: float = None, num_kv_heads: int = None, gated_attn: bool = False, flash_attn = False):
+    def __init__(self, d_model: int, num_heads: int, max_seq_len: int = None, theta: float = None, 
+                 num_kv_heads: int = None, gated_attn: bool = False, flash_attn = False, bias: bool = False):
         """
         初始化多头自注意力模块。
 
@@ -386,13 +382,13 @@ class MultiHeadSelfAttention(nn.Module):
         self.head_dim = self.d_model // self.num_heads
         self.d_k = self.d_v = self.head_dim
         # Query 投影, (B, L, D)
-        self.q_proj = Linear(self.d_model, self.d_model)
+        self.q_proj = Linear(self.d_model, self.d_model, bias=bias)
 
         # Key/Value 投影, (B, L, D) -> (B, L, d_head * num_kv_heads) 注意，使用GQA的情况下可能小于d_model
-        self.k_proj = Linear(self.d_model, self.head_dim * self.num_kv_heads)
-        self.v_proj = Linear(self.d_model, self.head_dim * self.num_kv_heads)
+        self.k_proj = Linear(self.d_model, self.head_dim * self.num_kv_heads, bias=bias)
+        self.v_proj = Linear(self.d_model, self.head_dim * self.num_kv_heads, bias=bias)
 
-        self.out_proj = Linear(self.d_model, self.d_model)
+        self.out_proj = Linear(self.d_model, self.d_model, bias=bias)
 
         # rope初始化
         self.rope = RoPE(theta, self.d_k, self.max_seq_len) if theta is not None and max_seq_len is not None else None
@@ -475,10 +471,10 @@ class TransformerBlock(nn.Module):
         attn (MultiHeadSelfAttention): 多头自注意力模块。
         ffn (SwiGLU): SwiGLU 前馈网络模块。
     """
-    def __init__(self, d_model: int, num_heads: int, d_ff: int = None,theta: float = None,
+    def __init__(self, d_model: int, num_heads: int, d_ff: int = None, theta: float = None,
                  max_seq_len: int = None, gated_ffn: bool = True, activation: str = 'silu',
                  post_norm = False, no_norm: bool = False, num_kv_heads: int = None, gated_attn: bool = False,
-                 flash_attn: bool = False):
+                 layer_norm: bool = False,bias: bool = False, flash_attn: bool = False):
         """
         初始化 TransformerBlock。
 
@@ -500,20 +496,29 @@ class TransformerBlock(nn.Module):
         self.activation = activation
         self.num_kv_heads = num_kv_heads
         self.gated_attn = gated_attn
+        self.layer_norm = layer_norm
+        self.bias = bias
         self.flash_attn = flash_attn
 
-        if not no_norm:
+        if no_norm:
+            self.norm1 = nn.Identity()
+            self.norm2 = nn.Identity()
+        elif not self.layer_norm:
             self.norm1 = RMSNorm(self.d_model)
             self.norm2 = RMSNorm(self.d_model)
         else:
-            self.norm1 = nn.Identity()
-            self.norm2 = nn.Identity()
+            self.norm1 = nn.LayerNorm(self.d_model)
+            self.norm2 = nn.LayerNorm(self.d_model)
+            
 
-        self.attn = MultiHeadSelfAttention(self.d_model, self.num_heads, self.max_seq_len, self.theta, self.num_kv_heads, self.gated_attn, self.flash_attn)
+        self.attn = MultiHeadSelfAttention(d_model=self.d_model, num_heads=self.num_heads, 
+                                           max_seq_len=self.max_seq_len, theta=self.theta, 
+                                           num_kv_heads=self.num_kv_heads, gated_attn=self.gated_attn, 
+                                           bias=self.bias, flash_attn=self.flash_attn)
         if self.gated_ffn:
-            self.ffn = GatedFeedForward(d_model=self.d_model, d_ff=self.d_ff, activation=self.activation)
+            self.ffn = GatedFeedForward(d_model=self.d_model, d_ff=self.d_ff, activation=self.activation, bias=bias)
         else:
-            self.ffn = StandardFeedForward(d_model=self.d_model, d_ff=self.d_ff, activation=self.activation)
+            self.ffn = StandardFeedForward(d_model=self.d_model, d_ff=self.d_ff, activation=self.activation, bias=bias)
 
     def forward(self, x: Float[torch.Tensor, "batch_size seq_len d_model"], token_positions: Float[torch.Tensor, "batch_size seq_len"] = None) -> torch.Tensor:
         """
@@ -550,10 +555,11 @@ class TransformerLM(nn.Module):
         num_heads (int): 注意力头的数量。
     """
     def __init__(self, vocab_size: int, context_length: int, d_model: int,
-                 num_layers: int, num_heads: int, rope_theta: float, d_ff: int = None, tie_weights: bool = False,
+                 num_layers: int, num_heads: int, rope_theta: float = None, d_ff: int = None, tie_weights: bool = False,
                  post_norm: bool = False, no_norm: bool = False, num_kv_heads: int = None,
                  gated_attn: bool = False, gated_ffn: bool = True, activation: str = 'silu',
-                 flash_attn = False):
+                 flash_attn = False, absolute_pe: bool = False, pos_emb_type: Literal['rope', 'sinusoidal', 'learned', 'removed'] = 'rope', layer_norm: bool = False,
+                 bias: bool = False):
         """
         初始化 TransformerLM 模型。
 
@@ -568,31 +574,52 @@ class TransformerLM(nn.Module):
         """
         super().__init__()
         self.vocab_size = vocab_size
-        self.context_length = context_length
         self.d_model = d_model
         self.num_layers = num_layers
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
         self.d_ff = d_ff
-        self.rope_theta = rope_theta
+        self.context_length = context_length
         self.post_norm = post_norm
         self.no_norm = no_norm
         self.gated_attn = gated_attn
         self.gated_ffn = gated_ffn
         self.activation = activation
+        self.absolute_pe = absolute_pe
+        self.pos_emb_type = pos_emb_type
+        self.layer_norm = layer_norm
+        self.bias = bias
         self.flash_attn = flash_attn
-
         self.embed = Embedding(self.vocab_size, self.d_model, weight_tying=tie_weights)
+
+        if pos_emb_type != 'rope':
+            self.rope_theta = None
+            if self.pos_emb_type == 'learned':
+                self.pos_embed = nn.Embedding(context_length, d_model)
+            elif self.pos_emb_type == 'removed':
+                self.pos_embed = None
+            elif self.pos_emb_type == 'sinusoidal':
+                self.pos_embed = SinusoidalPositionalEncoding(self.d_model, self.context_length)
+            else:
+                raise ValueError(f"未知的位置编码类型{pos_emb_type}")
+        else:
+             self.rope_theta = rope_theta
+
         self.blocks = nn.ModuleList()
         for i in range(self.num_layers):
             self.blocks.append(TransformerBlock(d_model = d_model, num_heads = self.num_heads, d_ff = self.d_ff,
                                                 theta=self.rope_theta, max_seq_len=self.context_length,
                                                 gated_ffn=self.gated_ffn, activation=self.activation,
-                                                post_norm=self.post_norm, no_norm=self.no_norm,
-                                                num_kv_heads=self.num_kv_heads, gated_attn=self.gated_attn, flash_attn=self.flash_attn))
+                                                post_norm=self.post_norm,
+                                                num_kv_heads=self.num_kv_heads, gated_attn=self.gated_attn, 
+                                                layer_norm = self.layer_norm,
+                                                bias = self.bias, flash_attn=self.flash_attn))
         if not self.no_norm:
             if not self.post_norm:
-                self.norm_final = RMSNorm(self.d_model)
+                if layer_norm:
+                    self.norm_final = nn.LayerNorm(self.d_model, bias=True)
+                else:
+                    self.norm_final = RMSNorm(self.d_model)
             else:
                 self.norm_final = nn.Identity()
         else:
@@ -619,12 +646,36 @@ class TransformerLM(nn.Module):
                 形状: `(batch_size, seq_len, vocab_size)`。
         """
         x = self.embed(tokens)  # batch_size seq_len d_model
-        if token_positions is None:
-            batch_size = tokens.shape[0]
-            seq_len = tokens.shape[1]
-            token_positions = torch.arange(seq_len, device=x.device).unsqueeze(0).expand(batch_size, -1)
-        for block in self.blocks:
-            x = block(x, token_positions)
+        if self.pos_emb_type == 'learned':
+            # 1. 可学习绝对位置编码
+            assert self.pos_embed is not None
+            batch_size, seq_len = tokens.shape
+            pos = torch.arange(seq_len, dtype=torch.long, device=tokens.device)
+            x = x + self.pos_embed(pos)
+            # 不需要 RoPE 的 token_positions
+            for block in self.blocks:
+                x = block(x, token_positions=None) 
+
+        elif self.pos_emb_type == 'sinusoidal':
+            # 2. 固定正余弦位置编码
+            assert self.pos_embed is not None
+            x = self.pos_embed(x)
+            for block in self.blocks:
+                x = block(x, token_positions=None)
+
+        elif self.pos_emb_type == 'removed':
+            # 3. 不添加位置编码，验证模型直接学习位置关系的假设
+            for block in self.blocks:
+                x = block(x, token_positions=None)
+        else:
+            # 4. 旋转位置编码，用绝对位置编码相对位置信息
+            if token_positions is None:
+                batch_size, seq_len = tokens.shape
+                token_positions = repeat(torch.arange(seq_len, device=tokens.device), 's -> b s', b=batch_size)
+            
+            for block in self.blocks:
+                x = block(x, token_positions)
+
         x = self.norm_final(x)
         x = self.lm_head(x) # batch_size seq_len vocab_size
         return x

@@ -1,0 +1,68 @@
+# base_config.yaml
+# ==========================================
+# 1. 基础与系统设置 (General & System)
+# ==========================================
+project_name: "CS336-TransformerLM-OpenWebText"
+seed: 42                                  # 固定随机种子，保证实验可复现
+device: "cuda"                            # 训练设备
+load_ckpt: False                          # 是否加载旧权重（Resume Training）
+save_ckpt: True                           # 是否保存权重
+checkpoint_path: "checkpoints/"           # 权重保存路径
+
+# ==========================================
+# 2. 数据设置 (Data Configuration)
+# ==========================================
+train_data_path: "data/owt_train.bin"     # 预处理好的二进制训练数据
+val_data_path: "data/owt_valid.bin"       # 验证数据
+batch_size: 16                            # 单卡单次前向传播的样本数
+context_length: 1024                      # 序列长度 (Sequence Length)
+token_dtype: "uint16"                     # 数据存储精度，uint16 可节省内存
+
+# ==========================================
+# 3. 模型架构设置 (Model Architecture)
+# ==========================================
+vocab_size: 50257                         # 词表大小 (GPT-2 tokenizer)
+n_layers: 12                              # Transformer 层数
+n_heads: 8                                # 注意力头数
+d_model: 512                              # 嵌入维度 (Embedding Dimension)
+d_ff: null                                # FFN 隐层维度 (null 表示自动计算，通常 SwiGLU 为 8/3 * d_model)
+n_kv_heads: null                          # KV 头数 (null 表示等于 n_heads，即不使用 GQA/MQA)
+
+activation: "silu"                        # 激活函数 ['silu', 'relu', 'gelu' 等] (SiLU 通常配合 Gated FFN 使用)
+gated_ffn: True                           # 开启 Gated FFN (即 SwiGLU 结构)
+gated_attn: False                         # 开启 Gated Attention (通常为 False)
+Weight_Tying: True                        # 共享 Input Embedding 和 Output Projection 权重
+
+post_norm: True                           # Post-Norm (注意：Pre-Norm 训练更稳定，这里选 True 可能是为了复现特定结构)
+layer_norm: True                          # 使用 LayerNorm (若为 False 则通常使用 RMSNorm)
+no_norm: False                            # 安全开关：是否完全移除 Norm
+
+pos_emb_type: 'rope'                      # 'rope': 旋转位置编码; 'sinusoidal': 正弦位置编码; 'learned': 嵌入矩阵学习位置编码; 'removed': 无位置编码
+rope_theta: 10000.0                       # RoPE 的波长基数
+bias: False                               # 禁用 Linear 层偏置 (现代 LLM 常见做法)
+
+# ==========================================
+# 4. 训练流程设置 (Training Loop)
+# ==========================================
+max_steps: 2500                           # 总训练步数
+warmup_steps: 200                         # 学习率预热步数
+cycle_steps: 2000                         # 调度器周期 (用于 Cosine/WSD decay)
+accumulate_size: 32                       # 梯度累积步数 (真实 Batch Size = 16 * 32 = 512)
+
+log_interval: 50                          # WandB/控制台打印频率
+eval_interval: 500                        # 验证集评估频率
+eval_steps: 50                            # 每次评估使用的 Batch 数量
+checkpoint_interval: 500                  # 模型保存频率
+
+# ==========================================
+# 5. 优化器与调度器 (Optimizer & Scheduler)
+# ==========================================
+lr_schedule: 'wsd'                        # 调度器：WSD (Warmup-Stable-Decay) 是一种现代策略
+max_learning_rate: 6e-4                   # 峰值学习率
+min_learning_rate: 6e-5                   # 衰减终点学习率
+weight_decay: 0.1                         # 权重衰减 (通常 0.1 适合 AdamW)
+max_grad_norm: 1.0                        # 梯度裁剪阈值
+
+beta1: 0.9                                # AdamW Beta1
+beta2: 0.95                               # AdamW Beta2
+eps: 1e-8                                 # 数值稳定性项

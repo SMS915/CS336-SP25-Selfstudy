@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=0
 export PYTHONPATH="${PYTHONPATH}:."
 
 # 默认参数
-CONFIG_PATH="config/config.yaml"
+CONFIG_PATH="configs/config.yaml"
 DEFAULT_PROMPT="The future of artificial intelligence is"
 
 # 获取命令行传入的 Prompt，如果没有则使用默认值

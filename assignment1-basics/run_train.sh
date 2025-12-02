@@ -2,7 +2,7 @@
 
 # --- 配置区域 ---
 # 指定你要使用的配置文件路径
-CONFIG_PATH="configs/config.yaml"
+CONFIG_PATH="configs/vanilla_based_config.yaml"
 
 # 指定使用的 GPU
 export CUDA_VISIBLE_DEVICES=0
@@ -20,7 +20,7 @@ python cs336_basics/Train.py --config "$CONFIG_PATH"
 
 # 如果训练成功，打印提示
 if [ $? -eq 0 ]; then
-    echo "✅ Training completed successfully!"
+    echo "✅ 训练成功"
 else
-    echo "❌ Training failed!"
+    echo "❌ 训练失败"
 fi
