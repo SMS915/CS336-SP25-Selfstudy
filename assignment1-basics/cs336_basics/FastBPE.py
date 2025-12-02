@@ -90,50 +90,110 @@ def _process_chunk_worker(args) -> Dict[bytes, int]:
 
 
 class Word:
-    """编码单词在BPE训练中的状态。"""
+    """
+    编码单词在BPE训练中的状态,包括组成的token id,该单词的id和频率。
+    
+    Attribute:
+        id(int): 单词在词表中的索引
+    """
     def __init__(self, token_ids: List[int], frequency: int, index: int):
+        """
+        Args:
+            token_ids (List[int]): (初始情况下)构成该word的token的对应id序列
+            freq (int): 语料中这个word的频率, 供一次更新一类word的所有相关数量信息
+            index (int): 单词集中该word的唯一id
+        """
         self.id = index
         self.freq = frequency
         self.tokens = token_ids
 
     def get_pairs(self) -> set[tuple[int, int]]:
+        """获取word中所有相邻token_id对"""
         return set(zip(self.tokens[:-1], self.tokens[1:]))
     
     def merge(self, target_pair: tuple[int, int], new_token_id: int) -> tuple[Dict, Dict, Set]:
+        """
+        在当前单词的token序列中执行合并操作，并记录pair的变化信息
+
+        执行一次线性扫描，构建一个新的 Token 序列（Generated Sequence）
+        在此过程中，它将原序列（Original Sequence）中的目标 Pair 替换为新 Token
+        并对比"新旧序列"在片段连接处的边界差异，从而统计频率变化。
+
+        具体来说，每次迭代
+        对于原序列中相邻的两个片段 A 和 B ( ... A, B ... )：
+            1. 旧接口 (Old Interface): 由 A 在原序列的"尾部" 和 B 在原序列的"头部" 组成。
+            2. 新接口 (New Interface): 由 A 在新序列的 Token 和 B 在新序列的 Token 组成。
+
+        这里的"片段"，可能是一个pair构成一个片段，也可能是一个token构成一个片段，视情况而定,意义是代表新序列中的一个token单元的来源
+
+        如果 (新接口 != 旧接口)，说明合并操作改变了 A 与 B 之间的上下文环境：
+            - 旧接口对应的 Pair 断裂 (removed)
+            - 新接口对应的 Pair 生成 (added)
+
+        Args:
+            target_pair (Tuple[int, int]): 需要被合并的目标token_id对
+            new_token_id (int): target_pair合并后的token对应id
+
+        Returns:
+            removed_counts, add_counts, new_pairs: Tuple[Dict, Dict, Set[Tuple[int, int]]]
+            
+            removed_counts (Dict[Tuple, int]): 断裂(减少)的pair与减少的数量
+            add_counts (Dict[Tuple, int]): 生成(增加)的pair与数量
+            new_pairs (Set[Tuple[int, int]]): 更新后word中所有pair的集合，供更新索引
+        """
         if len(self.tokens) < 2:
             return {}, {}, set(zip(self.tokens[:-1], self.tokens[1:]))
 
-        freq_deltas = defaultdict(int)
+        freq_deltas = defaultdict(int) # 存储频率变化量: key=pair, value=delta
+
         generated_tokens = []
         i = 0
         n = len(self.tokens)
         target_left, target_right = target_pair
-        last_orig_suffix = None
+
+        # last_orig_suffix: 上一次片段的右边界
+        last_seg_right = None
 
         while i < n:
-            is_merge = (i < n - 1 and self.tokens[i] == target_left and self.tokens[i+1] == target_right)
             
-            if is_merge:
+            is_target = (i < n - 1 and self.tokens[i] == target_left and self.tokens[i+1] == target_right)
+            
+            if is_target:
+                # 当前处理的片段是合并的目标对
                 token_to_append = new_token_id
-                curr_orig_prefix = target_left
-                curr_orig_suffix = target_right
+
+                # 该pair的左右边界
+                curr_seg_left = target_left
+                curr_seg_right = target_right
                 freq_deltas[target_pair] -= 1
                 step = 2
+
             else:
+                # 当前处理的片段只是当前位置的token
                 current_token = self.tokens[i]
+
+                # 保持不变
                 token_to_append = current_token
-                curr_orig_prefix = current_token
-                curr_orig_suffix = current_token
+
+                # 左右边界都是其自身
+                curr_seg_left = current_token
+                curr_seg_right = current_token
+
                 step = 1
 
             if generated_tokens:
-                last_gen_suffix = generated_tokens[-1]
-                if (last_gen_suffix != last_orig_suffix) or (token_to_append != curr_orig_prefix):
-                    freq_deltas[(last_gen_suffix, token_to_append)] += 1
-                    freq_deltas[(last_orig_suffix, curr_orig_prefix)] -= 1
+                # 获取"新序列"中上一个片段的形态 (即上一个 append 进去的 token)
+                last_token = generated_tokens[-1]
+                # 对比: [新序列的连接] vs [原序列的连接]
+                # 新连接: (last_token, token_to_append)
+                # 旧连接: (last_seg_right, curr_seg_left)
+                if (last_token != last_seg_right) or (token_to_append != curr_seg_left):
+                    freq_deltas[(last_token, token_to_append)] += 1
+                    freq_deltas[(last_seg_right, curr_seg_left)] -= 1
 
             generated_tokens.append(token_to_append)
-            last_orig_suffix = curr_orig_suffix
+            # 当前片段的右边界，将成为下一轮循环的"上一个片段右边界"
+            last_seg_right = curr_seg_right
             i += step
 
         self.tokens = generated_tokens
@@ -148,9 +208,6 @@ class Word:
                 added_counts[p] = delta
         
         return removed_counts, added_counts, current_pairs_set
-
-
-# --- BPETokenizer (集成了 Training 逻辑) ---
 
 class BPETokenizer:
     @staticmethod
@@ -213,17 +270,12 @@ class BPETokenizer:
         self.byte_encoder = self._bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
 
-    # --- Training Interface ---
-
     @classmethod
     def train(cls, input_path: str | os.PathLike, vocab_size: int, special_tokens: List[str], split_token: bytes = b"<|endoftext|>"):
         """
         训练 BPE 模型并返回一个 BPETokenizer 实例。
         集成 tqdm 显示训练进度。
         """
-        
-        # 内部类：用于封装训练过程中的复杂状态（倒排索引、频率桶等）
-        # 这样不会污染 BPETokenizer 实例的命名空间
         class _TrainerBackend:
             def __init__(self):
                 self._words: List[Word] = []
@@ -308,12 +360,10 @@ class BPETokenizer:
                 
                 next_token_id = 256
                 
-                # 添加特殊 tokens 到词表（如果不参与合并，只是占位）
+                # 添加特殊 tokens 到词表
                 for special_token_byte in special_tokens_bytes:
                     if len(self._vocab) >= vocab_size:
                         break
-                    # 如果特殊 token 已经在基础字节中，这步可能会覆盖或跳过，通常特殊 token 是额外定义的
-                    # 简单起见，这里直接分配 ID
                     self._vocab[next_token_id] = special_token_byte
                     next_token_id += 1
                     pbar.update(1)
@@ -356,16 +406,12 @@ class BPETokenizer:
                 pbar.close()
                 return self._vocab, self._merges
 
-        # --- End of Internal Class ---
-
         # 实例化后端并运行
         trainer = _TrainerBackend()
         vocab, merges = trainer.run(input_path, vocab_size, special_tokens, split_token)
         
         # 返回新的 Tokenizer 实例
         return cls(vocab, merges, special_tokens)
-
-    # --- Existing Methods (Save/Load/Encode/Decode) ---
 
     def save(self, file_prefix: str):
         """保存 vocab.json 和 merges.txt"""

@@ -27,25 +27,21 @@ def main():
     print(f"Save Prefix: {args.save_name}")
     print(f"--------------------------------")
 
-    # 1. 实例化训练器
+    # 实例化并训练训练器
     trainer = BPETokenizer.train(
         input_path=args.input_path,
         vocab_size=args.vocab_size,
         special_tokens=args.special_tokens
     )
 
-    # 2. 开始训练 (你的代码中 train 方法返回了 vocab, merges)
-    # 注意：确保你的 train 方法签名与这里匹配
+    # 获取vocab和merge，如果需要
+    # vocab, merge = trainer._vocab, trainer._merges
 
-
-    # 3. 保存结果
-    # 如果你已经在 train() 内部调用了 save()，这一步可以省略
-    # 或者为了保险，在这里显式调用我们刚才写的 save()
+    # 保存结果
     if hasattr(trainer, 'save'):
         trainer.save(args.save_name)
     else:
-        print("Warning: Trainer has no 'save' method. Please implement it or rely on auto-save in train().")
-
+        print("警告: Trainer 没有实现 train 方法. 请先实现或者在调用train()时自动保存.")
 
 if __name__ == "__main__":
     main()

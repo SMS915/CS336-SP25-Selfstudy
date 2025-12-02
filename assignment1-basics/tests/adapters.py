@@ -591,9 +591,7 @@ def run_load_checkpoint(
     """
     return load_checkpoint(src, model, optimizer)
 
-
-# from cs336_basics.BPE import *
-from cs336_basics.FastBPE import BPETrainer, BPETokenizer
+from cs336_basics.FastBPE import BPETokenizer
 
 def get_tokenizer(
     vocab: dict[int, bytes],
@@ -645,7 +643,7 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    bpe = BPETrainer()
-    vocab, merges = bpe.train(input_path, vocab_size, special_tokens)
+    
+    tokenizer = BPETokenizer.train(input_path, vocab_size, special_tokens)
     # vocab, merges = train_bpe_run(input_path, vocab_size, special_tokens)
-    return vocab, merges
+    return tokenizer._vocab, tokenizer._merges
