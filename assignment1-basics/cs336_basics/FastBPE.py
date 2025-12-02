@@ -242,6 +242,25 @@ def get_pretoken_freq(pretokenize_iter: Iterator[bytes]) -> Dict[tuple[bytes], i
     return freq
 
 class BPETrainer:
+    @staticmethod
+    def _bytes_to_unicode():
+        """
+        构建 byte -> unicode string 的映射表，
+        用于将任意字节转换为可打印字符，
+        以便可以存入 json 和 txt 文件。
+        """
+        bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(
+            range(ord("®"), ord("ÿ") + 1))
+        cs = bs[:]
+        n = 0
+        for b in range(2 ** 8):
+            if b not in bs:
+                bs.append(b)
+                cs.append(2 ** 8 + n)
+                n += 1
+        cs = [chr(n) for n in cs]
+        return dict(zip(bs, cs))
+
     def __init__(self):
         self._words: List[Word] = []
         self._pair_count: Dict[Tuple[int, int], int] = defaultdict(int) # pair计数
@@ -355,9 +374,46 @@ class BPETrainer:
                     self._update_pair_freq(p, increase * word.freq)
                     self._pair_index[p].add(word_id)
 
-            next_token_id += 1 
-        
+            next_token_id += 1
+        # self.save("my_bpe")
         return self._vocab, self._merges
+
+    def save(self, file_prefix: str):
+        """
+        保存 vocab.json 和 merges.txt
+        Args:
+            file_prefix: 文件名前缀，例如 'gpt2'，将生成 'gpt2_vocab.json' 和 'gpt2_merges.txt'
+        """
+        print(f"正在保存模型到 {file_prefix}_vocab.json 和 {file_prefix}_merges.txt ...")
+
+        # 1. 获取字节到字符的映射
+        byte_encoder = self._bytes_to_unicode()
+
+        # 2. 转换 Vocab: 从 {id: bytes} -> {unicode_str: id}
+        # 这是为了符合 Tokenizer.from_files 中 json.load 的格式
+        vocab_output = {}
+        for token_id, token_bytes in self._vocab.items():
+            # 将 bytes 序列中的每个 byte 转换为对应的 unicode 字符
+            token_str = "".join([byte_encoder[b] for b in token_bytes])
+            vocab_output[token_str] = token_id
+
+        # 3. 保存 vocab.json
+        vocab_path = f"{file_prefix}_vocab.json"
+        with open(vocab_path, "w", encoding="utf-8") as f:
+            # ensure_ascii=False 保证输出的是字符而不是 \uXXXX 转义
+            json.dump(vocab_output, f, ensure_ascii=False, indent=2)
+
+        # 4. 转换并保存 merges.txt
+        merges_path = f"{file_prefix}_merges.txt"
+        with open(merges_path, "w", encoding="utf-8") as f:
+            f.write("#version: 0.2\n")  # 标准头信息
+            for p1_bytes, p2_bytes in self._merges:
+                # 同样将 bytes 转换为 unicode 字符串
+                s1 = "".join([byte_encoder[b] for b in p1_bytes])
+                s2 = "".join([byte_encoder[b] for b in p2_bytes])
+                f.write(f"{s1} {s2}\n")
+
+        print("保存完成。")
     
 class BPETokenizer:
     @staticmethod
@@ -568,29 +624,3 @@ class BPETokenizer:
                 decoded_bytes.append(token_bytes)
 
         return b"".join(decoded_bytes).decode(encoding='utf-8', errors='replace')
-
-        
-
-
-
-                            
-
-
-
-
-            
-                
-
-
-            
-
-            
-
-
-
-
-
-
-
-
-
