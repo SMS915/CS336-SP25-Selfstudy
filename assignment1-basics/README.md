@@ -170,7 +170,7 @@ python Train.py --config base_config.yaml
 python Train.py --config vanilia_transformer_config.yaml
 ```
 
-## 📂 项目结构
+## 项目结构
 
 - `cs336_basics/`：包含模型实现的核心库。
   - `model.py`：Transformer 组件（Attention, MLP, RoPE 等）。
@@ -181,7 +181,7 @@ python Train.py --config vanilia_transformer_config.yaml
 - 。
 - `config.yaml`：超参数和架构切换的集中配置文件。
 
-## 📜 参考文献
+## 参考文献
 
 - Vaswani et al., "Attention Is All You Need" (2017)
 - Su et al., "RoFormer: Enhanced Transformer with Rotary Position Embedding" (2021)
