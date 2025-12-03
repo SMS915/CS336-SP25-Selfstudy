@@ -1,6 +1,6 @@
 # CS336 作业 1：从零构建 Transformer 语言模型
 
-本项目实现了一个 GPT 风格的 Decoder-only Transformer 语言模型，完全使用 PyTorch 原生构建（避免使用 `nn.Transformer` 模块）。该项目旨在探索大语言模型（LLM）架构的演变，通过对比 2017 年最初的 Transformer 设计与现代 Llama 风格的改进。
+本项目实现了一个 GPT 风格的 Decoder-only Transformer 语言模型，使用 PyTorch 原生构建（避免使用 `nn.Transformer` 等封装模块）。该项目旨在探索大语言模型（LLM）架构的演变，通过对比 2017 年最初的 Transformer 设计与现代 Llama 风格的改进。
 
 ## 核心特性
 
@@ -13,27 +13,105 @@
 
 ## 消融实验与洞察
 
-我们在 TinyStories 数据集上进行了广泛的消融实验，以理解现代架构选择的影响。
+我们在 OpenWebText数据集上进行了一些消融实验，以理解现代架构选择的影响。
+
+###  实验基准设置 (Experimental Setup)
+
+为了确保对比的公平性，所有消融实验均基于以下基准超参数进行（除非特定实验中另有说明）：
+
+- **数据集**: OpenWebText (Subset)
+
+- **模型规模**: ~16M 参数
+
+  - $d_{model} = 256$, $n_{layers} = 4$, $n_{heads} = 4$
+
+- **训练配置**:
+
+  - Context Length: 256 (用于快速迭代) / 1024 (用于验证长序列性能)
+
+  - Max Steps: 40,000
+
+  - Batch Size: 64
+
+  - Weight_Tying: True
+
+  - Max Learning Rate: 3e-4 (Cosine Schedule with Warmup)
+
+    
+
+### 架构演进分析 (Architectural Evolution Analysis)
+
+Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla）到现代主流（Modern, e.g., Llama）的显著演进。为了直观地展示这种演进的价值，我们首先对比了完全体的“现代架构”与“原始架构”在小参数下的性能：
+
+![ablation_modern&vanilia_valloss](.\asset\ablation_modern&vanilla_val_loss.png)
+
+![ablation_modern&vanilia_gradnorm](.\asset\ablation_modern&vanilla_gradnorm.png)
+
+<center>(上图对比了现代架构（Modern）与原始架构（Vanilla）的验证集 Loss 和梯度范数。可以看到现代架构在收敛速度和训练稳定性上具有压倒性优势。)</center>
+
+
+
+这种演进并非偶然，而是为了解决**训练稳定性**和**模型表达能力**这两个核心痛点。下面的实验旨在解构这一过程：
+
+1. **稳定性的博弈：Post-Norm vs. Pre-Norm** 原始 Transformer 采用 **Post-Norm** 结构（`Norm(x + attn(x))`），理论上保留了更强的梯度流，但在深层网络初始化阶段极易导致梯度爆炸或消失，使得训练对超参数（如学习率、Warmup）极其敏感。现代架构普遍转向 **Pre-Norm**（`x + attn(Norm(x))`），配合 **RMSNorm**，通过将归一化置于残差分支内，创造了梯度的“高速公路”，显著提升了训练初期的稳定性。
+
+2. **位置感知的进化：绝对 vs. 相对** 从**绝对位置编码**（Sinusoidal/Learned）转向**旋转位置编码（RoPE）**是另一大飞跃。绝对位置编码将位置信息强加于 Token Embedding，存在“冷启动”问题且难以捕捉长距离的相对关系。RoPE 通过旋转操作将相对位置信息注入 Attention 机制，赋予了模型更强的长度外推能力和更快的收敛速度。
+
+3. **激活函数的效能** 从 **ReLU** 到 **SwiGLU** 的转变，通过引入门控机制（Gating），增加了非线性变换的丰富度，虽然参数量略有增加，但换来了更优的收敛效果。
+
+   
 
 ### 1. 训练稳定性：Post-Norm 与 Pre-Norm 对比
 
 **假设**：与 Pre-Norm（GPT-2/Llama 采用）相比，Post-Norm 架构（原始 Transformer 采用）在早期训练阶段容易出现梯度不稳定的问题。
 
-观察：
+![abletion_norm_train_loss](.\asset\abletion_norm_train_loss.png)
 
-*上图展示了训练过程中的梯度范数。**橙色线条（原生/Post-Norm）在预热（warmup）结束后表现出剧烈的不稳定性和梯度尖峰，而蓝色线条（现代/Pre-Norm）*则保持稳定。
+![abletion_norm_gradnorm](.\asset\abletion_norm_gradnorm.png)
 
-### 2. 位置编码：“冷启动”问题
+<center>上图展示了训练过程中的loss和梯度范数。</center>
 
-**假设**：与可学习的绝对位置编码（Learned Absolute Embeddings）相比，RoPE 为相对位置提供了更好的归纳偏置（Inductive Bias），从而导致更快的收敛速度。
+**观察**：橙色线条**（原生/Post-Norm）**在预热（warmup）结束后表现出剧烈的不稳定性和梯度尖峰，而蓝色线条**（现代/Pre-Norm）**则保持稳定。这证实了 Post-Norm 在深层网络训练初期的不稳定性。
 
-**观察**：在有限步数的训练场景中（例如 20k 步），**Learned Absolute PE** 明显落后于 **RoPE**。这是因为 Learned PE 初始化为随机噪声，需要消耗早期的训练步数来“学习”顺序的概念，而 RoPE 从第 0 步开始就注入了几何相对距离信息。
+
+
+### 2. 位置编码策略对比分析：RoPE, NoPE, Sinusoidal 与 Learned
+
+**背景**：在原始 Transformer（Post-Norm）的基础上，控制其他变量不变，对比了四种位置编码配置的效果：RoPE（旋转位置编码）、NoPE（无位置编码）、Sinusoidal（正余弦绝对位置）和 Learned（可学习绝对位置）。
+
+![ablation_pe_trainloss](.\asset\ablation_pe_train_loss.png)
+
+![ablation_pe_valloss](.\asset\ablation_pe_val_loss.png)
+
+![ablation_pe_gradnorm](.\asset\ablation_pe_gradnorm.png)
+
+<center>上图从上到下依次为：训练集 Loss、验证集 Loss、梯度范数。</center>
+
+**观察**： 
+
+**A. Loss 曲线分析 (Training & Validation Loss)** 观察验证集 Loss 曲线，我们可以看到明显的性能分层：
+
+1. **RoPE (绿色, Green)**：收敛速度最快，最终 Loss 最低。证明了将相对位置信息注入注意力机制的有效性。
+2. **NoPE (深蓝, Dark Blue)**：令人惊讶的是，在当前实验设置（较短上下文长度 256）下，不使用任何显式位置编码的模型表现优于传统的绝对位置编码。这表明因果掩码 (Causal Mask) 本身已泄露了足够的隐式位置信息供模型学习。
+3. **Sinusoidal (橙色, Orange)**：作为 Baseline，表现中规中矩。
+4. **Learned Absolute (浅蓝, Light Blue)**：表现最差，收敛最慢。这体现了“冷启动”问题——模型需要消耗早期的训练步数来从零学习位置向量的顺序关系，拖慢了语义学习的进程。
+
+**B. 梯度范数分析 (Gradient Norm)** 观察梯度范数曲线，出现两极分化的现象：
+
+1. **不稳定组 (Additive PE)**：**Sinusoidal (橙色)** 和 **Learned (浅蓝)** 都使用了加性位置编码（`x + pos_emb(x)`）。它们在训练初期（Warmup 结束时）都出现了剧烈的梯度震荡和尖峰。这表明将位置向量直接**相加**到词嵌入中，显著增加了 Post-Norm 架构中残差流的方差，导致优化困难。
+2. **稳定组 (Non-Additive)**：**RoPE (绿色)** 和 **NoPE (深蓝)** 的梯度范数都极其平稳。RoPE 采用旋转（乘性）操作，不改变向量模长；NoPE 则完全没有引入额外的位置向量干扰。
+
+**结论**：RoPE 结合了“乘性操作的训练稳定性”和“显式的相对位置几何信息”，因此在该组对比中取得了最佳的综合性能。
+
+
 
 ### 3. 权重绑定 (Weight Tying) 的影响
 
 **分析**：将嵌入层（Embedding layer）和语言模型头（LM Head/输出层）的权重绑定可以显著减少参数量，但也可能限制表示能力。我们的实验表明... [在此添加您的发现]
 
-## 使用方法 (Usage)
+
+
+## 使用方法
 
 ### 1. 环境设置 (Setup)
 
@@ -167,7 +245,7 @@ python Train.py --config base_config.yaml
 **训练一个“复古”的 2017 风格模型（Post-Norm, ReLU, Sinusodial PE）：**
 
 ```
-python Train.py --config vanilia_transformer_config.yaml
+python Train.py --config vanilla_transformer_config.yaml
 ```
 
 ## 项目结构
@@ -176,10 +254,31 @@ python Train.py --config vanilia_transformer_config.yaml
   - `model.py`：Transformer 组件（Attention, MLP, RoPE 等）。
   - `optimizer.py`：AdamW 的手动实现。
   - `Train.py`：包含检查点保存和 wandb 日志记录的主训练循环。
-  - `BPE.py`：朴素版的BytePairEncoder, 实现了完整的必要功能，但是效率上有较大的提升空间
-  - `FastBPE.py`：优化版的BytePairEncoder
-- 。
-- `config.yaml`：超参数和架构切换的集中配置文件。
+  - `BPE.py`：朴素版的BytePairEncoder, 实现了完整的必要功能，但是效率上有较大的提升空间。
+  - `FastBPE.py`：优化版的BytePairEncoder。
+  - `checkpointing.py`：包含模型检查点保存的相关代码。
+  - `data.py`：朴素的单进程dataloader实现，通过内存映射流式处理二进制token文件。
+  - `fast_data.py`：多进程dataloader。
+  - `GenerateText.py`：文本生成函数，接受top_k和temperature参数，未实现kv cache。
+  - `generate.py`：自动读取最佳模型，并基于输入的参数和prompt生成文本。
+  - `preprocess_training_data.py`：语料处理代码/脚本，调用FastBPE，对指定文本语料进行编码并二进制化。
+  -  `train_bpe.py`：BPE训练代码/脚本，接受文本语料地址，词表大小，保存名称和指定的special_token，训练分词器并保存。
+  - `utils.py`：存放其他功能性函数的代码，包括手动实现的Softmax，cross_entropy，学习率调度和梯度裁剪。
+- `configs/`: 配置文件存放处。
+  - `base_config.yaml`：以现代Transformer架构为基准的配置文件，包含详细的参数注释，所有用于消融实验的可选参数均处于默认值
+  - `vanilla_transformer_config.yaml`：基于原论文中Transformer架构的配置文件
+
+- `asset/`：wandb曲线图片存放位置，包含各个消融实验的部分展示
+- `tests/`：官方测试文件的存放位置
+  - `adapter.py`：官方提供的接口文件，在其中实现自身代码与测试的对接
+  - `*.py`
+
+- `cs336_spring2025_assignment1_basics.pdf`：官方给出的handout，完整涵盖了assignment的全部内容和引导
+- `[翻译]cs336_spring2025_assignment1_basics.pdf`：handout的中文翻译
+- `run_generate.sh`：文本生成脚本。
+- `run_train.sh`：Transformer模型训练脚本。
+- `run_train_bpe.sh`：分词器训练脚本。
+- `uv.lock`：官方的uv环境（在较新的卡，如5090上不能用）。
 
 ## 参考文献
 

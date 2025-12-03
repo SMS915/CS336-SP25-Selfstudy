@@ -15,47 +15,6 @@ def Softmax(x: torch.Tensor, i: int = 0) -> torch.Tensor:
 #     correct_log = torch.gather(inputs, -1, target.unsqueeze(-1))
 #     return (max_logit + log_sum_exp - correct_log).mean()
 
-# def cross_entropy_loss(inputs: Float[torch.Tensor, "batch_total vocab_size"], 
-#                        target: Float[torch.Tensor, "batch_total"], 
-#                        chunk_size: int = 4096) -> torch.Tensor:
-#     """
-#     内存高效的分块 Cross Entropy Loss 实现。
-#     避免一次性实例化巨大的 exp(logits) 矩阵。
-#     """
-#     n_samples = inputs.shape[0]
-#     total_loss = 0.0
-    
-#     # 将巨大的 (B*T, V) 矩阵切分成小块处理
-#     # chunk_size 4096 是一个经验值，既能利用 GPU 并行，又不会爆显存
-#     for i in range(0, n_samples, chunk_size):
-#         end = min(i + chunk_size, n_samples)
-        
-#         # Slicing 创建的是 View，不会复制数据，开销极小
-#         inputs_chunk = inputs[i:end]
-#         target_chunk = target[i:end]
-        
-#         # === 原始逻辑，但在小矩阵上运行 ===
-#         # 1. 获取最大值用于数值稳定 (Max Trick)
-#         max_logit = torch.max(inputs_chunk, dim=1, keepdim=True)[0]
-        
-#         # 2. 计算 LogSumExp
-#         # 这里的 exp 临时变量只占用 chunk_size * vocab 的显存 (约 400MB)，非常安全
-#         exp_logits = torch.exp(inputs_chunk - max_logit)
-#         log_sum_exp = torch.log(torch.sum(exp_logits, dim=1, keepdim=True))
-        
-#         # 3. 获取目标类别的 Logit
-#         correct_logit = torch.gather(inputs_chunk, -1, target_chunk.unsqueeze(-1))
-        
-#         # 4. 计算当前块的 Sum Loss
-#         # Loss = log(sum(exp)) - (target_logit - max_logit)
-#         #      = log_sum_exp + max_logit - correct_logit
-#         chunk_loss = log_sum_exp + max_logit - correct_logit
-        
-#         # 累加 Loss (注意要 sum，最后再除以总数)
-#         total_loss = total_loss + chunk_loss.sum()
-        
-#     return total_loss / n_samples
-
 def cross_entropy_loss(inputs, target):
     return F.cross_entropy(inputs, target)
 
