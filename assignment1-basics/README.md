@@ -43,9 +43,9 @@
 
 Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla）到现代主流（Modern, e.g., Llama）的显著演进。为了直观地展示这种演进的价值，我们首先对比了完全体的“现代架构”与“原始架构”在小参数下的性能：
 
-![ablation_modern&vanilia_valloss](.\asset\ablation_modern&vanilla_val_loss.png)
+![ablation_modern&vanilia_valloss](asset\ablation_modern&vanilla_val_loss.png)
 
-![ablation_modern&vanilia_gradnorm](.\asset\ablation_modern&vanilla_gradnorm.png)
+![ablation_modern&vanilia_gradnorm](asset\ablation_modern&vanilla_gradnorm.png)
 
 <center>(上图对比了现代架构（Modern）与原始架构（Vanilla）的验证集 Loss 和梯度范数。可以看到现代架构在收敛速度和训练稳定性上具有压倒性优势。)</center>
 
@@ -65,9 +65,9 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 **假设**：与 Pre-Norm（GPT-2/Llama 采用）相比，Post-Norm 架构（原始 Transformer 采用）在早期训练阶段容易出现梯度不稳定的问题。
 
-![abletion_norm_train_loss](.\asset\abletion_norm_train_loss.png)
+![abletion_norm_train_loss](asset\abletion_norm_train_loss.png)
 
-![abletion_norm_gradnorm](.\asset\abletion_norm_gradnorm.png)
+![abletion_norm_gradnorm](asset\abletion_norm_gradnorm.png)
 
 <center>上图展示了训练过程中的loss和梯度范数。</center>
 
@@ -79,11 +79,11 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 **背景**：在原始 Transformer（Post-Norm）的基础上，控制其他变量不变，对比了四种位置编码配置的效果：RoPE（旋转位置编码）、NoPE（无位置编码）、Sinusoidal（正余弦绝对位置）和 Learned（可学习绝对位置）。
 
-![ablation_pe_trainloss](.\asset\ablation_pe_train_loss.png)
+![ablation_pe_trainloss](asset\ablation_pe_train_loss.png)
 
-![ablation_pe_valloss](.\asset\ablation_pe_val_loss.png)
+![ablation_pe_valloss](asset\ablation_pe_val_loss.png)
 
-![ablation_pe_gradnorm](.\asset\ablation_pe_gradnorm.png)
+![ablation_pe_gradnorm](asset\ablation_pe_gradnorm.png)
 
 <center>上图从上到下依次为：训练集 Loss、验证集 Loss、梯度范数。</center>
 
