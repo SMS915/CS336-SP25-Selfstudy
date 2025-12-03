@@ -47,7 +47,7 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 ![ablation_modern&vanilia_gradnorm](asset/ablation_modern&vanilla_gradnorm.png)
 
-<center>(上图对比了现代架构（Modern）与原始架构（Vanilla）的验证集 Loss 和梯度范数。可以看到现代架构在收敛速度和训练稳定性上具有压倒性优势。)</center>
+<p align="center">(上图对比了现代架构（Modern）与原始架构（Vanilla）的验证集 Loss 和梯度范数。可以看到现代架构在收敛速度和训练稳定性上具有压倒性优势。)<p>
 
 
 
@@ -71,7 +71,7 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 <center>上图展示了训练过程中的loss和梯度范数。</center>
 
-**观察**：橙色线条**（原生/Post-Norm）**在预热（warmup）结束后表现出剧烈的不稳定性和梯度尖峰，而蓝色线条**（现代/Pre-Norm）**则保持稳定。这证实了 Post-Norm 在深层网络训练初期的不稳定性。
+**观察**：橙色线条**(原生/Post-Norm)**在预热（warmup）结束后表现出剧烈的不稳定性和梯度尖峰，而蓝色线条**(现代/Pre-Norm)**则保持稳定。这证实了 Post-Norm 在深层网络训练初期的不稳定性。
 
 
 
@@ -85,7 +85,9 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 ![ablation_pe_gradnorm](asset/ablation_pe_gradnorm.png)
 
-<center>上图从上到下依次为：训练集 Loss、验证集 Loss、梯度范数。</center>
+<p align="center">上图从上到下依次为：训练集 Loss、验证集 Loss、梯度范数。</p>
+
+
 
 **观察**： 
 
