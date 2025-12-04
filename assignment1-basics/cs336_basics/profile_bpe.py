@@ -2,8 +2,8 @@ import cProfile
 import pstats
 import os
 from cs336_basics.bpe_fast import BPETokenizer as FastTokenizer
-from cs336_basics.bpe_baseline import BPETokenizer as BaseTokenizer
-from cs336_basics.bpe_baseline import train_bpe_run
+from cs336_basics.bpe_naive import BPETokenizer as BaseTokenizer
+from cs336_basics.bpe_naive import train_bpe_run
 
 def run_training_for_profile():
     # 1. 设置参数

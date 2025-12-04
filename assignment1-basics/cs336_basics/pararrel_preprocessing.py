@@ -3,7 +3,7 @@ import multiprocessing as mp
 import numpy as np
 import time
 from bpe_fast import BPETokenizer, find_chunk_boundaries # 导入你的 FastBPE
-from bpe_baseline import BPETokenizer as OriginalBPETokenizer
+from bpe_naive import BPETokenizer as OriginalBPETokenizer
 
 # --- 配置 ---
 TOKENIZER_DIR = "BPE_File"
