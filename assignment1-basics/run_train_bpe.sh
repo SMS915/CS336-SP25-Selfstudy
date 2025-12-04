@@ -2,14 +2,13 @@
 
 # ================= 配置区域 =================
 
-# 1. 设置输入文件路径 (例如 OpenWebText 的训练集)
-INPUT_DATA="data/TinyStoriesV2-GPT4-valid.txt"
+INPUT_DATA="data/owt_train.txt"
 
 # 2. 设置目标词表大小 (GPT-2 标准是 50257)
-VOCAB_SIZE=1000
+VOCAB_SIZE=32000
 
 # 3. 设置保存的文件名前缀 (会生成 ..._vocab.json 和 ..._merges.txt)
-SAVE_PREFIX="BPE_File/self_test_valid"
+SAVE_PREFIX="BPE_File/self_owt"
 
 # 4. 设置特殊 Token (用空格分隔)
 SPECIAL_TOKENS="<|endoftext|>"

@@ -1,7 +1,7 @@
 # ==========================================
 # 1. 基础与系统设置 (General & System)
 # ==========================================
-project_name: "CS336-TransformerLM-OpenWebText-ablation"
+project_name: "CS336-TransformerLM-OpenWebText-Ablation"
 seed: 42
 device: "cuda"
 load_ckpt: False
@@ -13,41 +13,43 @@ checkpoint_path: "./checkpoints/"
 # ==========================================
 train_data_path: "data/owt_train.bin"
 val_data_path: "data/owt_valid.bin"
-batch_size: 64
-context_length: 256
+batch_size: 32
+context_length: 512
 token_dtype: "uint16"
 
 # ==========================================
 # 3. 模型架构设置 (Model Architecture)
 # ==========================================
 vocab_size: 50257
-n_layers: 4
-n_heads: 4
-d_model: 256
+n_layers: 16
+n_heads: 16
+d_model: 512
 d_ff: null
 n_kv_heads: null
 
-activation: 'relu'
-gated_ffn: False
+activation: 'silu'
+gated_ffn: True
 gated_attn: False
 Weight_Tying: True
 
-post_norm: True
-layer_norm: True
+post_norm: False
+layer_norm: False
 no_norm: False
 
-pos_emb_type: 'learned'
+pos_emb_type: 'rope'
 rope_theta: 10000.0
-bias: True
+bias: False
 
 # ==========================================
 # 4. 训练流程设置 (Training Loop)
 # ==========================================
-max_steps: 40000
-warmup_steps: 4000
-cycle_steps: 28000
+max_steps: 20000
+warmup_steps: 2000
+cycle_steps: 20000
+accumulate_size: 4
+grad_ckpt: False
 
-log_interval: 200
+log_interval: 100
 eval_interval: 1000
 eval_steps: 50
 checkpoint_interval: 4000

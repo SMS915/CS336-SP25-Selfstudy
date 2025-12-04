@@ -15,9 +15,6 @@ echo "Generating text with Prompt: '$PROMPT'"
 echo "Using Config: $CONFIG_PATH"
 echo "========================================================"
 
-# 运行生成脚本
-# 注意：你需要确保你的 GenerateText.py 或 main 生成脚本支持这些参数
-# 这里的 GenerateText 指向包含 main 函数的文件名 (不带 .py)
 python cs336_basics/generate.py \
     --config "$CONFIG_PATH" \
     --prompt "$PROMPT" \

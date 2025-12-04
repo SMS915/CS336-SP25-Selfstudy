@@ -436,6 +436,12 @@ class BPETokenizer:
                 f.write(f"{s1} {s2}\n")
         print("保存完成。")
 
+    def get_vocab(self):
+        return self._vocab
+
+    def get_merges(self):
+        return self._merges
+
     @classmethod
     def from_files(cls, vocab_filepath, merges_filepath, special_tokens = None, skip_first_row = False):
         with open(vocab_filepath, 'r', encoding='utf-8') as f:

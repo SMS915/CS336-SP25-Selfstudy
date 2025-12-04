@@ -6,19 +6,19 @@ import argparse
 from typing import List, Tuple
 from tqdm import tqdm  # 导入 tqdm
 
-# 尝试导入 FastBPE，兼容 user 提供的路径或当前目录
-try:
-    from FastBPE import BPETokenizer, find_chunk_boundaries
-except ImportError:
-    try:
-        from cs336_basics.FastBPE import BPETokenizer, find_chunk_boundaries
-    except ImportError:
-        print("错误: 无法导入 FastBPE。请确保 'FastBPE.py' (或 cs336_basics.FastBPE) 包含 BPETokenizer 和 find_chunk_boundaries。")
-        exit(1)
+from cs336_basics.bpe_fast import BPETokenizer, find_chunk_boundaries
 
 # --- 全局配置 ---
 TOKEN_DTYPE = np.uint16  # 对于 GPT-2 级别的词表 (50257)，uint16 (0-65535) 足够且节省空间
 CHUNK_MULTIPLIER = 4     # 任务块数量是核心数的倍数，让调度更灵活
+
+DATA_DIR = "data"
+DEFAULT_FILES = [
+    # "owt_train.txt",
+    # "owt_valid.txt",
+    "TinyStoriesV2-GPT4-train.txt",
+    # "TinyStoriesV2-GPT4-valid.txt"
+]
 
 def encode_worker(args):
     """
@@ -130,14 +130,6 @@ def process_file(input_path: str, tokenizer: BPETokenizer, num_workers: int):
     print(f"  - 生成文件: {output_path}")
 
 def main():
-    # 默认配置
-    DATA_DIR = "data"
-    DEFAULT_FILES = [
-        # "owt_train.txt",
-        # "owt_valid.txt",
-        "TinyStoriesV2-GPT4-train.txt",
-        # "TinyStoriesV2-GPT4-valid.txt"
-    ]
 
     parser = argparse.ArgumentParser(description="使用 FastBPE 并行编码文本文件为二进制文件 (.bin)")
     

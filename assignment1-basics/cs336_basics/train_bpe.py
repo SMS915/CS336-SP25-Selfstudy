@@ -4,7 +4,7 @@ import os
 import time
 import datetime
 from tqdm import tqdm
-from cs336_basics.FastBPE import BPETokenizer
+from cs336_basics.bpe_fast import BPETokenizer
 
 
 def main():
@@ -14,7 +14,6 @@ def main():
     parser.add_argument("--input_path", type=str, required=True, help="Path to the training corpus (txt/bin)")
     parser.add_argument("--vocab_size", type=int, required=True, help="Target vocabulary size")
     parser.add_argument("--save_name", type=str, required=True, help="Prefix for the saved vocab/merges files")
-
     # 可选参数
     parser.add_argument("--special_tokens", nargs="+", default=["<|endoftext|>"], help="List of special tokens")
 

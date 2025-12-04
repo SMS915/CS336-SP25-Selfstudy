@@ -1,7 +1,7 @@
 # ==========================================
 # 1. 基础与系统设置 (General & System)
 # ==========================================
-project_name: "CS336-TransformerLM-OpenWebText-ablation"
+project_name: "CS336-TransformerLM-OpenWebText-Ablation"
 seed: 42
 device: "cuda"
 load_ckpt: False
@@ -30,27 +30,27 @@ n_kv_heads: null
 activation: 'relu'
 gated_ffn: False
 gated_attn: False
-Weight_Tying: False
+Weight_Tying: True
 
 post_norm: True
 layer_norm: True
 no_norm: False
 
-pos_emb_type: 'sinusoidal'
+pos_emb_type: 'removed'
 rope_theta: 10000.0
-bias: False
+bias: True
 
 # ==========================================
 # 4. 训练流程设置 (Training Loop)
 # ==========================================
-max_steps: 20000
-warmup_steps: 2000
-cycle_steps: 18000
+max_steps: 40000
+warmup_steps: 4000
+cycle_steps: 24000
 
-log_interval: 100
+log_interval: 200
 eval_interval: 500
 eval_steps: 50
-checkpoint_interval: 4000
+checkpoint_interval: 40000
 
 # ==========================================
 # 5. 优化器与调度器 (Optimizer & Scheduler)

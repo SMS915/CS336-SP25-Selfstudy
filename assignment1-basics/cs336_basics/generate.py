@@ -4,9 +4,9 @@ import argparse
 import os
 
 from cs336_basics.model import TransformerLM
-from cs336_basics.BPE import BPETokenizer
+from cs336_basics.bpe_baseline import BPETokenizer
 from cs336_basics.checkpointing import get_latest_checkpoint, get_best_checkpoint, load_amp_checkpoint
-from cs336_basics.GenerateText import generate_text
+from cs336_basics.generation_utils import generate_text
 
 def main():
     parser = argparse.ArgumentParser(description="使用训练好的模型生成文本。")

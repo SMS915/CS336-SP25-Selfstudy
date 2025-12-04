@@ -113,6 +113,26 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 
 
+### 4. 激活函数影响
+
+在原始Transformer的基础上，控制参数量和其他因素不变，对比了几种激活函数对性能的影响
+
+**假设**：SwiGLU（SiLU + 门控机制）相比于传统的 ReLU，通过引入门控线性单元增加了非线性表达能力，通常能带来更优的收敛效果。
+
+![ablation_activation_train_loss](asset/ablation_activation_train_loss.png)
+
+![ablation_activation_val_loss](asset/ablation_activation_val_loss.png)
+
+![ablation_activation_grad_norm](asset/ablation_activation_grad_norm.png)
+
+<p align="center">上图对比了 SwiGLU (蓝色) 与原始 ReLU (橙色) 的训练与验证 Loss。</p>
+
+**观察**：
+
+1. **收敛优势**：从 Loss 曲线可以看出，**SwiGLU (蓝色)** 相比 **ReLU (橙色)** 具有更快的收敛速度和更低的最终 Loss。这验证了门控机制在提升模型性能方面的有效性。
+2. **规模效应 (Scale Effect)**：值得注意的是，虽然 SwiGLU 表现更优，但在当前的小参数规模（~17M）下，其带来的性能提升幅度相比于位置编码（RoPE）的改进显得较小。
+   - 这可能是因为在小模型中，参数量的限制使得模型难以充分利用 SwiGLU 带来的额外表达能力。通常在更大规模的模型（如 Llama-70B）中，SwiGLU 的优势会更加显著。
+
 ## 使用方法
 
 ### 1. 环境设置 (Setup)
@@ -125,9 +145,6 @@ pip install uv
 
 # 从uv.lock同步环境，如果是5090需要手动安装最新的torch和相应库
 uv sync
-
-# 使用 uv 运行代码 (自动管理依赖)
-uv run Train.py --config {config}.yaml
 ```
 
 ### 2. 运行测试 (Run Unit Tests)
@@ -139,7 +156,8 @@ Windows环境下需要注释掉tests/test_tokenizer.py 的 import resource语句
 另外，由于Windows与Linux的多进程运行方式不同，Windows上由于多进程分发耗时原因无法通过官方 1.5s speed test, 在Linux环境中speed_test用时在0.4-0.6秒左右。
 
 ```
-uv run pytest
+uv run pytest # 一次性运行全部测试
+uv run pytest -k test_{name}.py # 测试单个场景
 ```
 
 
@@ -164,6 +182,8 @@ gunzip owt_valid.txt.gz
 
 cd ..
 ```
+
+
 
 ### 4. 分词器训练 (Train BPE)
 
@@ -216,7 +236,7 @@ upcoming...
 训练方法: 在run_train_bpe.sh中指定好语料文件和词表长度，然后运行bash文件即可
 
 ```bash
-chmod +x ./run_train_bpe.sh
+chmod +x ./run_train_bpe.sh # 给予脚本文件权限
 ./run_train_bpe.sh
 ```
 
@@ -241,46 +261,58 @@ chmod +x ./run_train_bpe.sh
 **训练一个现代 Llama 风格(PreNorm, RMSNorm, RoPE)的模型：**
 
 ```
-python Train.py --config base_config.yaml
+python Train.py --config base_modern.yaml
 ```
 
 **训练一个“复古”的 2017 风格模型（Post-Norm, ReLU, Sinusodial PE）：**
 
 ```
-python Train.py --config vanilla_transformer_config.yaml
+python Train.py --config base_vanilla.yaml
 ```
+
+**运行消融实验：**
+
+```
+python Train.py --config experiments/ablation_{}.yaml
+```
+
+
 
 ## 项目结构
 
-- `cs336_basics/`：包含模型实现的核心库。
-  - `model.py`：Transformer 组件（Attention, MLP, RoPE 等）。
-  - `optimizer.py`：AdamW 的手动实现。
-  - `Train.py`：包含检查点保存和 wandb 日志记录的主训练循环。
-  - `BPE.py`：朴素版的BytePairEncoder, 实现了完整的必要功能，但是效率上有较大的提升空间。
-  - `FastBPE.py`：优化版的BytePairEncoder。
-  - `checkpointing.py`：包含模型检查点保存的相关代码。
-  - `data.py`：朴素的单进程dataloader实现，通过内存映射流式处理二进制token文件。
-  - `fast_data.py`：多进程dataloader。
-  - `GenerateText.py`：文本生成函数，接受top_k和temperature参数，未实现kv cache。
-  - `generate.py`：自动读取最佳模型，并基于输入的参数和prompt生成文本。
-  - `preprocess_training_data.py`：语料处理代码/脚本，调用FastBPE，对指定文本语料进行编码并二进制化。
-  -  `train_bpe.py`：BPE训练代码/脚本，接受文本语料地址，词表大小，保存名称和指定的special_token，训练分词器并保存。
-  - `utils.py`：存放其他功能性函数的代码，包括手动实现的Softmax，cross_entropy，学习率调度和梯度裁剪。
-- `configs/`: 配置文件存放处。
-  - `base_config.yaml`：以现代Transformer架构为基准的配置文件，包含详细的参数注释，所有用于消融实验的可选参数均处于默认值
-  - `vanilla_transformer_config.yaml`：基于原论文中Transformer架构的配置文件
+├── asset/                                                                               # 实验记录与可视化 (WandB 曲线图等)
+├── configs/                                                                           # 模型与训练配置文件
+│   ├── base_modern.yaml                                                 # 现代架构基准配置 (Llama-style, RoPE, SwiGLU)
+│   ├── base_vanilla.yaml                                                    # 原始架构配置 (Post-Norm, Sinusoidal PE, ReLU)
+│   └── experiments/
+│       └── ablation_{ablation_name}.yaml                                           # 用于消融实验的独立配置
+├── cs336_basics/                                                                 # 核心源代码库
+│   ├── model.py                                                                   # Transformer 核心组件 (Attention, RoPE, RMSNorm)
+│   ├── optimizer.py                                                             # 手写 AdamW 优化器
+│   ├── utils.py                                                                       # 基础工具 (Softmax, CrossEntropy, LR Schedule)
+│   ├── checkpointing.py                                                     # 模型检查点保存与加载
+│   ├── train.py                                                                      # 主训练循环 (集成 WandB)
+│   ├── bpe_baseline.py                                                       # BPE 分词器 (Baseline 实现)
+│   ├── bpe_fast.py                                                               # BPE 分词器 (优化版实现)
+│   ├── profile_bpe.py                                                          # 对原始或优化的分词器进行效率分析
+│   ├── train_bpe.py                                                             # BPE 训练入口脚本
+│   ├── data.py                                                                      # 单进程 Dataloader (Memory Mapping)
+│   ├── fast_data.py                                                              # 多进程 Dataloader
+│   ├── preprocess_training_data.py                                 # 语料预处理与二进制化脚本
+│   ├── pretokenization_example.py                                 # 官方给出的多进程文本分块边界处理代码
+│   ├── generation_utils.py                                                  # 文本生成核心逻辑 (Top-k, Temp)
+│   └── generate.py                                                               # 推理生成入口脚本
+├── tests/                                                                                # 单元测试目录
+│   ├── adapter.py                                                                 # 官方测试接口适配器
+│   └── ...                                                                                 # 官方测试用例
+├── cs336_spring2025_assignment1_basics.pdf             # 官方作业 Handout (英文)
+├── [翻译]cs336_spring2025_assignment1_basics.pdf   # 作业 Handout (中文翻译)
+├── run_train.sh                                                                    # 启动脚本：模型训练
+├── run_generate.sh                                                            # 启动脚本：文本生成
+├── run_train_bpe.sh                                                           # 启动脚本：分词器训练
+└── uv.lock                                                                             # Python 环境依赖锁定文件,在较新的 (如Blackwell架构) GPU上不适配
 
-- `asset/`：wandb曲线图片存放位置，包含各个消融实验的部分展示
-- `tests/`：官方测试文件的存放位置
-  - `adapter.py`：官方提供的接口文件，在其中实现自身代码与测试的对接
-  - `*.py`
 
-- `cs336_spring2025_assignment1_basics.pdf`：官方给出的handout，完整涵盖了assignment的全部内容和引导
-- `[翻译]cs336_spring2025_assignment1_basics.pdf`：handout的中文翻译
-- `run_generate.sh`：文本生成脚本。
-- `run_train.sh`：Transformer模型训练脚本。
-- `run_train_bpe.sh`：分词器训练脚本。
-- `uv.lock`：官方的uv环境（在较新的卡，如5090上不能用）。
 
 ## 参考文献
 

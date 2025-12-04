@@ -1,0 +1,68 @@
+# ==========================================
+# 1. 基础与系统设置 (General & System)
+# ==========================================
+project_name: "CS336-TransformerLM-OpenWebText-Ablation"
+seed: 42
+device: "cuda"
+load_ckpt: False
+save_ckpt: False
+checkpoint_path: "./checkpoints/"
+
+# ==========================================
+# 2. 数据设置 (Data Configuration)
+# ==========================================
+train_data_path: "data/owt_train.bin"
+val_data_path: "data/owt_valid.bin"
+batch_size: 64
+context_length: 256
+token_dtype: "uint16"
+
+# ==========================================
+# 3. 模型架构设置 (Model Architecture)
+# ==========================================
+vocab_size: 50257
+n_layers: 4
+n_heads: 4
+d_model: 256
+d_ff: null
+n_kv_heads: null
+
+activation: 'relu'
+gated_ffn: False
+gated_attn: False
+Weight_Tying: True
+
+post_norm: True
+layer_norm: True
+no_norm: False
+
+pos_emb_type: 'sinusoidal'
+rope_theta: 10000.0
+bias: True
+
+# ==========================================
+# 4. 训练流程设置 (Training Loop)
+# ==========================================
+max_steps: 40000
+warmup_steps: 4000
+cycle_steps: 24000                          # 这里lr在24000步就触底了，实际上是因为调整了总步数却忘了调整调度策略的参数。不过其他消融实验也是同样基于该调度参数，同样控制了变量
+accumulate_size: 1
+grad_checkpointing: False
+
+log_interval: 200
+eval_interval: 500
+eval_steps: 50
+checkpoint_interval: 4000
+
+# ==========================================
+# 5. 优化器与调度器 (Optimizer & Scheduler)
+# ==========================================
+lr_schedule: 'cosine'
+max_learning_rate: 3e-4
+min_learning_rate: 3e-5
+weight_decay: 0.01
+max_grad_norm: 1.0
+
+beta1: 0.9
+beta2: 0.95
+eps: 1e-8

@@ -1,9 +1,9 @@
 __package__ = "cs336_basics"
-import torch
 
+import torch
 from cs336_basics.model import TransformerLM
 from cs336_basics.checkpointing import *
-from cs336_basics.BPE import BPETokenizer
+from cs336_basics.bpe_baseline import BPETokenizer
 from cs336_basics.utils import Softmax
 
 def generate_text(model: TransformerLM, tokenizer: BPETokenizer, prompt: str, max_new_tokens: int, temperature: float = 1.0, top_k: int | None = None) -> str:

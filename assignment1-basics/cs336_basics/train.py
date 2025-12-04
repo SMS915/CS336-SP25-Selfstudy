@@ -11,7 +11,7 @@ from cs336_basics.optimizer import AdamW
 from cs336_basics.checkpointing import *
 from cs336_basics.model import *
 # from cs336_basics.data import DataLoader
-from cs336_basics.fast_data import create_dataloader 
+from cs336_basics.fast_data import create_dataloader
 
 def main():
     parser = argparse.ArgumentParser(description="训练大语言模型的脚本")
@@ -119,82 +119,11 @@ def main():
 
     print("尝试编译模型")
     model = torch.compile(model, mode='default')
-    # start_step = 0
 
-        # 初始化数据加载器
-    # train_loader = DataLoader(
-    #     dataset_path=config['train_data_path'],
-    #     context_length=config['context_length'],
-    #     batch_size=config['batch_size'],
-    #     seed=config.get('seed', 42),
-    #     device=device.type,
-    #     token_dtype=np.dtype(config.get('token_dtype', 'uint16'))
-    # )
     train_loader = create_dataloader(config, is_train=True)
 
-    # val_loader = DataLoader(
-    #     dataset_path=config['val_data_path'],
-    #     context_length=config['context_length'],
-    #     batch_size=config['batch_size'],
-    #     seed=config.get('seed', 42),
-    #     device=device.type,
-    #     token_dtype=np.dtype(config.get('token_dtype', 'uint16'))
-    # )
     val_loader = create_dataloader(config, is_train=False)
 
-
-    # current_epoch = 0
-    # train_iter = train_loader.__iter__()
-    # for step in range(start_step, config['max_steps']):
-    #     new_lr = get_lr_schedule(t=step, t_warm=config['warmup_steps'], t_cycle=config['cycle_steps'], lr_max=config['max_learning_rate'], lr_min=config['min_learning_rate'])
-    #     for param_group in optimizer.param_groups:
-    #         param_group['lr'] = new_lr
-    #     epoch_for_dataloader = step // config['steps_per_epoch']
-    #     if epoch_for_dataloader != current_epoch:
-    #         current_epoch = epoch_for_dataloader
-    #         train_iter = train_loader.__iter__()
-    #     with torch.amp.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
-    #         inputs, targets = next(train_iter)
-    #         logits = model(inputs, token_positions = None)  # batch_size seq_len vocab_size
-    #         loss = cross_entropy_loss(logits.view(-1, config['vocab_size']), targets.view(-1))
-    #     # scaled_loss = loss * s
-    #     optimizer.zero_grad()
-    #     scaler.scale(loss).backward()  
-    #     scaler.unscale_(optimizer)
-    #     clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
-    #     # torch.nn.utils.clip_grad_norm_(model.parameters(), config.get('max_grad_norm', 1.0))
-    #     scaler.step(optimizer)
-    #     scaler.update()
-
-    #     wandb.log({'train/loss': loss.item(), 'learning_rate': optimizer.param_groups[0]['lr']}, step=step)
-    #     if step % config.get('log_interval', 100) == 0:
-    #         print(f"Step {step}: Train Loss = {loss.item():.4f}")
-
-    #     if (step + 1) % config['eval_interval'] == 0:
-    #         model.eval()
-    #         val_loss = 0.0
-    #         with torch.no_grad():
-    #             val_iter = val_loader.__iter__()
-    #             for _ in range(config['eval_steps']):
-    #                 val_inputs, val_targets = next()
-    #                 val_logits = model(val_inputs, token_positions = None)
-    #                 val_loss += cross_entropy_loss(val_logits.view(-1, config['vocab_size']), val_targets.view(-1)).item()
-
-    #             avg_val_loss = val_loss / config['eval_steps']
-    #             perplexity = math.exp(avg_val_loss)
-    #             wandb.log({'val/loss': avg_val_loss, 'val/perplexity': perplexity}, step=step)
-    #         model.train()
-
-    #         if (step + 1) % config['checkpoint_interval'] == 0:
-    #             if not os.path.exists(ckpt_dir):
-    #                 os.makedirs(ckpt_dir)
-    #             ckpt_filename = f"ckpt_step_{step:07d}_loss_{val_loss:.4f}.pt"
-    #             ckpt_path = os.path.join(ckpt_dir, ckpt_filename)
-    #             if scaler is not None:
-    #                 save_amp_checkpoint(model=model, optimizer=optimizer,scaler=scaler, iteration= step + 1, out=ckpt_path)
-    #             else:
-    #                 save_checkpoint(model=model, optimizer=optimizer, iteration= step + 1, out=ckpt_path)
-    #             print(f"保存检查点: {ckpt_path}\n")
     grad_accum_steps = config.get('accumulate_size', 1)
 
     train_iter = iter(train_loader)
@@ -245,7 +174,6 @@ def main():
             accum_loss += loss.item() * grad_accum_steps 
 
         # 权重更新
-        
         if scaler is not None:
             scaler.unscale_(optimizer)
             # 梯度裁剪
@@ -265,6 +193,8 @@ def main():
         if step % config.get('log_interval', 100) == 0:
             print(f"Step {step}: Train Loss = {avg_loss:.4f}, grad_norm = {curr_grad_norm:.4f}")
 
+
+        # 评估逻辑
         if (step + 1) % config['eval_interval'] == 0:
             model.eval()
             val_loss = 0.0
@@ -292,6 +222,8 @@ def main():
             perplexity = math.exp(avg_val_loss)
             wandb.log({'val/loss': avg_val_loss, 'val/perplexity': perplexity}, step=step)
             model.train()
+
+            # 保存ckpt逻辑
             if config.get('save_ckpt', False):
                 if (step + 1) % config['checkpoint_interval'] == 0:
                     if not os.path.exists(ckpt_dir):
@@ -305,6 +237,82 @@ def main():
                     else:
                         save_checkpoint(model=model, optimizer=optimizer, iteration=step + 1, out=ckpt_path)
                     print(f"保存检查点: {ckpt_path}\n")
+
+
+    # 初版 training loop
+    # start_step = 0
+
+    # 初始化数据加载器
+    # train_loader = DataLoader(
+    #     dataset_path=config['train_data_path'],
+    #     context_length=config['context_length'],
+    #     batch_size=config['batch_size'],
+    #     seed=config.get('seed', 42),
+    #     device=device.type,
+    #     token_dtype=np.dtype(config.get('token_dtype', 'uint16'))
+    # )
+
+    # val_loader = DataLoader(
+    #     dataset_path=config['val_data_path'],
+    #     context_length=config['context_length'],
+    #     batch_size=config['batch_size'],
+    #     seed=config.get('seed', 42),
+    #     device=device.type,
+    #     token_dtype=np.dtype(config.get('token_dtype', 'uint16'))
+    # )
+
+    # current_epoch = 0
+    # train_iter = train_loader.__iter__()
+    # for step in range(start_step, config['max_steps']):
+    #     new_lr = get_lr_schedule(t=step, t_warm=config['warmup_steps'], t_cycle=config['cycle_steps'], lr_max=config['max_learning_rate'], lr_min=config['min_learning_rate'])
+    #     for param_group in optimizer.param_groups:
+    #         param_group['lr'] = new_lr
+    #     epoch_for_dataloader = step // config['steps_per_epoch']
+    #     if epoch_for_dataloader != current_epoch:
+    #         current_epoch = epoch_for_dataloader
+    #         train_iter = train_loader.__iter__()
+    #     with torch.amp.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
+    #         inputs, targets = next(train_iter)
+    #         logits = model(inputs, token_positions = None)  # batch_size seq_len vocab_size
+    #         loss = cross_entropy_loss(logits.view(-1, config['vocab_size']), targets.view(-1))
+    #     # scaled_loss = loss * s
+    #     optimizer.zero_grad()
+    #     scaler.scale(loss).backward()
+    #     scaler.unscale_(optimizer)
+    #     clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
+    #     # torch.nn.utils.clip_grad_norm_(model.parameters(), config.get('max_grad_norm', 1.0))
+    #     scaler.step(optimizer)
+    #     scaler.update()
+
+    #     wandb.log({'train/loss': loss.item(), 'learning_rate': optimizer.param_groups[0]['lr']}, step=step)
+    #     if step % config.get('log_interval', 100) == 0:
+    #         print(f"Step {step}: Train Loss = {loss.item():.4f}")
+
+    #     if (step + 1) % config['eval_interval'] == 0:
+    #         model.eval()
+    #         val_loss = 0.0
+    #         with torch.no_grad():
+    #             val_iter = val_loader.__iter__()
+    #             for _ in range(config['eval_steps']):
+    #                 val_inputs, val_targets = next()
+    #                 val_logits = model(val_inputs, token_positions = None)
+    #                 val_loss += cross_entropy_loss(val_logits.view(-1, config['vocab_size']), val_targets.view(-1)).item()
+
+    #             avg_val_loss = val_loss / config['eval_steps']
+    #             perplexity = math.exp(avg_val_loss)
+    #             wandb.log({'val/loss': avg_val_loss, 'val/perplexity': perplexity}, step=step)
+    #         model.train()
+
+    #         if (step + 1) % config['checkpoint_interval'] == 0:
+    #             if not os.path.exists(ckpt_dir):
+    #                 os.makedirs(ckpt_dir)
+    #             ckpt_filename = f"ckpt_step_{step:07d}_loss_{val_loss:.4f}.pt"
+    #             ckpt_path = os.path.join(ckpt_dir, ckpt_filename)
+    #             if scaler is not None:
+    #                 save_amp_checkpoint(model=model, optimizer=optimizer,scaler=scaler, iteration= step + 1, out=ckpt_path)
+    #             else:
+    #                 save_checkpoint(model=model, optimizer=optimizer, iteration= step + 1, out=ckpt_path)
+    #             print(f"保存检查点: {ckpt_path}\n")
 
     print("训练完成。")
 if __name__ == "__main__":
