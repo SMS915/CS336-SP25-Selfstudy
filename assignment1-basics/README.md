@@ -5,15 +5,20 @@
 ## 核心特性
 
 - **分词器 (Tokenizer)**：在 TinyStories/OpenWebText 数据集上训练的自定义字节对编码（BPE）分词器。
+
 - **模型架构**：
   - **现代组件**：RoPE（旋转位置编码）、RMSNorm、SwiGLU 激活函数。
   - **传统支持**：可配置支持绝对可学习位置编码/正余弦位置编码、LayerNorm 和 ReLU。
+  
 - **优化**：自定义实现的 `AdamW` 优化器和带有数值稳定性技巧的交叉熵损失函数（Cross-Entropy Loss）。
+
 - **效率**：支持 `torch.compile` 和混合精度训练（AMP）。
+
+  
 
 ## 消融实验与洞察
 
-我们在 OpenWebText数据集上进行了一些消融实验，以理解现代架构选择的影响。
+在 OpenWebText数据集上基于Transformer架构进行了一些消融实验，以理解现代架构选择的影响。
 
 ###  实验基准设置 (Experimental Setup)
 
@@ -35,8 +40,10 @@
 
   - Weight_Tying: True
 
-  - Max Learning Rate: 3e-4 (Cosine Schedule with Warmup)
+  - Max Learning Rate: 3e-4
 
+  - Min Learning Rate:  3e-5
+  
     
 
 ### 架构演进分析 (Architectural Evolution Analysis)
@@ -157,7 +164,7 @@ Windows环境下需要注释掉tests/test_tokenizer.py 的 import resource语句
 
 ```
 uv run pytest # 一次性运行全部测试
-uv run pytest -k test_{name}.py # 测试单个场景
+uv run pytest -k test_{test_name}.py # 测试单个场景
 ```
 
 
@@ -209,7 +216,7 @@ cd ..
 
 #### 训练
 
-**朴素版测试结果**
+##### 朴素版测试结果
 
 upcoming...
 
@@ -303,7 +310,7 @@ python Train.py --config experiments/ablation_{}.yaml
 │   ├── generation_utils.py                                                  # 文本生成核心逻辑 (Top-k, Temp)
 │   └── generate.py                                                               # 推理生成入口脚本
 ├── tests/                                                                                # 单元测试目录
-│   ├── adapter.py                                                                 # 官方测试接口适配器
+│   ├── adapters.py                                                                 # 官方测试接口适配器
 │   └── ...                                                                                 # 官方测试用例
 ├── cs336_spring2025_assignment1_basics.pdf             # 官方作业 Handout (英文)
 ├── [翻译]cs336_spring2025_assignment1_basics.pdf   # 作业 Handout (中文翻译)
