@@ -163,11 +163,11 @@ ___
 
 
 
-![ablation_WeightTying_train_loss](D:/CSDIY/CS336/assignment1-basics/asset/ablation_WeightTying_train_loss.png)
+![ablation_WeightTying_train_loss](asset/ablation_WeightTying_train_loss.png)
 
-![ablation_WeightTying_val_loss](D:/CSDIY/CS336/assignment1-basics/asset/ablation_WeightTying_val_loss.png)
+![ablation_WeightTying_val_loss](asset/ablation_WeightTying_val_loss.png)
 
-![ablation_WeightTying_gradnorm](D:/CSDIY/CS336/assignment1-basics/asset/ablation_WeightTying_gradnorm.png)
+![ablation_WeightTying_gradnorm](asset/ablation_WeightTying_gradnorm.png)
 
 **Observations:**
 

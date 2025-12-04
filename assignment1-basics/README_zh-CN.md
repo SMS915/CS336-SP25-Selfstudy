@@ -181,7 +181,7 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 **观察**：
 
-  1. **收敛性能的绝对优势 (Performance Superiority)**
+**1. 收敛性能的绝对优势 (Performance Superiority)**
 
 ​	**等参数下的性能提升**: 在几乎相同的参数规模下，搭载 **SwiGLU** 的模型（绿色/蓝色曲线）在验证集 Loss 上始终显著优于 **ReLU** 模型（橙色/黄色曲线）。
 
