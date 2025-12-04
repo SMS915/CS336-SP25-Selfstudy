@@ -64,7 +64,7 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 
 2. **位置感知的进化：绝对 vs. 相对** 从**绝对位置编码**（Sinusoidal/Learned）转向**旋转位置编码（RoPE）**是另一大飞跃。绝对位置编码将位置信息强加于 Token Embedding，存在“冷启动”问题且难以捕捉长距离的相对关系。RoPE 通过旋转操作将相对位置信息注入 Attention 机制，赋予了模型更强的长度外推能力和更快的收敛速度。
 
-3. **激活函数的效能** 从 **ReLU** 到 **SwiGLU** 的转变，通过引入门控机制（Gating），增加了非线性变换的丰富度，虽然参数量略有增加，但换来了更优的收敛效果。
+3. **激活函数的效能** 从 **ReLU** 到 **SwiGLU** 的转变，通过引入门控机制（Gating），增加了非线性变换的丰富度，配合调整隐藏层的维度，在参数量少量增加的条件下换来了更优的收敛效果。
 
    
 
@@ -137,7 +137,7 @@ Transformer 架构自 2017 年提出以来，经历了从原始设计（Vanilla�
 **观察**：
 
 1. **收敛优势**：从 Loss 曲线可以看出，**SwiGLU (蓝色)** 相比 **ReLU (橙色)** 具有更快的收敛速度和更低的最终 Loss。这验证了门控机制在提升模型性能方面的有效性。
-2. **规模效应 (Scale Effect)**：值得注意的是，虽然 SwiGLU 表现更优，但在当前的小参数规模（~17M）下，其带来的性能提升幅度相比于位置编码（RoPE）的改进显得较小。
+2. **规模效应**：值得注意的是，虽然 SwiGLU 表现更优，但在当前的小参数规模（~17M）下，其带来的性能提升幅度相比于位置编码（RoPE）的改进显得较小。
    - 这可能是因为在小模型中，参数量的限制使得模型难以充分利用 SwiGLU 带来的额外表达能力。通常在更大规模的模型（如 Llama-70B）中，SwiGLU 的优势会更加显著。
 
 ## 使用方法
@@ -287,37 +287,40 @@ python Train.py --config experiments/ablation_{}.yaml
 
 ## 项目结构
 
-├── asset/                                                                               # 实验记录与可视化 (WandB 曲线图等)
-├── configs/                                                                           # 模型与训练配置文件
-│   ├── base_modern.yaml                                                 # 现代架构基准配置 (Llama-style, RoPE, SwiGLU)
-│   ├── base_vanilla.yaml                                                    # 原始架构配置 (Post-Norm, Sinusoidal PE, ReLU)
+```text
+.
+├── asset/                                          # 实验记录与可视化 (WandB 曲线图等)
+├── configs/                                        # 模型与训练配置文件
+│   ├── base_modern.yaml                            # 现代架构基准配置 (Llama-style, RoPE, SwiGLU)
+│   ├── base_vanilla.yaml                           # 原始架构配置 (Post-Norm, Sinusoidal PE, ReLU)
 │   └── experiments/
-│       └── ablation_{ablation_name}.yaml                                           # 用于消融实验的独立配置
-├── cs336_basics/                                                                 # 核心源代码库
-│   ├── model.py                                                                   # Transformer 核心组件 (Attention, RoPE, RMSNorm)
-│   ├── optimizer.py                                                             # 手写 AdamW 优化器
-│   ├── utils.py                                                                       # 基础工具 (Softmax, CrossEntropy, LR Schedule)
-│   ├── checkpointing.py                                                     # 模型检查点保存与加载
-│   ├── train.py                                                                      # 主训练循环 (集成 WandB)
-│   ├── bpe_baseline.py                                                       # BPE 分词器 (Baseline 实现)
-│   ├── bpe_fast.py                                                               # BPE 分词器 (优化版实现)
-│   ├── profile_bpe.py                                                          # 对原始或优化的分词器进行效率分析
-│   ├── train_bpe.py                                                             # BPE 训练入口脚本
-│   ├── data.py                                                                      # 单进程 Dataloader (Memory Mapping)
-│   ├── fast_data.py                                                              # 多进程 Dataloader
-│   ├── preprocess_training_data.py                                 # 语料预处理与二进制化脚本
-│   ├── pretokenization_example.py                                 # 官方给出的多进程文本分块边界处理代码
-│   ├── generation_utils.py                                                  # 文本生成核心逻辑 (Top-k, Temp)
-│   └── generate.py                                                               # 推理生成入口脚本
-├── tests/                                                                                # 单元测试目录
-│   ├── adapters.py                                                                 # 官方测试接口适配器
-│   └── ...                                                                                 # 官方测试用例
-├── cs336_spring2025_assignment1_basics.pdf             # 官方作业 Handout (英文)
-├── [翻译]cs336_spring2025_assignment1_basics.pdf   # 作业 Handout (中文翻译)
-├── run_train.sh                                                                    # 启动脚本：模型训练
-├── run_generate.sh                                                            # 启动脚本：文本生成
-├── run_train_bpe.sh                                                           # 启动脚本：分词器训练
-└── uv.lock                                                                             # Python 环境依赖锁定文件,在较新的 (如Blackwell架构) GPU上不适配
+│       └── ablation_{ablation_name}.yaml           # 用于消融实验的独立配置
+├── cs336_basics/                                   # 核心源代码库
+│   ├── model.py                                    # Transformer 核心组件 (Attention, RoPE, RMSNorm)
+│   ├── optimizer.py                                # 手写 AdamW 优化器
+│   ├── utils.py                                    # 基础工具 (Softmax, CrossEntropy, LR Schedule)
+│   ├── checkpointing.py                            # 模型检查点保存与加载
+│   ├── train.py                                    # 主训练循环 (集成 WandB)
+│   ├── bpe_baseline.py                             # BPE 分词器 (Baseline 实现)
+│   ├── bpe_fast.py                                 # BPE 分词器 (优化版实现)
+│   ├── profile_bpe.py                              # 对原始或优化的分词器进行效率分析
+│   ├── train_bpe.py                                # BPE 训练入口脚本
+│   ├── data.py                                     # 单进程 Dataloader (Memory Mapping)
+│   ├── fast_data.py                                # 多进程 Dataloader
+│   ├── preprocess_training_data.py                 # 语料预处理与二进制化脚本
+│   ├── pretokenization_example.py                  # 官方给出的多进程文本分块边界处理代码
+│   ├── generation_utils.py                         # 文本生成核心逻辑 (Top-k, Temp)
+│   └── generate.py                                 # 推理生成入口脚本
+├── tests/                                          # 单元测试目录
+│   ├── adapter.py                                  # 官方测试接口适配器
+│   └── ...                                         # 官方测试用例
+├── cs336_spring2025_assignment1_basics.pdf         # 官方作业 Handout (英文)
+├── [翻译]cs336_spring2025_assignment1_basics.pdf    # 作业 Handout (中文翻译)
+├── run_train.sh                                    # 启动脚本：模型训练
+├── run_generate.sh                                 # 启动脚本：文本生成
+├── run_train_bpe.sh                                # 启动脚本：分词器训练
+└── uv.lock                                         # Python 环境依赖锁定文件,在较新的 (如Blackwell架构) GPU上不适配
+```
 
 
 
