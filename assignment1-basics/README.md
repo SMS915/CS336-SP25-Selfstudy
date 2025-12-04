@@ -57,8 +57,9 @@ Since its proposal in 2017, the Transformer architecture has undergone significa
 
 ![ablation_modern&vanilia_gradnorm](asset/ablation_modern&vanilla_gradnorm.png)
 
-<p align="center">(The figures above compare the Validation Loss and Gradient Norm of the Modern architecture vs. the Vanilla architecture. It can be seen that the Modern architecture has an overwhelming advantage in convergence speed and training stability.)<p>
-
+<p align="center">Figure: Comparison between Modern architecture and Vanilla architecture on Validation Loss and Gradient Norm.</p><p align="center">
+It can be seen that the Modern architecture has an overwhelming advantage in convergence speed and training stability.
+</p>
 
 
 
@@ -76,7 +77,11 @@ This evolution is not accidental but addresses two core pain points: **Training 
 
    The transition from **ReLU** to **SwiGLU** introduces a gating mechanism. This increases the richness of non-linear transformations and, when combined with adjusted hidden layer dimensions, yields better convergence with only a small increase in parameter count.
 
-   
+
+
+___
+
+
 
 ### 1. Training Stability: Post-Norm vs. Pre-Norm
 
@@ -88,13 +93,21 @@ This evolution is not accidental but addresses two core pain points: **Training 
 
 <center>The figures above show the loss and gradient norm during training.</center>
 
-**Observation**：The orange line **(Native/Post-Norm)** shows severe instability and gradient spikes after warmup ends, while the blue line **(Modern/Pre-Norm)** remains stable. This confirms the instability of Post-Norm in the early training of deep networks.
+**Observation**：The orange line **(Native/Post-Norm)** shows severe instability and gradient spikes after warmup ends, while the blue line **(Modern/Pre-Norm)** remains stable. 
+
+
+
+**Conclusion**：This confirms the instability of Post-Norm in the early training of deep networks.
+
+
+
+___
 
 
 
 ### 2. Positional Encoding Strategy Analysis: RoPE, NoPE, Sinusoidal & Learned
 
-**Background**：Based on the original Transformer (Post-Norm) and keeping other variables constant, we compared the effects of four positional encoding configurations: RoPE (Rotary), NoPE (No Positional Encoding), Sinusoidal (Absolute), and Learned (Absolute).
+**Experimental Setup**：Based on the original Transformer (Post-Norm) and keeping other variables constant, we compared the effects of four positional encoding configurations: RoPE (Rotary), NoPE (No Positional Encoding), Sinusoidal (Absolute), and Learned (Absolute).
 
 ![ablation_pe_trainloss](asset/ablation_pe_train_loss.png)
 
@@ -140,17 +153,79 @@ Observing the gradient norm curves reveals a polarization:
 
 
 
+___
+
+
+
 ### 3. Impact of Weight Tying
 
-**Analysis**：Tying the weights of the embedding layer and the language model head (Output layer) can significantly reduce the number of parameters, but may limit representation capability. 
+**Experimental Setup:** Building upon the Vanilla (Post-Norm) architecture, this experiment compares two embedding strategies: **Tied** (yellow), where the input embedding and the output LM head share parameters, and **Untied** (red), where the input and output utilize two independent matrices. The Tied configuration contains 28.9M parameters, while the Untied configuration contains 16M.
 
-Our experiments show ...
+
+
+![ablation_WeightTying_train_loss](D:/CSDIY/CS336/assignment1-basics/asset/ablation_WeightTying_train_loss.png)
+
+![ablation_WeightTying_val_loss](D:/CSDIY/CS336/assignment1-basics/asset/ablation_WeightTying_val_loss.png)
+
+![ablation_WeightTying_gradnorm](D:/CSDIY/CS336/assignment1-basics/asset/ablation_WeightTying_gradnorm.png)
+
+**Observations:**
+
+**1. Generalization Victory on Tied** 
+
+As shown in the `val/loss` curve, the **Tied Model (Yellow)** achieves a significantly lower terminal loss (**4.67**) compared to the **Untied Model (Red)** (**4.79**). This demonstrates that weight tying effectively functions as a regularizer. By reducing the parameter count, it mitigates overfitting and enhances the model's performance on the validation set.
+
+**2. The Cost of Optimization Stability** 
+
+The `grad_norm` plot reveals a counter-intuitive phenomenon. The **Untied Model (Red)** exhibits a remarkably stable gradient norm with almost no fluctuation throughout the entire training process. In contrast, the **Tied Model (Yellow)** undergoes severe **Gradient Spikes** during the early training phase (Warmup), indicating significant optimization instability despite its superior final performance.
+
+
+
+**Analysis:** 
+
+Under the current experimental conditions—characterized by a small model scale and limited data diversity—the results exhibit a distinct trade-off: the **Untied configuration demonstrates superior gradient stability**, whereas the **Tied configuration yields better final performance**. We analyze this phenomenon through the lenses of gradient propagation and modular functional responsibilities.
+
+
+
+**1. Gradient Propagation Perspective: Structural Decoupling and Buffering** 
+
+In the **Untied** configuration, the input embedding layer and the output classification layer are structurally decoupled. During backpropagation, error gradients originating from the output prediction logits do not directly impinge upon the input representations. This physical isolation acts as a natural **optimization buffer**, granting the model superior stability during the early training phase. Conversely, in the **Tied** configuration, a single set of parameters must simultaneously handle divergent gradient flows from both the network's "head" (feature extraction) and "tail" (logit prediction). This direct feedback loop induces high variance and severe gradient spikes during the initial training stages.
+
+
+
+**2. Functional Role Perspective: Friction in Multi-Objective Optimization** 
+
+From a functional standpoint, the tied embedding matrix faces a **Dual-Role Constraint**: it must serve as the input layer to construct a robust, continuous semantic space while simultaneously acting as the output layer to provide high-resolution, discriminative classification boundaries. In the early stages of training, the gradient directions required to satisfy these two distinct objectives often exhibit orthogonal or even conflicting trends. This conflict results in significant **"Optimization Friction,"** which manifests as the observed gradient oscillations.
+
+
+
+**3. Small-Scale Regime Analysis: The Dividend of Inductive Bias** 
+
+In the current experimental setting characterized by a smaller model size and limited data diversity, the weight tying strategy—despite its initial instability—introduces a critical **Inductive Bias**: the assumption that the input semantic space and the output semantic space are isomorphic. This strong constraint acts as an effective regularizer, forcing the model to learn more compact and essential semantic representations within a restricted parameter space. Consequently, this translates into superior generalization capabilities within the current data scope.
+
+
+
+**4. Large-Scale Scenario Extrapolation: The Necessity of Semantic Heterogeneity** 
+
+However, when extrapolating to large-scale model training driven by massive, diverse corpora, subtle **"Semantic Deviations"** may emerge between the contextual semantics of the input and the predictive distributional semantics of the output. In such regimes, the **Untied** strategy is released from the isomorphic constraint and possesses greater parameter capacity to independently model this input-output asymmetry. Given abundant data, this higher degree of expressive freedom is expected to capture broader semantic nuances, potentially surpassing the performance ceiling of the tied strategy in long-run training.
+
+
+
+**Conclusion**：
+
+In summary, the decision to employ Weight Tying should not be viewed merely as a binary architectural preference, but as a strategic trade-off contingent upon the specific **"Data-Parameter Regime."** Fundamentally, Weight Tying serves as a **strong regularizer**. By enforcing isomorphism between input and output spaces, it sacrifices early-stage optimization stability in exchange for enhanced generalization in resource-constrained settings. Conversely, in resource-abundant regimes characteristic of large-scale pre-training, decoupling these weights (Untying) may be the necessary path to unlock the model's full expressive potential.
+
+
+
+___
 
 
 
 ### 4. Impact of Activation Functions
 
-Based on the original Transformer, keeping parameter count and other factors constant, we compared the impact of different activation functions on performance.
+**Experimental Setup**：In order to isolate the effect of activation functions, we evaluated the performance of SwiGLU (SiLU + gating mechanism) versus standard ReLU on both Modern and Vanilla architectures. We strictly controlled the parameter counts to ensure a fair comparison (~77M/16M for SwiGLU vs. ~76M/16M for ReLU).
+
+
 
 **Hypothesis**：SwiGLU (SiLU + Gating), compared to traditional ReLU, increases non-linear expressive power by introducing a Gated Linear Unit, usually leading to better convergence.
 
@@ -158,19 +233,39 @@ Based on the original Transformer, keeping parameter count and other factors con
 
 ![ablation_activation_val_loss](asset/ablation_activation_val_loss.png)
 
-![ablation_activation_grad_norm](asset/ablation_activation_grad_norm.png)
+![ablation_activation_grad_norm](asset/ablation_activation_gradnorm.png)
+
+![ablation_activation_gradnorm_modern](asset/ablation_activation_gradnorm_modern.png)
 
 <p align="center">The figure above compares Training & Validation Loss for SwiGLU (Blue) vs. Original ReLU (Orange)</p>
 
-**Observation**：
+**Observations**：
 
-1. **Convergence Advantage**：The Loss curves show that **SwiGLU (Blue)** has faster convergence and lower final Loss compared to **ReLU (Orange)**. This verifies the effectiveness of the gating mechanism in improving model performance.
+1. **Performance Superiority**
 
-2. **Scale Effect**: Notably, while SwiGLU performs better, at the current small parameter scale (~17M), the magnitude of improvement is smaller compared to improvements from positional encoding (RoPE).
+   **Performance Improvement under Equal Parameters**: At nearly identical parameter scales, models equipped with **SwiGLU** (green/blue curves) consistently achieve significantly lower validation loss compared to **ReLU** models (orange/yellow curves).
+
+   **Consistency of the Gap**: This performance advantage is particularly pronounced within the Modern architecture. **Modern + SwiGLU (green)** exhibits the steepest descent slope and the lowest convergence value, demonstrating that Gated Linear Units (GLU) possess higher **information encoding efficiency** under equivalent computational budgets.
+
    
-   - This may be because, in small models, parameter limitations make it difficult to fully utilize the extra expressive power brought by SwiGLU. Typically, in larger models (like Llama-70B), the advantage of SwiGLU becomes more significant.
+
+2. **Gradient Stability Advantage**
+
+   **Baseline Role of Architecture**: First, the `grad_norm` chart confirms that the Modern (Pre-Norm) architecture (green/orange) successfully eliminates the severe gradient spikes observed in the Vanilla (Post-Norm) architecture (blue/yellow) during the early stages of training. This validates the necessity of Pre-Norm for optimizing deep networks.
+
    
-     
+
+   **SwiGLU’s "Stabilizer" Effect**: More notably, even within the already stable Modern architecture, the gradient norm of **SwiGLU (green)** remains lower and smoother than that of **ReLU (orange)**.
+
+   - While it is often assumed that introducing complex gating structures might increase optimization complexity, the experiment indicate that the multiplicative interactions in SwiGLU appear to create a smoother optimization landscape, rendering the model more robust during parameter updates.
+
+   
+
+**Conclusion**：
+
+The experiments compellingly demonstrate that the superiority of SwiGLU stems from its intrinsic structure rather than an increase in parameter count (which was strictly controlled at ~76M vs. ~77M and 16M vs. 16M). SwiGLU not only enhances the model's **nonlinear expressive capability** through its feature gating mechanism but also unexpectedly yields **additional benefits in gradient stability**. This positions it as the indisputable activation function of choice for modern LLM architectures.
+
+
 
 ## Usage
 
