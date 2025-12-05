@@ -2,13 +2,15 @@
 
 # ================= 配置区域 =================
 
-INPUT_DATA="data/owt_train.txt"
+INPUT_DATA="data/OpenWebText-Sample-100MB.txt"
 
 # 2. 设置目标词表大小 (GPT-2 标准是 50257)
 VOCAB_SIZE=32000
 
 # 3. 设置保存的文件名前缀 (会生成 ..._vocab.json 和 ..._merges.txt)
-SAVE_PREFIX="BPE_File/self_owt"
+SAVE_PREFIX="BPE_File/naive_test_100mb"
+
+BPE_VERSION="naive"
 
 # 4. 设置特殊 Token (用空格分隔)
 SPECIAL_TOKENS="<|endoftext|>"
@@ -37,6 +39,7 @@ python cs336_basics/train_bpe.py \
     --input_path "$INPUT_DATA" \
     --vocab_size "$VOCAB_SIZE" \
     --save_name "$SAVE_PREFIX" \
+    --bpe_version "$BPE_VERSION" \
     --special_tokens $SPECIAL_TOKENS
 
 # 检查退出状态
