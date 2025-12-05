@@ -429,7 +429,6 @@ class BPETokenizer:
 
         merges_path = f"{file_prefix}_merges.txt"
         with open(merges_path, "w", encoding="utf-8") as f:
-            f.write("#version: 0.2\n") 
             for p1_bytes, p2_bytes in self._merges:
                 s1 = "".join([byte_encoder[b] for b in p1_bytes])
                 s2 = "".join([byte_encoder[b] for b in p2_bytes])

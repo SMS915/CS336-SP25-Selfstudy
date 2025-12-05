@@ -4,20 +4,21 @@ import numpy as np
 import time
 import argparse
 from typing import List, Tuple
-from tqdm import tqdm  # 导入 tqdm
+from tqdm import tqdm
 
-from cs336_basics.bpe_fast import BPETokenizer, find_chunk_boundaries
+from cs336_basics.bpe_fast import find_chunk_boundaries
+from cs336_basics.bpe_fast import BPETokenizer as FastTokenizer
+from cs336_basics.bpe_naive import BPETokenizer as NaiveTokenizer
 
-# --- 全局配置 ---
 TOKEN_DTYPE = np.uint16  # 对于 GPT-2 级别的词表 (50257)，uint16 (0-65535) 足够且节省空间
 CHUNK_MULTIPLIER = 4     # 任务块数量是核心数的倍数，让调度更灵活
 
 DATA_DIR = "data"
 DEFAULT_FILES = [
-    # "owt_train.txt",
-    # "owt_valid.txt",
+    "owt_train.txt",
+    "owt_valid.txt",
     "TinyStoriesV2-GPT4-train.txt",
-    # "TinyStoriesV2-GPT4-valid.txt"
+    "TinyStoriesV2-GPT4-valid.txt"
 ]
 
 def encode_worker(args):
@@ -39,7 +40,7 @@ def encode_worker(args):
             
             bytes_data = f.read(length)
             
-        # 解码为字符串，使用 'replace' 忽略错误的 unicode 字符（防止切分点在多字节字符中间的极罕见情况）
+        # 解码为字符串，使用 'replace' 忽略错误的 unicode 字符
         text_chunk = bytes_data.decode('utf-8', errors='replace')
         
         # 执行 FastBPE 编码
@@ -51,7 +52,7 @@ def encode_worker(args):
         print(f"\n[Worker Error] 处理块 {chunk_id} ({start}-{end}) 时出错: {e}")
         return np.array([], dtype=TOKEN_DTYPE)
 
-def process_file(input_path: str, tokenizer: BPETokenizer, num_workers: int):
+def process_file(input_path: str, tokenizer: FastTokenizer | NaiveTokenizer, num_workers: int):
     """
     处理单个文件的完整流程：切分 -> 并行编码 -> 写入 .bin
     """
@@ -69,9 +70,7 @@ def process_file(input_path: str, tokenizer: BPETokenizer, num_workers: int):
     
     t0 = time.time()
 
-    # 1. 计算切分边界
-    # 我们希望把文件切分成很多小块，让多进程并行处理
-    # 使用 b'\n' 作为切分符，确保在行尾切断，防止单词被切断
+    # 计算切分边界,把文件切分成很多小块，让多进程并行处理
     desired_chunks = num_workers * CHUNK_MULTIPLIER
     print(f"正在计算文件切分边界 (目标: {desired_chunks} 块)...")
     
@@ -105,10 +104,6 @@ def process_file(input_path: str, tokenizer: BPETokenizer, num_workers: int):
     print("启动多进程编码...")
     with mp.Pool(processes=num_workers) as pool:
         with open(output_path, 'wb') as f_out:
-            # 使用 tqdm 包装循环
-            # total=num_tasks: 进度条的总长度是任务块的数量
-            # unit="chunk": 单位是块
-            # desc: 进度条左侧的描述文字
             with tqdm(total=num_tasks, desc=f"Encoding {os.path.basename(input_path)}", unit="chunk") as pbar:
                 # imap 返回的是一个迭代器，按任务提交顺序返回结果
                 for result_arr in pool.imap(encode_worker, tasks):
@@ -135,7 +130,7 @@ def main():
     
     parser.add_argument("--inputs", nargs='+', help="输入文本文件路径列表 (.txt)。如果不指定，默认使用代码中定义的 DATA_DIR 下的文件。")
     parser.add_argument("--model_dir", type=str, default="BPE_File", help="包含 vocab.json 和 merges.txt 的目录")
-    parser.add_argument("--workers", type=int, default=15, help="并行工作的进程数") # 这里由于autodl的CPU核心数与系统信息不一致，需要手动指定自己被分配了几个CPU核心，否则进程太多反而会限制进程性能
+    parser.add_argument("--workers", type=int, default=15, help="并行工作的进程数") # 这里由于autodl的CPU核心数与系统信息不一致，需要手动指定自己分配的CPU核心数量，否则进程太多反而会限制进程性能
     parser.add_argument("--vocab_file", type=str, default="gpt2_vocab.json", help="词表文件名")
     parser.add_argument("--merges_file", type=str, default="gpt2_merges.txt", help="Merges 文件名")
     
@@ -148,17 +143,26 @@ def main():
         print(f"错误: 找不到模型文件。\n请检查 {vocab_path} 和 {merges_path}")
         return
 
-    # 1. 加载分词器
+    # 加载分词器
     print(f"正在加载分词器 (PID: {os.getpid()})...")
     t_load = time.time()
-    tokenizer = BPETokenizer.from_files(
+
+    # fastTokenizer
+    # tokenizer = FastTokenizer.from_files(
+    #     vocab_filepath=vocab_path,
+    #     merges_filepath=merges_path,
+    #     special_tokens=["<|endoftext|>"]
+    # )
+
+    # naiveTokenizer
+    tokenizer = NaiveTokenizer.from_files(
         vocab_filepath=vocab_path,
         merges_filepath=merges_path,
         special_tokens=["<|endoftext|>"]
     )
     print(f"分词器加载完成，耗时 {time.time() - t_load:.2f} 秒。")
 
-    # 2. 确定要处理的文件列表
+    # 确定要处理的文件列表
     if args.inputs:
         # 如果命令行指定了文件，优先使用命令行参数
         files_to_process = args.inputs
@@ -167,7 +171,7 @@ def main():
         print(f"未指定输入文件，使用默认目录 '{DATA_DIR}' 下的文件列表。")
         files_to_process = [os.path.join(DATA_DIR, f) for f in DEFAULT_FILES]
 
-    # 3. 处理所有文件
+    # 处理所有文件
     for input_file in files_to_process:
         process_file(input_file, tokenizer, args.workers)
 

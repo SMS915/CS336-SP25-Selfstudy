@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ================= 配置区域 =================
-# Python 脚本的文件名
 
+# Python 脚本的文件名
 PYTHON_SCRIPT="cs336_basics/preprocess_training_data.py"
 
 # 模型文件所在的目录 (根据你的 ls 输出)
