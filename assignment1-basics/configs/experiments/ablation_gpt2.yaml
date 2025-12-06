@@ -27,7 +27,7 @@ d_model: 256
 d_ff: null
 n_kv_heads: null
 
-activation: 'relu'
+activation: 'gelu'
 gated_ffn: False
 gated_attn: False
 Weight_Tying: True
@@ -36,7 +36,7 @@ post_norm: False
 layer_norm: True
 no_norm: False
 
-pos_emb_type: 'sinusoidal'
+pos_emb_type: 'learned'
 theta: 10000.0
 bias: True
 

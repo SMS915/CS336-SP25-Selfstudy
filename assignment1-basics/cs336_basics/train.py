@@ -70,7 +70,7 @@ def main():
         num_layers=config['n_layers'],
         num_heads=config['n_heads'],
         d_ff = config['d_ff'],
-        rope_theta=config['rope_theta'],
+        theta=config['theta'],
         post_norm=config.get('post_norm', False),
         no_norm = config.get('no_norm', False),
         gated_ffn=config.get('gated_ffn', True),

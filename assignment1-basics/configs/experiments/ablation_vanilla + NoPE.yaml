@@ -37,7 +37,7 @@ layer_norm: True
 no_norm: False
 
 pos_emb_type: 'removed'
-rope_theta: 10000.0
+theta: 10000.0
 bias: True
 
 # ==========================================

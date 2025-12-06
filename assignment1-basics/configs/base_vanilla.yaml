@@ -25,7 +25,7 @@ n_layers: 12
 n_heads: 8
 d_model: 512
 d_ff: null
-rope_theta: 10000.0
+theta: 10000.0
 
 # 以下为消融的可选实验参数
 n_kv_heads: null

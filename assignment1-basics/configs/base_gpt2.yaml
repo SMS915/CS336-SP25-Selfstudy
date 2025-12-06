@@ -6,7 +6,7 @@ project_name: "CS336-TransformerLM-OpenWebText-Modern"
 seed: 42                                  # 固定随机种子，保证实验可复现
 device: "cuda"                            # 训练设备
 load_ckpt: False                          # 是否加载旧权重（Resume Training）
-save_ckpt: True                           # 是否保存权重
+save_ckpt: False                         # 是否保存权重
 checkpoint_path: "checkpoints/"           # 权重保存路径
 
 # ==========================================
@@ -31,18 +31,18 @@ theta: 10000.0                       # RoPE 的波长基数
 # 以下为消融的可选实验参数
 n_kv_heads: null                          # KV 头数 (null 表示等于 n_heads，即不使用 GQA/MQA)
 
-activation: "silu"                        # 激活函数 ['silu', 'relu', 'gelu' 等]
-gated_ffn: True                           # 开启 Gated FFN (即 SwiGLU 结构)
+activation: "gelu"                        # 激活函数 ['silu', 'relu', 'gelu' 等]
+gated_ffn: False                           # 开启 Gated FFN (即 SwiGLU 结构)
 gated_attn: False                         # 开启 Gated Attention
 Weight_Tying: True                        # 共享 Input Embedding 和 Output Projection 权重
 
 post_norm: False                          # Post-Norm 结构开关参数
-layer_norm: False                         # 是否使用 LayerNorm (若为 False 则使用 RMSNorm)
+layer_norm: True                       # 是否使用 LayerNorm (若为 False 则使用 RMSNorm)
 no_norm: False                            # 完全移除 Norm，观察无Norm下训练情况
 
-pos_emb_type: 'rope'                      # 'rope': 旋转位置编码; 'sinusoidal': 正弦位置编码; 'learned': 嵌入矩阵学习位置编码; 'removed': 无位置编码
+pos_emb_type: 'learned'                      # 'rope': 旋转位置编码; 'sinusoidal': 正弦位置编码; 'learned': 嵌入矩阵学习位置编码; 'removed': 无位置编码
 
-bias: False                               # 禁用 Linear 层偏置 (现代 LLM 常见做法)
+bias: True                              # 禁用 Linear 层偏置 (现代 LLM 常见做法)
 
 flash_attn: True                          # Flash-attention启用开关，开启时使用nn.functional内置的 scaled_dot_product_attention，反之使用自己实现的偏低效率SDPA
 

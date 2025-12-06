@@ -173,16 +173,14 @@ def train_bpe_run(input_path : str,
     given a path to corpus, train a bpe and return its vocabulary and merges
 
     Args:
-        input_path (str | os.PathLike): Path to a text file with BPE tokenizer training data.
-        vocab_size (int): A positive integer,defines maximum total number of items in the tokenizer's vocabulary, including special tokens.
-        special_tokens (list[str]): List of special tokens used in the tokenizer,
-        which will never be merged with other tokens or be split into multiple tokens.
+        input_path (str | os.PathLike): BPE训练语料文件地址
+        vocab_size (int): 一个正整数，规定了分词器的词表目标大小
+        special_tokens (list[str]): 一个列表，包含了所有在训练中需要避免被切分开 或者 与其他token合并的special_tokens
 
     Returns:
         tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-            vocab (dict[int, bytes]): The tokenizer vocabulary, a mapping from int (token ID in the vocabulary) to bytes (token bytes).
-            merges (list[tuple[bytes, bytes]]): A list of BPE merges produced from training. Each list item is a tuple of bytes (<token1>, <token2>),
-                                                representing that <token1> was merged with <token2>. Merges are ordered by order of creation.
+            vocab (dict[int, bytes]): 训练完毕的分词器的词表，表现为一个以token_id为键，以对应token字节为值的字典
+            merges (list[tuple[bytes, bytes]]): 一个记录了训练过程中所有BPE合并记录的列表，其中每个单元是一对token元组，表示token1与token2产生了合并，合并记录的排序与训练时的产生顺序一致。
     """
 
     if vocab_size <= 0 or not isinstance(vocab_size, int):
