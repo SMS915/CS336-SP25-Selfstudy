@@ -46,115 +46,97 @@
 * **架构与扩展性**: 当前的`pipeline.py`实现是一个功能完备的**单进程串行版本**，其重点在于验证和展示整个流程的逻辑正确性。由于其模块化的设计（每个WET文件被独立处理），其核心处理逻辑可以被轻松地封装并部署到并行计算框架（如 Python 的 concurrent.futures 或集群调度工具 submitit）中，以适应未来更大规模的处理任务。
 
   
+  
+  
 
-## 3. 项目结构
+## 3. 流水线成果与数据分析
+
+本节展示了数据处理流水线在样本数据集上运行后的关键统计数据，并对其进行分析。这些数据量化了每个过滤阶段对原始Common Crawl数据的筛选效果，并验证了本管道设计的有效性。
+
+
+
+### 3.1 初步过滤阶段统计
+
+以下数据是在一个包含 **545,744** 个文档的Common Crawl WET文件样本上，运行**并行初步过滤**后得到的统计结果：
+
+| 过滤步骤                                | 移除的文档数 | 剩余文档数 | (移除)占余量的百分比 | 占总数的百分比 | 备注                       |
+| :-------------------------------------- | :----------: | :--------: | :------------------: | :------------: | :------------------------- |
+| **短文本过滤** (`short_count < 100`)    |    11,928    |  533,816   |        ~2.19%        |     ~2.19%     | 移除内容过少的页面         |
+| **语言过滤** (`lang_failed`)            |   494,663    |   39,153   |       ~92.67%        |  **~90.64%**   | 过滤非英语或低置信度文本   |
+| **NSFW内容过滤** (`nsfw_failed`)        |     129      |   39,024   |        ~0.33%        |    ~0.023%     | 移除NSFW内容               |
+| **有害言论过滤**(`toxic_failed`)        |     264      |   38,760   |        ~0.67%        |    ~0.048%     | 移除Toxic内容              |
+| **Gopher规则** (`gopher_failed`)        |    3,573     |   35,187   |        ~9.22%        |     ~0.65%     | 移除结构性低质量文本       |
+| **自定义质量分类器** (`quality_failed`) |    29,362    |   5,825    |       ~83.44%        |     ~5.38%     | 移除“良好”但非“卓越”的文本 |
+| **最终保留** (`kept`)                   |  **5,825**   |     -      |          -           |   **~1.07%**   | -                          |
+
+#### 分析与洞见
+
+1. CC原始数据的信噪比极低
+
+   实验数据明确表明，原始Common Crawl数据中超过 **98%** 的内容不符合高质量标准。约 **1%** 的最终保留率与业界在构建大规模高质量语料库（如C4, RefinedWeb）时的发现高度一致，证明了本管道严格筛选的必要性和有效性。
+
+2. 过滤器的作用分工
+
+    **语言过滤器**是最高效的“粗筛”工具，仅此一项就剔除了绝大部分不相关的文档（~**90.64%**），符合 Common Crawl (CC) 原始分布。作为全网抓取的数据，CC包含了大量非英语、乱码、或者无法识别编码的网页。。
+
+    其他过滤器（Gopher、有害内容等）作为重要的补充，捕捉了特定类型的低质量内容。
+
+   **自定义质量分类器**则是最后但最关键的“精筛”工具。在所有通过了基础检查的文档中，它移除了超过八成（~83.44%）被判定为“非引用级”质量的内容，完美体现了本项目“精英 vs. 良好”的核心筛选策略。
+
+   
+
+## 4. 项目结构
 
 本项目的核心逻辑被统一组织在 `cs336_data` 这个Python包中，实现了可复用“库”代码与可执行“脚本”的分离。
 
 ```
-cs336_data/
-├── __init__.py                  # 包初始化文件
-├── dataset_builder.py           # 【脚本】构建质量分类器的训练数据集，支持多种负采样策略
-├── deduplication.py             # 【库】  精确行去重与MinHash+LSH近似去重的核心逻辑
-├── extraction.py                # 【库】  从原始HTML中进行稳健的文本提取
-├── filter.py                    # 【库】  包含所有过滤组件：语言识别、Gopher规则、NSFW/Toxic分类器，以及核心的 `judge_high_quality` 函数
-├── pipeline.py                  # 【脚本】最终的端到端流水线主脚本，负责编排所有处理阶段
-├── prepare_wiki_data.py         # 【脚本】用于从维基百科URL源文件采样，并生成wget下载命令的辅助脚本
-├── quality_classifier.py        # 【库】  包含 `QualityClassifier` 类，用于加载训练好的模型并执行预测
-├── sample_data_from_warc.py     # 【脚本】用于生成样本CSV文件以供分析和确定阈值的探索性脚本
-├── train_quality_classifier.py  # 【脚本】使用YAML配置文件来训练fastText质量分类器
-├── UF.py                        # 【库】  并查集（Disjoint Set Union）数据结构的实现，用于聚类
-└── utils.py                     # 【库】  包含通用辅助函数，如文本标准化 `normalize_text_for_duplication`
+·
+├── cs336_data/                                # 核心Python包，包含所有功能实现
+│   ├── __init__.py                            # 包初始化文件
+│   ├── dataset_builder.py                     # [可执行] 构建质量分类器训练集的核心脚本
+│   ├── deduplication.py                       # [库] 精确行去重与MinHash+LSH近似去重的核心逻辑
+│   ├── extraction.py                          # [库] 从HTML中进行稳健的文本提取
+│   ├── filter.py                              # [库] 包含所有过滤组件：语言、Gopher、NSFW/Toxic及高质量判断函数
+│   ├── pipeline.py                            # [可执行] 最终的端到端数据处理流水线主脚本
+│   ├── prepare_wiki_data.py                   # [可执行] 从维基百科URL清单中抽样，并生成下载脚本
+│   ├── quality_classifier.py                  # [库] QualityClassifier类，用于加载模型并执行预测
+│   ├── sample_cc_paths.py                     # [可执行] 从Common Crawl路径清单中抽样，并生成下载脚本
+│   ├── sample_data_from_warc.py               # [可执行] 用于生成样本CSV以供分析和确定阈值的探索性脚本
+│   ├── train_quality_classifier.py            # [可执行] 使用YAML配置训练质量分类器的主脚本
+│   ├── UF.py                                  # [库] 并查集（Union-Find）数据结构的实现
+│   └── utils.py                               # [库] 通用辅助函数，如文本标准化
+│
+├── data/                                      # (此目录被.gitignore忽略) 存放所有数据
+│   ├── cc_path/                               # 存放Common Crawl的路径清单文件
+│   ├── classifiers/                           # 存放预训练的fastText分类器模型
+│   ├── classifiers_dataset/                   # 存放生成的用于训练质量分类器的数据集
+│   ├── crawls/                                # 存放下载的WARC/WET样本文件
+│   ├── dataset/                               # 存放清洗后的数据文件	
+│   ├── my_classifiers/                        # 存放自己训练好的质量分类器模型
+│   ├── wiki/                                  # 存放下载的维基百科页面WARC文件
+│   └── wiki_links/                            # 存放维基百科的URL清单文件
+│
+├── scripts/                                   # 便捷的Bash执行脚本
+│   ├── build_fasttext_dataset.sh              # 调用 dataset_builder.py 的封装脚本
+│   ├── download_requirings.sh                 # 一键下载所有必需的清单文件和预训练Fasttext模型
+│   ├── download_wet_file.sh                   # (由sample_cc_paths.py生成) 下载WET文件的脚本
+│   ├── download_wiki_pages.sh                 # (由prepare_wiki_data.py生成) 下载维基百科页面的脚本
+│   └── train_fasttext_classifier.sh           # 调用 train_quality_classifier.py 的封装脚本
+│
+├── classifier_config.yaml                     # fasttext分词器训练YAML配置文件
+│
+├── tests/
+│   ├── adapters.py                            # 官方测试接口适配器
+│   └── ...                                    # 官方测试用例
+│
+├── cs336_spring2025_assignment4_data.pdf      # 官方handout
+├── [双语]cs336_spring2025_assignment4_data.pdf # 原文与翻译混合文件
+└── uv.lock                                    # 官方环境依赖锁定文件,在较新的 (如Blackwell架构) GPU上不适配
 ```
 
-
-
-## 4. 使用工作流
-
-本项目设计为按以下顺序执行：
-
-1.  **准备正样本URL** :
-    运行 `prepare_wiki_data.py` 采样URL，并使用其输出的txt链接列表配合 `wget` 下载对应的WARC文件。
-
-    ```bash
-    # 确保 enwiki-20240420-extracted_urls.txt.gz 文件已下载至 data/wiki/ 目录
-    python -m cs336_data.prepare_wiki_data --num-samples 15000 # 指定采样数量
-    ```
-
-    该命令会生成一个名为 `data/wiki/subsampled_positive_{num_samples}_urls.txt` 的文本文件，其中包含了指定数量个待下载的URL。
-
-2.  使用 `wget` 批量下载正样本并打包为WARC
-
-    获取到URL列表后，我们使用 `wget` 来执行大规模的网页爬取。`wget` 命令经过精心配置，以确保下载过程的稳健性。由于此过程耗时极长，我们使用 `nohup` 和 `&` 将其置于后台作为**守护进程**运行。
-
-    ```bash
-    URL_LIST="data/wiki/subsampled_positive_15000_urls.txt"
-    WARC_PREFIX="data/wiki/subsampled_positive_15000_pages"
-    
-    # 使用 nohup 启动后台下载任务
-    # 日志将输出到 nohup.out 文件中
-    nohup wget \
-        --timeout=15          `# 设置单个请求的超时时间为15秒` \
-        --tries=2             `# 每个URL最多重试2次` \
-        --max-redirect=5      `# 最多跟随5次HTTP重定向` \
-        --quota=30G           `# 设置总下载配额为30GB，防止失控` \
-        --reject-regex '\.(pdf|zip|gz|rar|exe|iso|mp3|mp4|avi|mov)$' `# 拒绝下载常见的非文本文件类型` \
-        -i "${URL_LIST}"      `# 指定包含URL列表的输入文件` \
-        --warc-file="${WARC_PREFIX}" `# 将所有下载内容打包成WARC文件，wget会自动添加.warc.gz后缀` \
-        -O /dev/null          `# 将单个页面的内容丢弃，因为我们只关心WARC归档` \
-        > wget.log 2>&1 &
-    ```
-
-    
-
-3.  **构建分类器训练集**:
-    运行数据集构建脚本，以生成用于训练质量分类器的 `.train` 和 `.valid` 文件。
-
-    ```bash
-    python -m cs336_data.dataset_builder
-    ```
-
-4.  **训练质量分类器**:
-    根据需要修改 `configs/quality_classifier_config.yaml` 配置文件，然后运行训练脚本。
-
-    ```bash
-    python -m cs336_data.train_quality_classifier --config classifier_config.yaml
-    ```
-
-5.  **运行完整数据过滤流水线**:
-    在质量分类器训练完成并更新其路径后，执行主流水线脚本来处理大规模的WET文件。
-
-    ```bash
-    python -m cs336_data.pipeline
-    ```
-
-## 4. 使用工作流
+## 5. 使用工作流
 
 本项目的工作流被设计为一系列清晰、独立的步骤。推荐按以下顺序执行脚本，以完成从数据准备到模型训练的完整流程。
-
-### 步骤零：环境配置与下载基础数据
-
-**创建并同步虚拟环境**
-
-```
-uv venv
-source .venv/bin/activate
-uv sync
-```
-
-注意：较新的GPU架构（如Blackwell）可能需要手动升级`torch`与相关依赖。
-
-
-
-**下载必要外部数据**
-
-```bash
-# 本项目所需的所有外部数据（CC样本、预训练分类器、维基百科URL列表）均可通过一个脚本下载。
-chmod +x data_downloading.sh
-./data_downloading.sh
-```
-
-官方给出了示例单个Common Crawl样本，语言/NSFW/有害言论三种分类器，以及维基百科外部链接 url 列表的下载链接，运行脚本创建对应文件夹并下载
 
 ### **步骤一：准备网页数据 (Data Preparation)**
 
@@ -174,23 +156,49 @@ chmod +x data_downloading.sh
 
    命令会生成一个名为 `data/wiki/subsampled_positive_{num_samples}_urls.txt` 的文本文件，其中包含了指定数量个待下载的URL。
 
+   
+
 2. **创建并进入 `tmux` 会话**:
 
    为下载任务创建一个名为 `download` 的新会话。
 
    ```bash
-   tmux new -s download
+   tmux new -s download_wiki_pages
    ```
 
+   
+
 3. **在 `tmux` 会话中执行下载**:
+
+   
 
    在弹出的新`tmux`窗口中，运行下载连接的bash脚本
 
    ```bash
-   chmod +x download_wiki_pages.sh
-   ./download_wiki_pages.sh
+   chmod +x scripts/download_wiki_pages.sh
+   scripts/download_wiki_pages.sh
+   # <ctrl + b> + d 退出会话
    ```
-   *监控日志*: `tail -f wiki_download.log`
+
+   
+
+   如果需要重新接入会话，运行以下命令
+
+   ```bash
+   # 重新接入会话
+   tmux attach -t download_wiki_pages
+   ```
+
+   
+
+   下载完成后，杀死会话
+
+   ```bash
+   # 杀死会话
+   tmux kill-session -t download_wiki_pages
+   ```
+
+​	
 
 **B. 准备Common Crawl页面 (用于负样本和管道测试)**
 
@@ -200,19 +208,20 @@ chmod +x data_downloading.sh
     ```bash
     # 从 wet.paths.gz 清单中抽样20个WET文件链接，并生成下载脚本 download_cc_batch_1.sh
     # 默认只下载WET文件
-    python sample_cc_path.py data/cc_path/wet.paths.gz -n 100 --output-script download_cc_batch_1.sh
+    python sample_cc_path.py data/cc_path/wet.paths.gz -n 100 --output-script scripts/download_cc_batch_1.sh
     ```
 2.  **后续增量抽样**:
-    如果你需要更多不重复的样本，可以使用 `--skip` 参数。
+    如果需要更多不重复的样本，可以使用 `--skip` 参数。
+    
     ```bash
     # 在已抽样20个的基础上，再抽样100个全新的文件链接，并同时下载对应的WARC文件
-    python -m cs336_data.sample_cc_paths data/manifests/wet.paths.gz -n 100 --skip 20 --download-warc --output-script download_cc_batch_2.sh
+    python -m cs336_data.sample_cc_paths data/manifests/wet.paths.gz -n 100 --skip 20 --download-warc --output-script scripts/download_cc_batch_2.sh
     ```
 3.  **执行下载**:
     对每个生成的脚本执行后台下载任务。
     ```bash
-    chmod +x download_cc_batch_1.sh
-    nohup ./download_cc_batch_1.sh > cc_download_1.log 2>&1 &
+    chmod +x scripts/download_cc_batch_1.sh
+    nohup scripts/download_cc_batch_1.sh > cc_download_1.log 2>&1 &
     ```
 
 ### **步骤二：构建与训练质量分类器**
@@ -222,8 +231,8 @@ chmod +x data_downloading.sh
     
     ```bash
     # 脚本会寻找data/wiki和data/crawls下的wiki和warc数据源，需要根据具体路径修改脚本配置
-    chmod +x build_fasttext_dataset.sh
-    ./build_fasttext_dataset.sh
+    chmod +x scripts/build_fasttext_dataset.sh
+    scripts/build_fasttext_dataset.sh
     ```
 2.  **训练模型**:
     使用YAML配置文件来训练分类器。
@@ -236,12 +245,10 @@ chmod +x data_downloading.sh
 在质量分类器训练完成后，执行主流水线脚本来处理下载好的**WET**文件。
 ```bash
 # 脚本将处理 data/crawls/ 目录下的所有WET文件
-python -m cs336_data.pipeline
+python -m cs336_data.pipeline --config configs/{config_name}.yaml
 ```
 
-## 5. 环境设置与安装
-
-
+## 6. 环境设置与安装
 
 1.  **使用 `uv` 创建并同步虚拟环境:**
     ```bash
@@ -249,20 +256,22 @@ python -m cs336_data.pipeline
     source .venv/bin/activate
     
     uv sync # 较新的GPU，如Blackwell架构可能不支持官方给出的torch版本，需要手动升级torch与相关依赖
+    
+    uv pip install xxhash  # 精确行去除使用了xxhash中的哈希函数，以最大化效率
     ```
 
     
-
+    
 2.  下载所需数据
 
     ```bash
     # 本项目所需的所有外部数据（CC样本、预训练分类器、维基百科URL列表）均可通过一个脚本下载。
-    chmod +x data_downloading.sh
-    ./data_downloading.sh
+    chmod +x scripts/download_requirings.sh
+    scripts/data_downloading.sh
     ```
     
 
-## 6. 关键依赖
+## 7. 关键依赖
 
 *   `fastwarc`: 用于高效地读取WARC/WET文件。
 *   `fasttext`: 用于训练和运行文本分类器。
