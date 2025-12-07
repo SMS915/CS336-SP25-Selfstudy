@@ -17,5 +17,5 @@ training:
 
 experiment:
   name: "quality_classifier"
-  description: "A proper scale fast quality classifier for judging text quality at high speed"
+  description: "一个用于评估文本质量的Fasttext分类器"
   version: "v1.0"

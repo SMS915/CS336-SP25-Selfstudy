@@ -1,63 +1,107 @@
+# prepare_wiki_data.py (最终升级版)
 import gzip
 import random
+import argparse
+import os
 from pathlib import Path
-random.seed(42)  # 设置随机种子以确保可重复性
 
-INPUT_URL_GZ_FILE = Path("data/wiki/enwiki-20240420-extracted_urls.txt.gz")
-
-NUM_SAMPLES = 15000
-
-def sample_urls_from_gz(input_path: Path, k: int) -> None:
+def prepare_wiki_download_script(
+    url_manifest_path: str,
+    num_samples: int,
+    output_txt_path: str,
+    output_script_path: str,
+    warc_prefix: str,
+    seed: int = 42
+):
     """
-    使用水塘抽样从.gz文件中随机抽取k行URL。
-
-    Args:
-        input_path (Path): 输入的.gz文件路径。
-        output_path (Path): 输出的抽样URL文件路径。
-        k (int): 要抽取的样本数量。
+    从维基百科URL清单中抽样，生成URL列表文件和对应的wget下载脚本。
     """
-    print(f"开始从 {input_path} 中抽样 {k} 条URL...")
-    OUTPUT_SAMPLED_URLS_FILE = Path(f"data/wiki/subsampled_positive_{k}_urls.txt")
+    print(f"--- 步骤1: 从 '{url_manifest_path}' 中抽样 {num_samples} 条URL ---")
     
     # 确保输出目录存在
-    OUTPUT_SAMPLED_URLS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    Path(output_txt_path).parent.mkdir(parents=True, exist_ok=True)
 
-    reservoir = []  # 水塘
-    lines_seen = 0
-
-    # 使用gzip.open直接读取压缩文件
-    with gzip.open(input_path, 'rt', encoding='utf-8') as f:
-        for line in f:
-            lines_seen += 1
-            
-            # 水塘抽样
-            if len(reservoir) < k:
-                reservoir.append(line.strip())
-            else:
-                j = random.randint(0, lines_seen - 1)
-                if j < k:
-                    reservoir[j] = line.strip()
-
-            # 打印进度
-            if lines_seen % 1_000_000 == 0:
-                print(f"  ...已处理 {lines_seen // 1_000_000}M 行...")
-
-    if not reservoir:
-        print("错误：没有从输入文件中读取到任何URL！")
+    try:
+        with gzip.open(url_manifest_path, 'rt', encoding='utf-8') as f:
+            all_urls = [line.strip() for line in f if line.strip()]
+    except FileNotFoundError:
+        print(f"错误: URL清单文件 '{url_manifest_path}' 未找到！")
         return
 
-    # 将抽样结果写入输出文件
-    print(f"抽样完成！共处理 {lines_seen} 行。正在将 {len(reservoir)} 条URL写入 {OUTPUT_SAMPLED_URLS_FILE}...")
-    with open(OUTPUT_SAMPLED_URLS_FILE, 'w', encoding='utf-8') as f:
-        for url in reservoir:
-            f.write(url + '\n')
-            
-    print("完成！")
+    # 使用确定性随机排序 + 截取
+    print(f"使用固定种子({seed})对所有 {len(all_urls)} 条URL进行确定性随机排序...")
+    random.seed(seed)
+    random.shuffle(all_urls)
+    
+    sampled_urls = all_urls[:num_samples]
+    
+    # --- 写入抽样后的URL列表文件 ---
+    with open(output_txt_path, 'w', encoding='utf-8') as f:
+        f.writelines(url + '\n' for url in sampled_urls)
+    print(f"抽样完成！已将 {len(sampled_urls)} 条URL写入 '{output_txt_path}'。")
+
+    # --- 步骤2: 生成 wget 下载脚本 ---
+    print(f"\n--- 步骤2: 生成 wget 下载脚本到 '{output_script_path}' ---")
+    with open(output_script_path, 'w', encoding='utf-8') as f:
+        f.write("#!/bin/bash\n")
+        f.write("# 自动生成的维基百科引用页面下载脚本\n\n")
+        f.write("# 日志将输出到 wget_wiki.log 文件中\n")
+        f.write("wget \\\n")
+        f.write("    --timeout=15 \\\n")
+        f.write("    --tries=2 \\\n")
+        f.write("    --max-redirect=5 \\\n")
+        f.write("    --quota=30G \\\n")
+        f.write(r"    --reject-regex '\.(pdf|zip|gz|rar|exe|iso|mp3|mp4|avi|mov)$' \\")
+        f.write("\n")
+        f.write(f"    -i \"{output_txt_path}\" \\\n")
+        f.write(f"    --warc-file=\"{warc_prefix}\" \\\n")
+        f.write("    -O /dev/null\n")
+
+    os.chmod(output_script_path, 0o755)
+    
+    print("\n--- 下载脚本生成完毕！ ---")
+    print("请运行以下命令来启动后台下载:")
+    print(f"  nohup ./{output_script_path} > wget_wiki.log 2>&1 &")
 
 
 if __name__ == "__main__":
-    if not INPUT_URL_GZ_FILE.exists():
-        print(f"错误：输入文件不存在于 {INPUT_URL_GZ_FILE}")
-        print("请先运行下载脚本，或检查路径是否正确。")
-    else:
-        sample_urls_from_gz(INPUT_URL_GZ_FILE, NUM_SAMPLES)
+    parser = argparse.ArgumentParser(description="从维基百科URL清单中抽样并生成wget下载脚本。")
+    parser.add_argument(
+        "--manifest-file",
+        type=str,
+        default="data/cc_path/enwiki-20240420-extracted_urls.txt.gz",
+        help="输入的URL清单.gz文件路径。"
+    )
+    parser.add_argument(
+        "-n", "--num-samples",
+        type=int,
+        default=15000,
+        help="要抽样的URL数量。"
+    )
+    parser.add_argument(
+        "--output-txt",
+        type=str,
+        default="data/wiki/sampled_wiki_urls.txt",
+        help="输出的抽样URL列表文件名。"
+    )
+    parser.add_argument(
+        "--output-script",
+        type=str,
+        default="download_wiki_pages.sh",
+        help="输出的bash脚本文件名。"
+    )
+    parser.add_argument(
+        "--warc-prefix",
+        type=str,
+        default="data/wiki/wiki_cited_pages",
+        help="wget命令中--warc-file参数的前缀。"
+    )
+    args = parser.parse_args()
+    
+    prepare_wiki_download_script(
+        args.manifest_file,
+        args.num_samples,
+        args.output_txt,
+        args.output_script,
+        args.warc_prefix
+    )
