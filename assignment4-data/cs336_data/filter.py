@@ -1,9 +1,21 @@
 import regex
 import nltk
 from fasttext import FastText as FTModel
+LANG_MODEL_PATH = 'data/classifiers/lid.176.bin'
+NSFW_MODEL_PATH = 'data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin'
+TOXIC_MODEL_PATH = 'data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin'
+
+try:
+    LANG_MODEL = FTModel.load_model(LANG_MODEL_PATH)
+    NSFW_MODEL = FTModel.load_model(NSFW_MODEL_PATH)
+    TOXIC_MODEL= FTModel.load_model(TOXIC_MODEL_PATH)
+except ValueError as e:
+    print(f"错误：加载模型失败！请检查路径是否正确。错误信息: {e}")
+    LANG_MODEL, NSFW_MODEL, TOXIC_MODEL = None, None, None
+    exit(1)
 
 
-def classify_text(text: str, type: str) -> tuple[str, float]:
+def classify_text(model: FTModel._FastText, text: str, type: str) -> tuple[str, float]:
     """
     基于fasttext预加载模型对文本进行分类，返回分数最高的标签与对应分数
 
@@ -14,30 +26,37 @@ def classify_text(text: str, type: str) -> tuple[str, float]:
     Returns:
         tuple: 一个元组，包括模型对文本分数最高的标签与相应分数.
     """
-    path_dict = {
-        'language': 'data/classifiers/lid.176.bin',
-        'nsfw': 'data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin',
-        'toxic_speech': 'data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin'}
-    
-    model_path = path_dict.get(type)
-
-    if model_path is None:
-        raise ValueError(f"Unsupported classification type: {type}")
-    text = text.replace('\n', ' ').strip()
-    model = FTModel.load_model(model_path)
     predictions = model.predict(text)
-    label = predictions[0][0].replace('__label__', '')
+    label = predictions[0][0].replace('__label__', '') # type: ignore
     score = predictions[1][0].item()
     return label, score
 
 def identify_language(text: str) -> tuple[str, float]:
-    return classify_text(text, 'language')
+    # return classify_text(text, 'language')
+    text = text.replace('\n', ' ').strip()
+    assert LANG_MODEL is not None and isinstance(LANG_MODEL, FTModel._FastText)
+    predictions = LANG_MODEL.predict(text)
+    label = predictions[0][0].replace('__label__', '') # type: ignore
+    score = predictions[1][0].item()
+    return label, score
 
 def classify_nsfw(text: str) -> tuple[str, float]:
-    return classify_text(text, 'nsfw')
+    # return classify_text(text, 'nsfw')
+    text = text.replace('\n', ' ').strip()
+    assert NSFW_MODEL is not None and isinstance(NSFW_MODEL, FTModel._FastText)
+    predictions = NSFW_MODEL.predict(text)
+    label = predictions[0][0].replace('__label__', '') # type: ignore
+    score = predictions[1][0].item()
+    return label, score
 
 def classify_toxic_speech(text: str) -> tuple[str, float]:
-    return classify_text(text, 'toxic_speech')
+    # return classify_text(text, 'toxic_speech')
+    text = text.replace('\n', ' ').strip()
+    assert TOXIC_MODEL is not None and isinstance(TOXIC_MODEL, FTModel._FastText)
+    predictions = TOXIC_MODEL.predict(text)
+    label = predictions[0][0].replace('__label__', '') # type: ignore
+    score = predictions[1][0].item()
+    return label, score
 
 def gopher_quality_filter(text: str) -> bool:
     """
@@ -55,22 +74,34 @@ def gopher_quality_filter(text: str) -> bool:
     # nltk.download('punkt', quiet=True)
     # nltk.download('punkt_tab', quiet=True)
 
-    words = nltk.word_tokenize(text)
+    # words = nltk.word_tokenize(text) # word_tokenize开销偏大，换成split更快
+    words = text.split()
     word_count = len(words)
+
+    # 文本的词数应该在50-100000之间。 
     if word_count < 50 or word_count > 100000:
         return False
     
-    mean_word_length = sum(len(word) for word in words) / word_count
+    total_length = 0
+    alpha_count = 0
+    for word in words:
+        total_length += len(word)
+        if any(c.isalpha() for c in word):
+            alpha_count += 1
+    
+    mean_word_length = total_length / word_count
+    # 词的平均长度应在3到10个字符之间。
     if mean_word_length < 3 or mean_word_length > 10:
         return False
     
     lines = text.splitlines()
     ellipsis_lines_count = sum(1 for line in lines if line.strip().endswith('...'))
+    # 文本中省略号结尾的行数不应超过总行数的30%。
     if (ellipsis_lines_count / len(lines)) > 0.3:
         return False
-    
-    alphabetic_word_count = sum(1 for word in words if contains_alphabetic(word))
-    if (alphabetic_word_count / word_count) < 0.8:
+
+    # 包含字母的单词应占总单词数的至少80%。
+    if alpha_count / word_count < 0.8:
         return False
     
     return True

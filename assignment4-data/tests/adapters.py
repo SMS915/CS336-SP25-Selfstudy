@@ -37,7 +37,7 @@ def run_classify_toxic_speech(text: str) -> tuple[Any, float]:
 
 
 def run_classify_quality(text: str) -> tuple[Any, float]:
-    file_path = 'data/my_classifiers/quality_classifier_3gram.bin'
+    file_path = 'data/my_classifiers/best_classifier.bin'
     mapping = {
                 '__label__low_quality': 'cc',
                 '__label__high_quality': 'wiki'
@@ -53,7 +53,11 @@ def run_gopher_quality_filter(text: str) -> bool:
 def run_exact_line_deduplication(
     input_files: list[os.PathLike], output_directory: os.PathLike
 ):
-    exact_line_deduplication(input_files, output_directory)
+    input_base_dir = os.path.commonpath(input_files)
+    if len(input_files) == 1:
+        input_base_dir = os.path.dirname(input_files[0])
+        
+    exact_line_deduplication(input_files, input_base_dir, output_directory)
 
 
 def run_minhash_deduplication(

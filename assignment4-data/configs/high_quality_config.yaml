@@ -1,0 +1,33 @@
+# config_high_quality.yaml
+project_name: "CS336_High_Quality_Run"
+
+paths:
+  input_dir: "data/crawls/wet"
+  base_output_dir: "data/high_quality_output"
+  models:
+    quality_classifier: "data/my_classifiers/best_classifier.bin"
+    # 标签映射
+    label_mapping:
+      __label__low_quality: 'cc'
+      __label__high_quality: 'wiki'
+
+processing:
+  max_workers: 15
+  max_files_limit: 20  # 测试用，生产环境设为 null
+
+filter:
+  min_doc_length: 200        # 提高长度门槛，过滤碎片
+  language:
+    target: "en"
+    min_score: 0.95          # 极高的语言置信度
+  safety:
+    nsfw_threshold: 0.01     # 极严格的NSFW过滤
+    toxic_threshold: 0.01    # 极严格的有毒言论过滤
+  
+deduplication:
+  fuzzy:
+    n_gram: 13
+    num_hashes: 128
+    # LSH 参数 (b=20, r=6): 适合 0.8+ 的高相似度，减少误删
+    bands: 20
+    threshold: 0.8

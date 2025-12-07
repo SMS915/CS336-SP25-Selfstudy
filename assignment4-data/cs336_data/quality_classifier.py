@@ -3,10 +3,10 @@ from typing import Optional, Dict
 
 class QualityClassifier:
     def __init__(self, model_path: str, label_map: Optional[Dict[str, str]]):
-        print(f"正在加载质量分类器模型: {model_path}")
+        # print(f"正在加载质量分类器模型: {model_path}")
         try:
             self.model = fasttext.load_model(model_path)
-            print("模型加载完成。")
+            # print("模型加载完成。")
         except ValueError as e:
             print(f"模型加载失败，检查输入路径{model_path}是否正确")
             print(f"错误: {e}")

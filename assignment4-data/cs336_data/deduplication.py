@@ -1,13 +1,17 @@
+from concurrent.futures import ProcessPoolExecutor
 import os
 import nltk
 import random
 import mmh3
+import shutil
+import xxhash
 import unicodedata
 import numpy as np
 import regex
 from nltk import ngrams
 from tqdm import tqdm
 from hashlib import md5
+from pathlib import Path
 from .UF import UnionFind
 from functools import partial
 from typing import List, Dict, Tuple, Set, List, Callable, Hashable, cast
@@ -37,7 +41,21 @@ def normalize_text_for_duplication(text: str) -> str:
     
     return text
 
-def exact_line_deduplication(input_files: List[os.PathLike], output_directory: os.PathLike) -> None:
+# 多进程行哈希函数, 供子进程调用
+def _count_lines_worker(file_paths):
+    local_counts = defaultdict(int)
+    hasher = xxhash.xxh3_128
+    for fp in file_paths:
+        with open(fp, 'r', encoding='utf-8') as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    h = hasher(stripped.encode('utf-8')).intdigest()
+                    local_counts[h] += 1
+    return local_counts
+
+
+def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike) -> Tuple[List[str | os.PathLike], int, int]:
     """
     对输入的文本文件进行精确行去重并写入到指定的输出文件夹中。
     采用两阶段行为
@@ -49,25 +67,60 @@ def exact_line_deduplication(input_files: List[os.PathLike], output_directory: o
         input_files (List[os.PathLike]): 一个包含所有输入文档路径的列表
         output_directory (os.PathLike):  用于存放输出文件的文件夹路径
     """
-    line_counts = {}
+    line_counts = defaultdict(int)
     os.makedirs(output_directory, exist_ok=True)
-    for input_file in input_files:
-        with open(input_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line_hash = md5(line.strip().encode('utf-8')).hexdigest()
-                line_counts[line_hash] = line_counts.get(line_hash, 0) + 1
+    hasher = xxhash.xxh3_128
 
-    for input_file in input_files:
-        output_file = os.path.join(output_directory, os.path.basename(input_file))
-        with open(input_file, 'r', encoding='utf-8') as fin, \
-             open(output_file, 'w', encoding='utf-8') as fout:
+    num_workers = 15
+    chunk_size = len(input_files) // num_workers + 1
+    chunks = [input_files[i:i + chunk_size] for i in range(0, len(input_files), chunk_size)]
+    
+    line_counts = defaultdict(int)
+    print(f"精确去重：启动 {num_workers} 个进程并行统计行频...")
+
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # 使用 map 并行处理
+        results = list(tqdm(executor.map(_count_lines_worker, chunks), 
+                            total=len(chunks), desc="合并计数器"))
+
+    input_base_path = Path(input_base_dir)
+    output_base_path = Path(output_directory)
+    output_paths = []
+
+    print("正在合并全局计数器...")
+    for local_cnt in results:
+        for k, v in local_cnt.items():
+            line_counts[k] += v
+
+    total_lines_before = sum(line_counts.values())
+    total_lines_after = sum(1 for count in line_counts.values() if count == 1)
+    print(f"统计结果: 原有 {total_lines_before} 行 -> 保留 {total_lines_after} 行 "
+          f"(移除率: {100 * (1 - total_lines_after / total_lines_before):.2f}%)")
+
+    for input_file in tqdm(input_files, desc="重写"):
+        input_file_path = Path(input_file)
+        # 计算相对于基础输入目录的路径
+        relative_path = input_file_path.relative_to(input_base_path)
+
+        # 在输出目录中构造完整的、包含子目录的目标路径
+        output_file_path = output_base_path / relative_path
+
+        # 确保输出文件的父目录存在
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+        output_paths.append(output_file_path)
+        with open(input_file_path, 'r', encoding='utf-8') as fin, \
+             open(output_file_path, 'w', encoding='utf-8') as fout:
             for line in fin:
-                line_hash = md5(line.strip().encode('utf-8')).hexdigest()
+                stripped_line = line.strip()
+                if not stripped_line:
+                    continue
+                line_hash = hasher(stripped_line.encode('utf-8')).intdigest()
                 if line_counts[line_hash] == 1:
                     fout.write(line)
 
+    return output_paths, total_lines_before, total_lines_after
 
-def convert_text_into_n_gram(n: int, text: str) -> set[tuple[str, ...]]:
+def convert_text_into_n_gram(n: int, text: str) -> Set[Tuple[str, ...]]:
     """
     将输入文本转换为词级别的n-gram集合。
     对文本进行清洗并分割，提取n-grams，并存储在集合中
@@ -113,6 +166,16 @@ def compute_minhash_signature(n_grams: Set[Tuple[str,...]], hash_functions: List
     return signature
 
 
+def generate_hash_seeds(num_hashes: int) -> np.ndarray:
+    """
+    生成用于 MinHash 的随机种子数组。
+    传递整数数组比传递函数对象列表在多进程中要高效得多。
+    """
+    # 使用固定的随机状态以确保可复现性
+    # 使用 uint32 范围内的随机整数
+    return np.random.randint(0, 2**32 - 1, size=num_hashes, dtype=np.uint32)
+
+
 def generate_hash_functions(num_hashes: int, max_hash: int = 2**32 - 1) -> List[Callable[[str], int]]:
     """
     生成并采用不同的随机种子，构成一组基于mmh3的高性能哈希函数，用于MinHash签名计算。
@@ -130,10 +193,44 @@ def generate_hash_functions(num_hashes: int, max_hash: int = 2**32 - 1) -> List[
         hash_functions.append(hash_func)
     return hash_functions
 
+def compute_minhash_signature(n_grams: Set[Tuple[str,...]], seeds: np.ndarray) -> np.ndarray:
+    """
+    使用预生成的种子计算 MinHash 签名。
+    """
+    num_hashes = len(seeds)
+    max_hash_val = 2**32 - 1
+    signature = np.full(num_hashes, max_hash_val, dtype=np.uint32)
+
+    if not n_grams:
+        return signature
+
+    for n_gram in n_grams:
+        n_gram_str = ' '.join(n_gram)
+        # 直接在这里调用 mmh3，避免了函数调用的额外开销
+        hashes = np.array([mmh3.hash(n_gram_str, seed=int(s), signed=False) 
+                           for s in seeds], dtype=np.uint32)
+        
+        signature = np.minimum(signature, hashes)
+
+    return signature
+
+# 签名计算worker函数
+def _compute_sig_worker(args):
+    # 解包参数
+    doc_id, file_path, n, seeds = args
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
+        text = f.read()
+        n_gram_set = convert_text_into_n_gram(n, text)
+        # 传入 seeds
+        signature = compute_minhash_signature(n_gram_set, seeds)
+        
+    return doc_id, signature, file_path, n_gram_set
+
 def generate_signature_for_texts(input_files: List[os.PathLike],
                                  n: int,
                                  num_hashes:int,
-                                 ) -> Tuple[Dict[int, np.ndarray], Dict[int, os.PathLike], Dict[int, tuple[tuple[str, ...]]], List[int]]:
+                                 ) -> Tuple[Dict[int, np.ndarray], Dict[int, os.PathLike], Dict[int, Tuple[Tuple[str, ...]]], List[int]]:
     """
     为输入文本文件生成MinHash签名。
     Args:
@@ -148,25 +245,32 @@ def generate_signature_for_texts(input_files: List[os.PathLike],
                          以便在字典中作为值）。这是后续进行精确Jaccard验证所必需的。
         - all_doc_ids: 一个包含所有已处理文档ID的列表。
     """
-    hash_functions = generate_hash_functions(num_hashes)
+    
     all_doc_ids = []
     id_signatures_map = {}
     id_paths_map = {}
     id_n_gram_map = {}
-    for i, input_file in tqdm(enumerate(input_files), desc="正在为文本生成MinHash签名"):
-        doc_id = i
-        all_doc_ids.append(doc_id)
-        with open(input_file, 'r', encoding='utf-8') as f:
-            text = f.read()
-            n_gram_set = convert_text_into_n_gram(n, text)
-            signature = compute_minhash_signature(n_gram_set, hash_functions)
-            id_signatures_map[doc_id] = signature
-            id_paths_map[doc_id] = input_file
-            id_n_gram_map[doc_id] = tuple(n_gram_set) # 转换为tuple以便存储
+
+    seeds = generate_hash_seeds(num_hashes)
+    tasks = []
+    for i, fp in enumerate(input_files):
+        # 构造参数元组
+        tasks.append((i, fp, n, seeds))
+    
+    with ProcessPoolExecutor() as executor:
+        # chunksize 设置大一点可以减少 IPC 开销
+        results = tqdm(executor.map(_compute_sig_worker, tasks, chunksize=10), 
+                       total=len(tasks), desc="并行生成MinHash签名")
+
+        for doc_id, sig, path, ngrams in results:
+            all_doc_ids.append(doc_id)
+            id_signatures_map[doc_id] = sig
+            id_paths_map[doc_id] = path
+            id_n_gram_map[doc_id] = tuple(ngrams)
 
     return id_signatures_map, id_paths_map, id_n_gram_map, all_doc_ids
 
-def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: dict[int, np.ndarray]) -> set[tuple[int, ...]]:
+def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: Dict[int, np.ndarray]) -> Set[Tuple[int, ...]]:
     """
     对MinHash签名执行局部敏感哈希（LSH），以高效地找出可能重复的候选对。
 
@@ -228,7 +332,20 @@ def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: 
 
     return candidate_pairs
 
-def find_true_duplicate_pair(candidate_pairs: set[tuple[int,...]], id_n_gram_map: Dict[int, tuple[tuple[str,...]]], jaccard_threshold: float = 0.8) -> list[tuple[int, int]]:
+def _verify_pair_worker(pairs_chunk, id_n_gram_map_subset, threshold):
+    # 为了避免传递整个巨大的 map，这里可以只传需要的 subset
+    # 在 Linux 上，可以依赖 fork 的共享内存
+    true_pairs = []
+    for doc1, doc2 in pairs_chunk:
+        set1 = set(id_n_gram_map_subset[doc1])
+        set2 = set(id_n_gram_map_subset[doc2])
+        intersection = len(set1 & set2)
+        union = len(set1 | set2)
+        if union > 0 and (intersection / union) >= threshold:
+            true_pairs.append((doc1, doc2))
+    return true_pairs
+
+def find_true_duplicate_pair(candidate_pairs: Set[tuple[int,...]], id_n_gram_map: Dict[int, Tuple[tuple[str,...]]], jaccard_threshold: float = 0.8) -> List[Tuple[int, int]]:
     """
     去重管道的精确验证阶段，对LSH生成的候选对进行精确的Jaccard相似度验证。
 
@@ -249,16 +366,43 @@ def find_true_duplicate_pair(candidate_pairs: set[tuple[int,...]], id_n_gram_map
         list[tuple[int, int]]: 一个列表，包含所有通过了Jaccard相似度验证的
                                “真实重复对”。
     """
-    true_duplicate_pairs = []
-    for pair in candidate_pairs:
-        doc_id1, doc_id2 = pair
-        ngrams_1_set, ngrams_2_set = set(id_n_gram_map[doc_id1]), set(id_n_gram_map[doc_id2])
 
-        intersection_set = ngrams_1_set & ngrams_2_set
-        union_set = ngrams_1_set | ngrams_2_set
-        jacccard_similiarity = len(intersection_set) / len(union_set)
-        if(jacccard_similiarity >= jaccard_threshold):
-            true_duplicate_pairs.append((doc_id1, doc_id2))
+    pairs_list = list(candidate_pairs)
+    if not pairs_list:
+        return []
+    
+
+    num_workers = 15
+    chunk_size = len(pairs_list) // num_workers + 1
+    chunks = [pairs_list[i:i+chunk_size] for i in range(0, len(pairs_list), chunk_size)]
+    
+    true_duplicate_pairs = []
+
+    worker_func = partial(_verify_pair_worker, 
+                          id_n_gram_map_subset=id_n_gram_map, # 注意这里的大对象传递风险
+                          threshold=jaccard_threshold)
+
+    with ProcessPoolExecutor() as executor:
+        results = executor.map(worker_func, chunks)
+        for res in results:
+            true_duplicate_pairs.extend(res)
+            
+    return true_duplicate_pairs
+
+    # true_duplicate_pairs = []
+    # for pair in candidate_pairs:
+    #     doc_id1, doc_id2 = pair
+    #     ngrams_1_set, ngrams_2_set = set(id_n_gram_map[doc_id1]), set(id_n_gram_map[doc_id2])
+
+    #     intersection_set = ngrams_1_set & ngrams_2_set
+    #     union_set = ngrams_1_set | ngrams_2_set
+    #     if len(union_set) == 0:
+    #         # 如果两个集合并集为空，说明两个文档都没有足够的 n-gram。
+    #         # 这种情况下无法计算相似度，或者视作不相似(0.0)，跳过即可。
+    #         continue
+    #     jacccard_similiarity = len(intersection_set) / len(union_set)
+    #     if(jacccard_similiarity >= jaccard_threshold):
+    #         true_duplicate_pairs.append((doc_id1, doc_id2))
 
     return true_duplicate_pairs
 
@@ -317,7 +461,7 @@ def remove_duplicate_ids(all_doc_ids: List[int], duplicate_clusters: List[Set[in
     keep_id_set = all_doc_id_set - remove_id_set
     return keep_id_set
 
-def minhash_deduplication(input_files: list[os.PathLike], num_hashes: int, num_bands: int, n: int, output_dir: os.PathLike, jaccard_threshold: float = 0.8):
+def minhash_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, num_hashes: int, num_bands: int, n: int, output_dir: os.PathLike, jaccard_threshold: float = 0.8):
     """
     对一组输入的文本文件执行端到端的近似去重流程，并输出唯一的文件。
 
@@ -341,12 +485,13 @@ def minhash_deduplication(input_files: list[os.PathLike], num_hashes: int, num_b
 
     5.  【筛选与输出】(Filtering & Output): 遍历所有识别出的重复簇，为每个簇
         确定一个唯一的“幸存者”文档并予以保留。最后，将所有被确定为需要保留的
-        原始文件内容，复制到指定的输出目录中。
+        原始文件目录存入列表，进行返回
 
     Args:
         input_files (list[os.PathLike]): 需要进行去重处理的输入文本文件的路径列表。
         num_hashes (int): 用于生成MinHash签名的哈希函数数量。
         num_bands (int): LSH阶段中，将MinHash签名分割成的“段”（band）的数量。
+        input_base_dir: 输入文件的根目录，用于计算相对路径。
         n (int): 用于将文本分割为n-gram时，n的值。
         output_dir (os.PathLike): 用于存放去重后唯一文件的输出目录的路径。
         jaccard_threshold (float, optional): 判断两个文档是否为真实重复的Jaccard
@@ -355,18 +500,41 @@ def minhash_deduplication(input_files: list[os.PathLike], num_hashes: int, num_b
     Returns:
         None: 此函数没有返回值，其结果是直接在输出目录中创建去重后的文件。
     """
+    # 1. 生成签名与映射
     id_signatures_map, id_paths_map, id_n_gram_map, all_doc_list = generate_signature_for_texts(input_files, n, num_hashes)
     all_doc_hashable_list = cast(List[Hashable], all_doc_list)
+    # 2. LSH 发现候选对
     candidate_pairs = get_lsh_candidate_pairs(num_hashes=num_hashes, num_band=num_bands, id_signatures_dict=id_signatures_map)
+    # 3. 精确 Jaccard 验证
     duplicate_pairs = find_true_duplicate_pair(candidate_pairs, id_n_gram_map, jaccard_threshold)
+
+    # 4. 聚类并筛选保留的 ID
     doc_id_to_keep = remove_duplicate_ids(all_doc_list, get_similar_cluster(all_doc_hashable_list, duplicate_pairs))
 
-    for doc_id in doc_id_to_keep:
-        input_file = id_paths_map[doc_id]
-        output_base_name = os.path.basename(input_file)
-        output_file = os.path.join(output_dir, output_base_name)
-        with open(input_file, 'r', encoding='utf-8') as in_file, open(output_file, 'w', encoding='utf-8') as out_file:
-            content = in_file.read()
-            out_file.write(content)
+    output_paths = (id_paths_map[id] for id in doc_id_to_keep)
+    # 统计信息
+    total_docs = len(all_doc_list)
+    unique_docs = len(doc_id_to_keep)
+    print(f"MinHash去重统计: 原有 {total_docs} 个文档 -> 保留 {unique_docs} 个文档 "
+          f"(移除率: {100 * (1 - unique_docs / total_docs):.2f}%)")
+    
+    # # 路径对象化
+    # input_base_path = Path(input_base_dir)
+    # output_base_path = Path(output_dir)
+
+    # for doc_id in tqdm(doc_id_to_keep, desc="保存去重后的文件"):
+    #     input_file_path = Path(id_paths_map[doc_id])
+    #     try:
+    #         relative_path = input_file_path.relative_to(input_base_path)
+    #     except ValueError:
+    #         # 如果文件不在 base_dir 下（防御性编程），回退到仅使用文件名
+    #         relative_path = Path(input_file_path.name)
+    #     output_file_path = output_base_path / relative_path
+    #     # 确保父目录存在
+    #     output_file_path.parent.mkdir(parents=True, exist_ok=True)
+    #     output_paths.append(output_file_path)
+    #     shutil.copy2(input_file_path, output_file_path)
+
+    return output_paths, total_docs, unique_docs
 
 

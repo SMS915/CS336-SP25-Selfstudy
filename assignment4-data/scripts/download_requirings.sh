@@ -44,7 +44,7 @@ wget -c -P $WIKI_PATH_DIR https://nlp.stanford.edu/data/nfliu/cs336-spring-2024/
 echo " URL列表下载完成！"
 
 CRAWL_LINKS_DIR="data/cc_path/"
-
+mkdir -p $CRAWL_LINKS_DIR
 CRAWL_NAME="CC-MAIN-2025-18"
 
 wget -c -P $CRAWL_LINKS_DIR https://data.commoncrawl.org/crawl-data/${CRAWL_NAME}/wet.paths.gz"

@@ -1,0 +1,33 @@
+# config_high_recall.yaml
+project_name: "CS336_High_Recall_Run"
+
+paths:
+  input_dir: "data/crawls/wet"
+  base_output_dir: "data/recall_output"
+  models:
+    quality_classifier: "data/my_classifiers/best_classifier.bin"
+    label_mapping:
+      __label__low_quality: 'cc'
+      __label__high_quality: 'wiki'
+
+processing:
+  max_workers: 15
+  max_files_limit: null 
+
+filter:
+  min_doc_length: 50         # 放宽长度限制
+  language:
+    target: "en"
+    min_score: 0.75          # 允许混杂一些非标准英语
+  safety:
+    nsfw_threshold: 0.1      # 宽松的安全阈值
+    toxic_threshold: 0.1
+  
+deduplication:
+  fuzzy:
+    n_gram: 13
+    num_hashes: 128
+    # LSH 参数 (b=42, r=3): 极其敏感，稍有相似就会被抓出来
+    # 这会产生大量候选对，适合用来测试去重效果，或者去除隐晦的洗稿
+    bands: 42
+    threshold: 0.7
