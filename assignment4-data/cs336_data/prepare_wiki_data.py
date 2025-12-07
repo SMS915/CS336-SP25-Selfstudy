@@ -51,7 +51,7 @@ def prepare_wiki_download_script(
         f.write("    --tries=2 \\\n")
         f.write("    --max-redirect=5 \\\n")
         f.write("    --quota=30G \\\n")
-        f.write(r"    --reject-regex '\.(pdf|zip|gz|rar|exe|iso|mp3|mp4|avi|mov)$' \\")
+        f.write(r"    --reject-regex '\.(pdf|zip|gz|rar|exe|iso|mp3|mp4|avi|mov)$' \")
         f.write("\n")
         f.write(f"    -i \"{output_txt_path}\" \\\n")
         f.write(f"    --warc-file=\"{warc_prefix}\" \\\n")
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--manifest-file",
         type=str,
-        default="data/cc_path/enwiki-20240420-extracted_urls.txt.gz",
+        default="data/wiki_links/enwiki-20240420-extracted_urls.txt.gz",
         help="输入的URL清单.gz文件路径。"
     )
     parser.add_argument(
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-script",
         type=str,
-        default="download_wiki_pages.sh",
+        default="scripts/download_wiki_pages.sh",
         help="输出的bash脚本文件名。"
     )
     parser.add_argument(

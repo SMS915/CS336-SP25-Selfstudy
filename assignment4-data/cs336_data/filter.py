@@ -52,8 +52,8 @@ def gopher_quality_filter(text: str) -> bool:
     Returns:
         bool: 如果文本通过质量过滤则返回 True，否则返回 False。
     """
-    nltk.download('punkt', quiet=True)
-    nltk.download('punkt_tab', quiet=True)
+    # nltk.download('punkt', quiet=True)
+    # nltk.download('punkt_tab', quiet=True)
 
     words = nltk.word_tokenize(text)
     word_count = len(words)
