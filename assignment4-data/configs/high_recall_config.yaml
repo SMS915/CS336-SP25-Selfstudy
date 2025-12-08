@@ -1,5 +1,5 @@
 # config_high_recall.yaml
-project_name: "CS336_High_Recall_Run"
+project_name: "CS336_High_Recall"
 
 paths:
   input_dir: "data/crawls/wet"
@@ -11,7 +11,7 @@ paths:
       __label__high_quality: 'wiki'
 
 processing:
-  max_workers: 15
+  max_workers: 30
   max_files_limit: null 
 
 filter:
