@@ -252,7 +252,7 @@ if __name__ == "__main__":
         if os.path.getsize(p) > 0
         ]
         print(f"模糊去重结束: {doc_count_before} -> {doc_count_after} 文档")
-        # 5. (可选) 构建分片数据集
+        
         print("\n--- 构建最终分片数据集 ---")
         final_shard_dir = os.path.join(config['paths']['base_output_dir'], 'shards')
         build_dataset_parallel(fuzzy_output_paths, Path(final_shard_dir))

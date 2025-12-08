@@ -12,17 +12,17 @@ paths:
       __label__high_quality: 'wiki'
 
 processing:
-  max_workers: 15
-  max_files_limit: 20  # 测试用，生产环境设为 null
+  max_workers: 30
+  max_files_limit: null # 测试用，生产环境设为 null
 
 filter:
   min_doc_length: 200        # 提高长度门槛，过滤碎片
   language:
     target: "en"
-    min_score: 0.95          # 极高的语言置信度
+    min_score: 0.9          # 极高的语言置信度
   safety:
-    nsfw_threshold: 0.01     # 极严格的NSFW过滤
-    toxic_threshold: 0.01    # 极严格的有毒言论过滤
+    nsfw_threshold: 0.02     # 极严格的NSFW过滤
+    toxic_threshold: 0.02    # 极严格的有毒言论过滤
   
 deduplication:
   fuzzy:
