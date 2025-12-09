@@ -1,7 +1,7 @@
 # cs336_data/pipeline.py
-
 import argparse
 import multiprocessing
+import fasttext
 import os
 import glob
 import yaml
@@ -9,15 +9,11 @@ from pathlib import Path
 from tqdm import tqdm
 from typing import Dict, Optional, Tuple, List, Any
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
 from fastwarc.warc import ArchiveIterator, WarcRecordType
-from .extraction import extract_text
-from .filter import (identify_language, 
-                     gopher_quality_filter, 
-                     classify_nsfw, 
-                     classify_toxic_speech)
+from .filter import (gopher_quality_filter, 
+                     classify_text)
 
 from .deduplication import minhash_deduplication, exact_line_deduplication
 from .quality_classifier import QualityClassifier
@@ -27,20 +23,23 @@ def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
     
+CONFIG_PATH = "configs/test_pipeline.yaml"
+CONFIG = load_config(CONFIG_PATH)
+
+model_setup = CONFIG['models']
+LANG_MODEL = fasttext.load_model(model_setup['lang_path'])
+NSFW_MODEL = fasttext.load_model(model_setup['nsfw_path'])
+TOXIC_MODEL = fasttext.load_model(model_setup['toxic_path'])
+QUALITY_CLASSIFIER = QualityClassifier(model_setup['quality_classifier'], model_setup['label_mapping'])
 
 _worker_context = {}
 
-def worker_initializer(config):
+def _worker_initializer():
     """
     这个函数会在每个子进程启动时只执行一次。
     用于加载模型并存入全局变量。
     """
     print(f"Worker {os.getpid()} initializing models...")
-    
-    # 1. 加载 QualityClassifier
-    model_path = config['paths']['models']['quality_classifier']
-    label_map = config['paths']['models']['label_mapping']
-    _worker_context['quality_classifier'] = QualityClassifier(model_path, label_map)
 
 def process_single_wet_file(wet_file_path: str | os.PathLike,
                             output_dir: str | os.PathLike,
@@ -48,10 +47,8 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
                             ) -> Tuple[List[str | os.PathLike], Dict[str, int]]:
     
     stats = defaultdict(int)
-    model_path = config['paths']['models']['quality_classifier']
-    label_map = config['paths']['models']['label_mapping']
-    quality_classifier = _worker_context['quality_classifier']
 
+    # 为每个wet文件创立对应的二级目录
     web_base_name = os.path.basename(wet_file_path).replace('.warc.wet.gz', '')
     output_subdir = os.path.join(output_dir, web_base_name)
     os.makedirs(output_subdir, exist_ok=True)
@@ -65,7 +62,7 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
 
     with open(wet_file_path, 'rb') as f_in:
         for i, record in enumerate(ArchiveIterator(f_in)):
-            if record.record_type != WarcRecordType.conversion :
+            if record.record_type != WarcRecordType.conversion:
                 stats['other_record_type'] += 1
                 continue
             
@@ -76,19 +73,24 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
             if not text or text.isspace() or len(text) < min_len:
                 stats['short_count'] += 1
                 continue
-            
-            lang_code, lang_score = identify_language(text)
+
+            text_for_filter = text.replace('\n', ' ').strip()
+
+            # lang_code, lang_score = classify_text(lang_model, text_for_filter)
+            lang_code, lang_score = classify_text(LANG_MODEL, text_for_filter)
             if lang_code != lang_target or lang_score <= lang_min_score:
                 stats['lang_failed'] += 1
                 continue
                 
-            nsfw_label, nsfw_score = classify_nsfw(text)
+            # nsfw_label, nsfw_score = classify_text(nsfw_model, text_for_filter)
+            nsfw_label, nsfw_score = classify_text(NSFW_MODEL, text_for_filter)
             transformed_nsfw_score = nsfw_score if nsfw_label == 'nsfw' else (1 - nsfw_score)
             if transformed_nsfw_score > nsfw_thresh:
                 stats['nsfw_failed'] += 1
                 continue
 
-            toxic_label, toxic_score = classify_toxic_speech(text)
+            # toxic_label, toxic_score = classify_text(toxic_model, text_for_filter)
+            toxic_label, toxic_score = classify_text(TOXIC_MODEL, text_for_filter)
             transformed_toxic_score = toxic_score if toxic_label == 'toxic' else (1 - toxic_score)
             if transformed_toxic_score > toxic_thresh:
                 stats['toxic_failed'] += 1
@@ -98,7 +100,8 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
                 stats['gopher_failed'] += 1
                 continue
 
-            quality_label, _ = quality_classifier.predict(text)
+            # quality_label, _ = quality_classifier.predict(text)
+            quality_label, _ = QUALITY_CLASSIFIER.predict(text)
             if quality_label == 'cc':
                 stats['quality_failed'] += 1
                 continue
@@ -128,7 +131,10 @@ def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[st
     output_dir = os.path.join(config['paths']['base_output_dir'], 'filtered')
     
     max_workers = config['processing']['max_workers']
+    worker_ttl = config['processing'].get('worker_ttl', 50) # 默认处理50个文件后重启
     max_files = config['processing']['max_files_limit']
+
+    print(f"启动 multiprocessing.Pool (Workers={max_workers}, TTL={worker_ttl})...")
 
     wet_files = sorted(glob.glob(f"{input_dir}/*.warc.wet.gz"))
     if not wet_files:
@@ -144,16 +150,26 @@ def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[st
     all_output_paths = []
     total_stats = defaultdict(int)
 
-    with ProcessPoolExecutor(max_workers=max_workers,
-                             initializer=worker_initializer,
-                             initargs=(config,)) as executor:
+    with multiprocessing.Pool(processes=max_workers, 
+                              initializer=_worker_initializer, # 进程启动时加载模型
+                              maxtasksperchild=worker_ttl) as pool: # 防内存泄漏
+
+    # processpool写法
+    # with ProcessPoolExecutor(max_workers=max_workers,
+    #                          initializer=_worker_initializer,
+    #                          ) as executor:
+
+    #   results = tqdm(executor.map(process_func, wet_files),
+    #                total=len(wet_files),
+    #                desc="并行处理wet文件")
+
         print(f"启动ProcessPoolExecutor，最大工作进程数: {max_workers}")
 
         process_func = partial(process_single_wet_file, output_dir=output_dir, config=config)
 
-        results = tqdm(executor.map(process_func, wet_files),
+        results = tqdm(pool.imap_unordered(process_func, wet_files, chunksize=1),
                        total=len(wet_files),
-                       desc="并行处理wet文件")
+                       desc="并行过滤 WET 文件")
         
         for output_paths, stats in results:
             all_output_paths.extend(output_paths)
@@ -162,6 +178,7 @@ def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[st
 
     print("初步过滤完成")
     print("并行过滤统计情况如下")
+    print(f"过滤后的文件共{len(all_output_paths)}个")
     for k, v in total_stats.items():
         print(f" - {k}: {v}, {v/total_stats['total']:.2%}")
     
@@ -219,11 +236,22 @@ def build_dataset_parallel(kept_files: List[Path], output_dir: Path, num_shards:
     with multiprocessing.Pool(processes=15) as pool:
         pool.starmap(write_shard, tasks)
 
+
+# 辅助函数：统计直接子目录的数量
+def count_subdirectories(path: str | os.PathLike) -> int:
+    p = Path(path)
+    if not p.exists():
+        return 0
+    # 只统计目录，不递归
+    return sum(1 for x in p.iterdir() if x.is_dir())
+
+
+# 辅助函数：递归获取目录下所有txt文件路径
+def get_all_txt_files(path: str | os.PathLike) -> List[Path]:
+    return list(Path(path).rglob("*.txt"))
+
+
 if __name__ == "__main__":
-    # input_dir = 'data/crawls/wet'
-    # filtered_output_dir = 'data/filtered'
-    # exact_output_dir = 'data/exact_deduplicated'
-    # fuzzy_output_dir = 'data/fuzzy_deduplicated'
     parser = argparse.ArgumentParser(description="Run the data processing pipeline.")
     parser.add_argument("--config", type=str, default="test_pipeline.yaml", help="Path to the YAML configuration file.")
     args = parser.parse_args()
@@ -233,29 +261,152 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"Config file not found: {args.config}")
     
     config = load_config(args.config)
+
+
     print(f"成功加载配置: {args.config}")
     print(f"项目名称: {config['project_name']}")
 
-    os.makedirs(config['paths']['base_output_dir'], exist_ok=True)
+    resume_mode = config.get('pipeline', {}).get('resume', False)
+    base_output = config['paths']['base_output_dir']
+    os.makedirs(base_output, exist_ok=True)
 
-    filtered_doc_paths, total_stats = filter_wet_files(config)
-    if filtered_doc_paths:
-        filtered_base_dir = os.path.join(config['paths']['base_output_dir'], 'filtered')
+    input_dir = config['paths']['input_dir']
+    max_files_config = config['processing'].get('max_files_limit')
 
-        print("\n--- 开始精确去重 ---")
-        exact_output_paths, exact_base_dir = exact_deduplicate(filtered_doc_paths, filtered_base_dir, config)
+    # 断点续传检查, 首先获取当前运行预期的中间产出文件夹数量
+    expected_limit = 0
+    if max_files_config is not None:
+        expected_limit = max_files_config
+        print(f"[Plan] 配置限制最大处理文件数: {expected_limit}")
+    else:
+        # 如果是 None，则扫描源目录下的 .warc.wet.gz 总数
+        print(f"[Plan] 配置为全量处理，正在统计源文件...")
+        source_files = glob.glob(os.path.join(input_dir, "*.warc.wet.gz"))
+        expected_limit = len(source_files)
+        print(f"[Plan] 源目录实际文件数: {expected_limit}")
 
-        print("\n--- 开始模糊去重 (MinHash) ---")
-        fuzzy_output_paths, doc_count_before, doc_count_after = fuzzy_deduplicate(exact_output_paths, exact_base_dir, config)
-        fuzzy_output_paths = [
-        Path(p) for p in fuzzy_output_paths 
-        if os.path.getsize(p) > 0
-        ]
-        print(f"模糊去重结束: {doc_count_before} -> {doc_count_after} 文档")
+    if expected_limit == 0:
+        print("错误: 预期处理数量为0，请检查输入目录或配置。")
+        exit(1)
+
+    filtered_dir = os.path.join(base_output, 'filtered')
+    exact_dedup_dir = os.path.join(base_output, 'exact_dedup')
+    
+    # 状态变量初始化
+    exact_input_files = [] # 传给 Exact Dedup 的输入
+    exact_input_base = ""
+    
+    fuzzy_input_files = [] # 传给 Fuzzy Dedup 的输入
+    fuzzy_input_base = ""
+    
+    skip_exact_dedupe = False # 标记位
+
+    # ---------------------------------------------------------
+    # 首先检查倒数第二个阶段 Exact Dedupe 输出是否完整
+    # ---------------------------------------------------------
+    if resume_mode:
+        count = count_subdirectories(exact_dedup_dir)
+        print(f"[Check] Exact Dedupe 目录 ({exact_dedup_dir}) 包含子目录数: {count}")
         
-        print("\n--- 构建最终分片数据集 ---")
-        final_shard_dir = os.path.join(config['paths']['base_output_dir'], 'shards')
+        # 只要子文件夹数量 >= 预期的 WET 文件数量，就认为该阶段已完成
+        if count >= expected_limit:
+            print(f">>> [Resume] Exact Dedupe 阶段已完成 ({count} >= {expected_limit})。")
+            print(">>> 跳过 Filter 和 Exact Dedupe，加载数据准备进入 Fuzzy Dedupe...")
+            
+            # 加载该目录下的所有 .txt 文件路径作为下一阶段输入
+            fuzzy_input_files = get_all_txt_files(exact_dedup_dir)
+            fuzzy_input_base = exact_dedup_dir
+            skip_exact_dedupe = True
+        else:
+            if count > 0:
+                print(f"[Resume] Exact Dedupe 不完整 ({count}/{expected_limit})，尝试回退到上一阶段。")
+            else:
+                print(f"[Resume] Exact Dedupe 目录不存在或为空。")
+
+
+    # ---------------------------------------------------------
+    # 检查一阶段 Filtered 输出是否完整 (如果不能直接跳过 Exact)
+    # ---------------------------------------------------------
+    if not skip_exact_dedupe:
+        if resume_mode:
+            count = count_subdirectories(filtered_dir)
+            print(f"[Check] Filtered 目录 ({filtered_dir}) 包含子目录数: {count}")
+            
+            if count >= expected_limit:
+                print(f">>> [Resume] Filter 阶段已完成 ({count} >= {expected_limit})。")
+                print(">>> 跳过 Filter 阶段，加载数据准备进入 Exact Dedupe...")
+                
+                exact_input_files = get_all_txt_files(filtered_dir)
+                exact_input_base = filtered_dir
+            else:
+                if count > 0:
+                    print(f"[Resume] Filtered 不完整 ({count}/{expected_limit})，将从头开始运行。")
+
+        # ---------------------------------------------------------
+        # 执行 Filter (如果需要)
+        # ---------------------------------------------------------
+        if not exact_input_files:
+            print("\n=== 执行 Stage 1: WET 过滤 ===")
+            exact_input_files, total_stats = filter_wet_files(config)
+            exact_input_base = filtered_dir
+            if not exact_input_files:
+                print("错误：过滤阶段未产生任何文件，程序终止。")
+                exit(1)
+
+        print("\n=== 执行 Stage 2: 精确去重 ===")
+        # 注意：exact_deduplicate 会根据 relative_to 保持子目录结构，这符合我们后续检查子目录数量的逻辑
+        fuzzy_input_files, fuzzy_input_base = exact_deduplicate(exact_input_files, exact_input_base, config)
+
+
+    if fuzzy_input_files:
+        print("\n=== 执行 Stage 3: 模糊去重 (MinHash) ===")
+        
+        # 过滤可能存在的空文件或无效路径
+        valid_fuzzy_inputs = [p for p in fuzzy_input_files if os.path.exists(p) and os.path.getsize(p) > 0]
+        
+        # 再次简单的防御性检查：如果有输入文件，就开始跑
+        if len(valid_fuzzy_inputs) == 0:
+             print("警告: 没有任何有效文件输入到模糊去重阶段，流程结束。")
+             exit(0)
+
+        fuzzy_output_paths, doc_count_before, doc_count_after = fuzzy_deduplicate(
+            valid_fuzzy_inputs, 
+            fuzzy_input_base, 
+            config
+        )
+
+        print("\n=== 构建分片数据集 ===")
+        fuzzy_output_paths = [Path(p) for p in fuzzy_output_paths if os.path.exists(p) and os.path.getsize(p) > 0]
+        
+        final_shard_dir = os.path.join(base_output, 'shards')
         build_dataset_parallel(fuzzy_output_paths, Path(final_shard_dir))
 
-        empty_docs = sum(1 for p in fuzzy_output_paths if os.path.getsize(p) == 0)
-        print(f"警告：结果中包含 {empty_docs} 个空文件")
+        print(f"\nPipeline 完成！最终分片保存在: {final_shard_dir}")
+    else:
+        print("流程异常：没有文件传递给模糊去重阶段。")
+
+
+
+    # os.makedirs(config['paths']['base_output_dir'], exist_ok=True)
+
+    # filtered_doc_paths, total_stats = filter_wet_files(config)
+    # if filtered_doc_paths:
+    #     filtered_base_dir = os.path.join(config['paths']['base_output_dir'], 'filtered')
+
+    #     print("\n--- 开始精确去重 ---")
+    #     exact_output_paths, exact_base_dir = exact_deduplicate(filtered_doc_paths, filtered_base_dir, config)
+
+    #     print("\n--- 开始模糊去重 (MinHash) ---")
+    #     fuzzy_output_paths, doc_count_before, doc_count_after = fuzzy_deduplicate(exact_output_paths, exact_base_dir, config)
+    #     fuzzy_output_paths = [
+    #     Path(p) for p in fuzzy_output_paths 
+    #     if os.path.getsize(p) > 0
+    #     ]
+    #     print(f"模糊去重结束: {doc_count_before} -> {doc_count_after} 文档")
+        
+    #     print("\n--- 构建最终分片数据集 ---")
+    #     final_shard_dir = os.path.join(config['paths']['base_output_dir'], 'shards')
+    #     build_dataset_parallel(fuzzy_output_paths, Path(final_shard_dir))
+
+    #     empty_docs = sum(1 for p in fuzzy_output_paths if os.path.getsize(p) == 0)
+    #     print(f"警告：结果中包含 {empty_docs} 个空文件")

@@ -1,24 +1,24 @@
-from concurrent.futures import ProcessPoolExecutor
 import os
-import nltk
 import random
 import mmh3
-import shutil
 import xxhash
 import unicodedata
 import numpy as np
 import regex
 from nltk import ngrams
 from tqdm import tqdm
-from hashlib import md5
 from pathlib import Path
 from .UF import UnionFind
 from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 from typing import List, Dict, Tuple, Set, List, Callable, Hashable, cast
 from itertools import combinations
 from collections import defaultdict
 random_seed = 42
 random.seed(random_seed)
+
+_verify_worker_context = {}
+
 
 def normalize_text_for_duplication(text: str) -> str:
     """
@@ -41,6 +41,7 @@ def normalize_text_for_duplication(text: str) -> str:
     
     return text
 
+
 # 多进程行哈希函数, 供子进程调用
 def _count_lines_worker(file_paths):
     local_counts = defaultdict(int)
@@ -53,7 +54,6 @@ def _count_lines_worker(file_paths):
                     h = hasher(stripped.encode('utf-8')).intdigest()
                     local_counts[h] += 1
     return local_counts
-
 
 def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike) -> Tuple[List[str | os.PathLike], int, int]:
     """
@@ -79,7 +79,7 @@ def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str
     print(f"精确去重：启动 {num_workers} 个进程并行统计行频...")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        # 使用 map 并行处理
+        # 并行处理
         results = list(tqdm(executor.map(_count_lines_worker, chunks), 
                             total=len(chunks), desc="合并计数器"))
 
@@ -169,7 +169,7 @@ def convert_text_into_n_gram(n: int, text: str) -> Set[Tuple[str, ...]]:
 def generate_hash_seeds(num_hashes: int) -> np.ndarray:
     """
     生成用于 MinHash 的随机种子数组。
-    传递整数数组比传递函数对象列表在多进程中要高效得多。
+    传递整数数组比传递函数对象列表要高效得多。
     """
     # 使用固定的随机状态以确保可复现性
     # 使用 uint32 范围内的随机整数
@@ -381,7 +381,7 @@ def _verify_pair_worker(pairs_chunk, id_n_gram_map_subset, threshold):
 #     true_duplicate_pairs = []
 
 #     worker_func = partial(_verify_pair_worker, 
-#                           id_n_gram_map_subset=id_n_gram_map, # 注意这里的大对象传递风险
+#                           id_n_gram_map_subset=id_n_gram_map, # 大对象传递
 #                           threshold=jaccard_threshold)
 
 #     with ProcessPoolExecutor() as executor:
@@ -408,11 +408,24 @@ def _verify_pair_worker(pairs_chunk, id_n_gram_map_subset, threshold):
 
 #     return true_duplicate_pairs
 
-def _lazy_verify_worker(args):
+def _lazy_verify_initializer(paths_map, n_val, thresh_val):
+    """
+    Worker初始化函数：只在每个子进程启动时执行一次。
+    接收共享数据并存入 worker 的全局上下文中。
+    """
+    global _verify_worker_context
+    _verify_worker_context['id_paths_map'] = paths_map
+    _verify_worker_context['n'] = n_val
+    _verify_worker_context['threshold'] = thresh_val
+    print(f"Worker {os.getpid()} initialized with shared data.")
+
+def _lazy_verify_worker(pair_chunk: List[Tuple[int, int]]):
     """
     并行 Worker：处理一批候选对的验证。
     """
-    pair_chunk, id_paths_map, n, threshold = args
+    id_paths_map = _verify_worker_context['id_paths_map']
+    n = _verify_worker_context['n']
+    threshold = _verify_worker_context['threshold']
     true_pairs_chunk = []
     
     for doc_id1, doc_id2 in pair_chunk:
@@ -489,7 +502,15 @@ def find_true_duplicate_pair(candidate_pairs: Set[tuple[int,...]], id_paths_map:
     
     true_duplicate_pairs = []
 
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+    # with ProcessPoolExecutor(max_workers=num_workers) as executor:
+
+    with ProcessPoolExecutor(
+        max_workers=num_workers,
+        initializer=_lazy_verify_initializer,
+        # initargs 只会被发送一次给每个 worker
+        initargs=(id_paths_map, n, jaccard_threshold) 
+    ) as executor:
+        
         # 使用 imap 或 map
         results = tqdm(executor.map(_lazy_verify_worker, tasks), 
                        total=len(chunks), 
@@ -571,7 +592,7 @@ def minhash_deduplication(input_files: List[os.PathLike], input_base_dir: str | 
         分入同一个“桶”中。只有在同一个桶中相遇的文档，才会被认为是可能重复的
         “候选对”。这一步是避免全局O(N^2)比较的关键。
 
-    3.  【精确验证】(Verification): 对所有候选对，通过计算它们原始n-gram集合的
+    3.  【精确验证】(Verification): 对所有候选对，通过读取路径并计算它们n-gram集合的
         真实Jaccard相似度，来进行精确的最终确认。
         
     4.  【聚类】(Clustering): 根据通过验证的“真实重复对”，使用并查集（Union-Find）
