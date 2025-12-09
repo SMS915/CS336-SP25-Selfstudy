@@ -495,11 +495,6 @@ def find_true_duplicate_pair(candidate_pairs: Set[tuple[int,...]], id_paths_map:
     
     chunks = [candidate_list[i:i + chunk_size] for i in range(0, total_pairs, chunk_size)]
     
-    # 构造任务参数：每个 worker 都需要一份 id_paths_map
-    # 注意：在 Linux 下，fork 机制会通过 Copy-on-Write 共享 id_paths_map 内存，不会立刻复制，
-    # 所以直接传递是内存安全的（除非你的 map 大到几十 GB）
-    tasks = [(chunk, id_paths_map, n, jaccard_threshold) for chunk in chunks]
-    
     true_duplicate_pairs = []
 
     # with ProcessPoolExecutor(max_workers=num_workers) as executor:
@@ -512,7 +507,7 @@ def find_true_duplicate_pair(candidate_pairs: Set[tuple[int,...]], id_paths_map:
     ) as executor:
         
         # 使用 imap 或 map
-        results = tqdm(executor.map(_lazy_verify_worker, tasks), 
+        results = tqdm(executor.map(_lazy_verify_worker, chunks), 
                        total=len(chunks), 
                        desc="并行精确验证")
         

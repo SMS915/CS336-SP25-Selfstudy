@@ -5,6 +5,9 @@ paths:
   input_dir: "data/crawls/wet"
   base_output_dir: "data/test_pipeline"
 
+pipeline:
+  resume: True
+
 models:
   quality_classifier: "data/my_classifiers/best_classifier.bin"
   toxic_path: "data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin"
