@@ -1,18 +1,23 @@
-# config_high_recall.yaml
+# test_pipeline.yaml
 project_name: "CS336_test_pipeline"
 
 paths:
   input_dir: "data/crawls/wet"
   base_output_dir: "data/test_pipeline"
-  models:
-    quality_classifier: "data/my_classifiers/best_classifier.bin"
-    label_mapping:
-      __label__low_quality: 'cc'
-      __label__high_quality: 'wiki'
+
+models:
+  quality_classifier: "data/my_classifiers/best_classifier.bin"
+  toxic_path: "data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin"
+  nsfw_path: "data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin"
+  lang_path: "data/classifiers/lid.176.bin"
+  label_mapping:
+    __label__low_quality: 'cc'
+    __label__high_quality: 'wiki'
 
 processing:
   max_workers: 15
   max_files_limit: 30
+  worker_ttl: 20
 
 filter:
   min_doc_length: 200       # 放宽长度限制
@@ -27,7 +32,5 @@ deduplication:
   fuzzy:
     n_gram: 13
     num_hashes: 128
-    # LSH 参数 (b=42, r=3): 极其敏感，稍有相似就会被抓出来
-    # 这会产生大量候选对，适合用来测试去重效果，或者去除隐晦的洗稿
     bands: 32
     threshold: 0.8

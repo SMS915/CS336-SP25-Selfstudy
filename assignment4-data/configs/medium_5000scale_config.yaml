@@ -1,0 +1,41 @@
+project_name: "CS336_Medium_Scale_5k"
+
+paths:
+  input_dir: "data/crawls/wet"
+  base_output_dir: "data/medium_output_5k"
+
+pipeline:
+  resume: True # 断点续传
+  
+models:
+  quality_classifier: "data/my_classifiers/best_classifier.bin"
+  toxic_classifier: "data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin"
+  nsfw_classifier: "data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin"
+  lang_classifier: "data/classifiers/lid.176.bin"
+  label_mapping:
+    __label__low_quality: 'cc'
+    __label__high_quality: 'wiki'
+
+processing:
+  # 留有余地，不要占满32核
+  max_workers: 30
+  # 处理 5000 个文件
+  max_files_limit: 5000
+  # 强制子进程重启频率
+  worker_ttl: 50 
+
+filter:
+  min_doc_length: 200        # 保持高质量过滤
+  language:
+    target: "en"
+    min_score: 0.9           # 稍稍放宽一点点，或者保持 0.95
+  safety:
+    nsfw_threshold: 0.01     
+    toxic_threshold: 0.01
+  
+deduplication:
+  fuzzy:
+    n_gram: 13
+    num_hashes: 128
+    bands: 20
+    threshold: 0.8
