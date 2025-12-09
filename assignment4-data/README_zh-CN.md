@@ -75,7 +75,7 @@
 
 
 
-### 3.1 初步过滤阶段统计
+### 3.1 小规模过滤阶段观察
 
 以下数据是在一个包含 **545,744** 个文档的Common Crawl WET文件样本上，运行**并行初步过滤**后得到的统计结果：
 
@@ -105,7 +105,7 @@
 
    
 
-### 3.3 规模化性能验证
+### 3.2 规模化性能验证
 
 为了验证流水线在处理实际生产级批次数据时的吞吐量与稳定性，选取了 Common Crawl 的一个**千文件级子集**进行规模化压力测试。旨在确立单节点在全负载状态下的性能基准。
 
@@ -157,9 +157,38 @@
     
     * 文档移除数: 19 篇 (保留 295,502 篇)。
     
-    * *分析*: 由于前置的“质量分类器”极其严格（仅保留了 1.1% 的头部数据），且“精确行去重”已经移除了大量重复片段，最终文档级的近似重复率极低（0.01%）。这表明经过严格筛选的高质量数据集本身具有较高的唯一性。
+    * 分析: 由于前置的“质量分类器”极其严格（仅保留了 1.1% 的头部数据），且“精确行去重”已经移除了大量重复片段，最终文档级的近似重复率极低（0.01%）。这表明经过严格筛选的高质量数据集本身具有较高的唯一性。
     
       
+
+### 3.3 大样本规模语料处理
+
+
+并行过滤用时1:35:05秒，内存峰值约14GB
+
+过滤后的文件共1464040个
+
+ - other_record_type: 5000, 0.00%
+ - total: 134078978, 100.00%
+ - lang_failed: 120142077, 89.61%
+ - short_count: 4512008, 3.37%
+ - quality_failed: 6999696, 5.22%
+ - kept: 1464040, 1.09%
+ - gopher_failed: 784019, 0.58%
+ - nsfw_failed: 63666, 0.05%
+ - toxic_failed: 113472, 0.08%
+
+
+
+精确行去重用时 00:43 + 13:54, 内存占用峰值27GB：
+
+197390853行 -> 57650791行  移除70.79%
+
+
+
+模糊去重，哈希签名生成用时 1:08:16  内存占用21GB
+
+
 
 ## 4. 项目结构
 
@@ -291,8 +320,8 @@
     如果需要更多不重复的样本，可以使用 `--skip` 参数。
     
     ```bash
-    # 在已抽样20个的基础上，再抽样100个全新的文件链接，并同时下载对应的WARC文件
-    python -m cs336_data.sample_cc_paths data/cc_path/wet.paths.gz -n 100 --skip 20  --output-script scripts/download_cc_batch_2.sh --download-warc
+    # 在已抽样20个的基础上，再抽样100个全新的文件链接
+    python -m cs336_data.sample_cc_paths data/cc_path/wet.paths.gz -n 100 --skip 20  --output-script scripts/download_cc_batch_2.sh
     ```
 3.  **执行下载**:
     对每个生成的脚本执行后台下载任务。
@@ -321,7 +350,7 @@
 
 在质量分类器训练完成后，执行主流水线脚本来处理下载好的**WET**文件。
 ```bash
-# 脚本将处理 data/crawls/ 目录下的所有WET文件
+# 脚本将处理 data/crawls/wet 目录下的所有WET文件
 python -m cs336_data.pipeline --config configs/{config_name}.yaml
 ```
 
@@ -346,7 +375,7 @@ python -m cs336_data.pipeline --config configs/{config_name}.yaml
     ```bash
     # 本项目所需的所有外部数据（CC样本、预训练分类器、维基百科URL列表）均可通过一个脚本下载。
     chmod +x scripts/download_requirings.sh
-    scripts/data_downloading.sh
+    scripts/download_requirings.sh
     ```
     
 
