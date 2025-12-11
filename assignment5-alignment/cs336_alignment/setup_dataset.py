@@ -3,7 +3,7 @@ import json
 from datasets import load_dataset
 from huggingface_hub import login
 
-# 如果你需要设置镜像
+# 设置镜像
 # os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 
@@ -22,7 +22,7 @@ def prepare_math_dataset():
     output_dir = "data/MATH"
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- 1. 处理验证集 (Test Split -> validation.jsonl) ---
+    # --- 处理验证集 (Test Split -> validation.jsonl) ---
     # 作业 Baseline 需要用这 5000 条数据
     print("正在处理 Validation set (原 test split)...")
     val_data = dataset["test"]
@@ -39,8 +39,7 @@ def prepare_math_dataset():
             f.write(json.dumps(entry) + "\n")
     print(f"✅ 已保存: {val_path} (共 {len(val_data)} 条)")
 
-    # --- 2. 处理训练集 (Train Split -> train.jsonl) ---
-    # 后续步骤会用到
+    # --- 处理训练集 (Train Split -> train.jsonl) ---
     print("正在处理 Train set...")
     train_data = dataset["train"]
     train_path = os.path.join(output_dir, "train.jsonl")

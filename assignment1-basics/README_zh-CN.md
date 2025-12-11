@@ -416,7 +416,7 @@ chmod +x ./run_train_bpe.sh # 给予脚本文件权限
 运行下方脚本可以多进程预处理数据，其中在bash脚本中指定分词器读取文件的前缀和进程数量，在preprocess_training_data.py中修改要encode的文件列表
 
 ```
-./preprocess_corpus.sh
+./preprocess_corpus.sh {bpe_prefix}
 ```
 
 
