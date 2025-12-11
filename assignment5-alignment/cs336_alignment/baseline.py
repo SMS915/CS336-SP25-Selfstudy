@@ -1,8 +1,11 @@
 import os
+import sys
 import json
 import time
+import yaml
+import argparse
 from vllm import LLM, SamplingParams
-from typing import List, Tuple, Dict, Callable
+from typing import List, Dict, Callable, Any
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
 
 def load_data(file_path: str) -> List[Dict]:
@@ -14,6 +17,23 @@ def load_data(file_path: str) -> List[Dict]:
 
 
 def formatting_prompt(examples: List[Dict], prompt_template: str) -> List[str]:
+    """
+    使用提供的模板批量格式化测试用例，生成最终的模型输入 Prompt。
+    遍历示例列表，将每个示例中的问题文本注入到模板的指定占位符中。
+
+    Args:
+        examples (List[Dict]): 测试用例列表。
+            列表中的每个字典必须包含 "problem" 键，代表原始问题文本。
+        prompt_template (str): 用于构建prompt的字符串模板
+            该字符串必须包含"{question}"占位符，以便替换为实际问题。
+
+    Returns:
+        List[str]: 格式化后的完整 Prompt 列表。
+            长度与输入examples相同，并顺序一一对应
+
+    Raises:
+        KeyError: 如果 examples 中的字典缺少 "problem" 键，将抛出此异常。
+    """
     prompts = []
     for ex in examples:
         prompt = prompt_template.replace("{question}", ex["problem"])
@@ -104,10 +124,10 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
         None: 此函数不返回数据，结果直接写入 `output_path` 指定的文件。
 
     Note:
-        函数内部使用了硬编码的模型配置：
+        根据官方handout, 函数内部使用了硬编码的模型配置：
         - dtype="bfloat16"
         - gpu_memory_utilization=0.9
-        - temperature=1.0, top_p=1.0 (贪婪/确定性采样通常应设 temp=0，此处设为1.0可能是为了多样性或特定需求)
+        - temperature=1.0, top_p=1.0
         - stop_tokens=["</answer>"]
     """
     examples = load_data(example_path)
@@ -127,13 +147,82 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
             f.write(json.dumps(res) + "\n")
     print(f" 结果已保存至: {output_path}")
 
+
+def parse_arguments() -> Dict[str, Any]:
+    """
+
+    解析命令行参数并加载 YAML 配置文件（如果提供）。
+
+    优先级逻辑：命令行参数 (CLI) > YAML 配置文件 > 默认值（如果有）。
+
+    Returns:
+        Dict[str, Any]: 包含最终运行配置的字典。
+    """
+    parser = argparse.ArgumentParser(description="Evaluate vLLM model performance.")
+
+    # 配置文件参数
+    parser.add_argument('--config', type=str, default=None, help='Path to the YAML configuration file.')
+
+    # 具体的运行参数 (默认值为 None，以便区分是否在命令行中指定了该参数)
+    parser.add_argument('--example_path', type=str, help='Path to the evaluation dataset (jsonl).')
+    parser.add_argument('--prompt_path', type=str, help='Path to the prompt template file.')
+    parser.add_argument('--output_path', type=str, help='Path to save evaluation results.')
+    parser.add_argument('--model_path', type=str, help='Path to the model checkpoint or HF ID.')
+
+    args = parser.parse_args()
+
+    # 初始化最终配置字典
+    final_config = {}
+
+    # 如果提供了 YAML 配置文件，先加载它
+    if args.config:
+        if not os.path.exists(args.config):
+            raise FileNotFoundError(f"Config file not found: {args.config}")
+        with open(args.config, 'r', encoding='utf-8') as f:
+            yaml_config = yaml.safe_load(f)
+            if yaml_config:
+                final_config.update(yaml_config)
+
+    # 使用命令行参数覆盖 YAML 配置 (仅当 CLI 参数不为 None 时)
+    for key, value in vars(args).items():
+        if key != 'config' and value is not None:
+            final_config[key] = value
+
+    return final_config
+
+
+def validate_config(config: Dict[str, Any]) -> None:
+    """验证必要的配置项是否存在。"""
+    required_keys = ['example_path', 'prompt_path', 'output_path', 'model_path']
+    missing_keys = [key for key in required_keys if key not in config]
+
+    if missing_keys:
+        print(f"Error: Missing required configuration keys: {missing_keys}")
+        print("Please provide them via --config YAML file or CLI arguments.")
+        sys.exit(1)
+
 if __name__ == '__main__':
-    EXAMPLE_PATH = 'data/MATH/validation.jsonl'
-    PROMPT_PATH = 'cs336_alignment/prompts/r1_zero.prompt'
-    OUTPUT_PATH = 'results/sft_v1_result.jsonl'
-    MODEL_PATH = 'checkpoints/sft_v1'
-    os.makedirs('results', exist_ok=True)
-    run_evaluate(EXAMPLE_PATH, PROMPT_PATH, OUTPUT_PATH, MODEL_PATH)
+    # EXAMPLE_PATH = 'data/MATH/validation.jsonl'
+    # PROMPT_PATH = 'cs336_alignment/prompts/r1_zero.prompt'
+    # OUTPUT_PATH = 'results/sft_v1_result.jsonl'
+    # MODEL_PATH = 'checkpoints/sft_v1'
+    config = parse_arguments()
+    validate_config(config)
+
+    print("正在用以下配置运行评估")
+    for k, v in config.items():
+        print(f"{k}: {v}")
+
+    output_dir = os.path.dirname(config['output_path'])
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    run_evaluate(
+        example_path=config['example_path'],
+        prompt_path=config['prompt_path'],
+        output_path=config['output_path'],
+        model_path=config['model_path']
+    )
 
 
 
