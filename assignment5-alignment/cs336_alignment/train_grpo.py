@@ -1,6 +1,5 @@
 import os
 os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] = "1"
-# 2. 解决 CUDA 碎片化 (针对本次报错)
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import re
 import yaml
@@ -12,7 +11,8 @@ import numpy as np
 from tqdm import tqdm
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from vllm import LLM, SamplingParams
 # 引入组件
 from cs336_alignment.sft import (
@@ -262,6 +262,7 @@ def train(config_path: str):
     # 开启梯度检查点省显存
     policy.gradient_checkpointing_enable()
     policy.train()
+
     
     optimizer = AdamW(policy.parameters(), lr=float(config["training"]["learning_rate"]))
 
@@ -286,7 +287,8 @@ def train(config_path: str):
         max_tokens=config["training"]["sampling_max_tokens"],
         stop=["</answer>"],
         include_stop_str_in_output=True,
-        n=config["training"]["group_size"] # 一次生成 G 个
+        n=config["training"]["group_size"], # 一次生成 G 个
+        repetition_penalty=config["training"]["repetition_penalty"],
     )
 
     # --- Data ---
@@ -303,10 +305,10 @@ def train(config_path: str):
     
     # --- GRPO Loop ---
     n_grpo_steps = config["training"]["n_grpo_steps"]
-    grad_accum_steps = config["training"]["gradient_accumulation_steps"]
     micro_batch_size = config["training"]["micro_batch_size"]
     epochs_per_batch = config["training"]["epochs_per_rollout_batch"]
     clip_range = config["training"]["clip_range"]
+    normalize_by_std = config["training"].get("normalize_by_std", True)
     
     start_step = config["model"]["start_step"]
     global_step = start_step if start_step is not None else 0
@@ -368,7 +370,7 @@ def train(config_path: str):
             repeated_ground_truths=all_ground_truths,
             group_size=config["training"]["group_size"],
             advantage_eps=config["training"]["advantage_eps"],
-            normalize_by_std=True
+            normalize_by_std=normalize_by_std
         )
         # 转为 Tensor 并移到 GPU
         advantages = advantages.to(device).unsqueeze(1) # (B*G, 1)
@@ -398,6 +400,7 @@ def train(config_path: str):
         input_ids = tokenized_batch["input_ids"].to(device)
         response_mask = tokenized_batch["response_mask"].to(device)
         labels = tokenized_batch["labels"].to(device)
+        attention_mask = tokenized_batch["attention_mask"].to(device)
         
         # 1.6 (Optional) Get Old Log Probs
         # 对于 Reinforce 其实不需要，但为了兼容 Clip Loss，这里通常会计算一次
@@ -410,8 +413,9 @@ def train(config_path: str):
             for i in range(0, len(input_ids), inference_batch_size):
                 batch_input_ids = input_ids[i : i + inference_batch_size]
                 batch_labels = labels[i : i + inference_batch_size]
+                batch_mask = attention_mask[i: i + inference_batch_size]
                 
-                log_probs_dict = get_response_log_probs(policy, batch_input_ids, batch_labels)
+                log_probs_dict = get_response_log_probs(policy, batch_input_ids, batch_mask, batch_labels)
                 old_log_probs_list.append(log_probs_dict["log_probs"].detach())
                 
         old_log_probs = torch.cat(old_log_probs_list, dim=0)
@@ -426,12 +430,19 @@ def train(config_path: str):
         indices = torch.randperm(train_dataset_len)
         
         policy.train()
-        
         # 记录累积 loss
         step_loss = 0.0
-        accum_stats = {"loss": 0.0, "clip_ratio": 0.0, "approx_kl": 0.0}
+        optimizer.zero_grad()
+        # accum_stats = {"loss": 0.0, "clip_ratio": 0.0, "approx_kl": 0.0}
         # Inner Epochs (On-policy 通常是 1)
-        for _ in range(epochs_per_batch):
+        for epoch_idx in range(epochs_per_batch):
+            indices = torch.randperm(train_dataset_len)
+            actual_accum_steps = train_dataset_len // micro_batch_size
+            epoch_metrics = {"loss": [], "clip_ratio": [], "approx_kl": []}
+            current_epoch_loss = 0.0
+            current_epoch_clip = 0.0
+            current_epoch_kl = 0.0
+
             for i in range(0, train_dataset_len, micro_batch_size):
                 mb_idx = indices[i : i + micro_batch_size]
                 
@@ -441,17 +452,18 @@ def train(config_path: str):
                 mb_mask = response_mask[mb_idx]
                 mb_adv = advantages[mb_idx]
                 mb_old_lp = old_log_probs[mb_idx]
+                mb_attention_mask = attention_mask[mb_idx]
                 # mb_rewards = raw_rewards[mb_idx] # 如果是 no_baseline 需要这个
                 
                 # Forward
-                mb_log_probs_dict = get_response_log_probs(policy, mb_input_ids, mb_labels)
+                mb_log_probs_dict = get_response_log_probs(policy, mb_input_ids, mb_attention_mask, mb_labels)
                 mb_policy_log_probs = mb_log_probs_dict["log_probs"]
                 
                 # GRPO Backward
                 # 注意：grad_accum_steps 这里需要怎么算？
                 # 我们希望每一轮 Rollout 更新一次参数。
                 # 所以 accum_steps 应该是 (rollout_batch_size / micro_batch_size)
-                actual_accum_steps = train_dataset_len // micro_batch_size
+                
                 
                 loss, step_metrics = grpo_microbatch_train_step(
                     policy_log_probs=mb_policy_log_probs,
@@ -463,9 +475,9 @@ def train(config_path: str):
                     cliprange=clip_range
                     # raw_rewards=mb_rewards
                 )
-                accum_stats["loss"] += loss.item() / actual_accum_steps
-                accum_stats["clip_ratio"] += step_metrics["clip_ratio"].item() / actual_accum_steps
-                accum_stats["approx_kl"] += step_metrics["approx_kl"].item() / actual_accum_steps
+                current_epoch_loss += loss.item()
+                current_epoch_clip += step_metrics["clip_ratio"].item() / actual_accum_steps
+                current_epoch_kl += step_metrics["approx_kl"].item() / actual_accum_steps
                 
                 step_loss += loss.item() / actual_accum_steps
 
@@ -473,7 +485,9 @@ def train(config_path: str):
             grad_norm = torch.nn.utils.clip_grad_norm_(policy.parameters(), config["training"]["max_grad_norm"])
             optimizer.step()
             optimizer.zero_grad()
-        
+            epoch_metrics["loss"].append(current_epoch_loss)
+            epoch_metrics["clip_ratio"].append(current_epoch_clip)
+            epoch_metrics["approx_kl"].append(current_epoch_kl)
         global_step += 1
         pbar.update(1)
         
@@ -486,9 +500,9 @@ def train(config_path: str):
             "train/format_rate": np.mean(format_scores),  # 格式正确率
             
             # 2. 训练动态
-            "train/loss": accum_stats["loss"],
-            "train/clip_fraction": accum_stats["clip_ratio"],
-            "train/approx_kl": accum_stats["approx_kl"],
+            "train/loss": np.mean(epoch_metrics["loss"]),
+            "train/clip_fraction": np.mean(epoch_metrics["clip_ratio"]),
+            "train/approx_kl": np.mean(epoch_metrics["approx_kl"]),
             "train/lr": optimizer.param_groups[0]['lr'],
             "train/grad_norm": grad_norm.item(), # 之前代码里算的
             
@@ -503,7 +517,6 @@ def train(config_path: str):
 
         # --- Evaluation & Saving ---
         if global_step % config["evaluation"]["eval_every_steps"] == 0:
-            # ... 调用 log_generations (和 SFT 一样) ...
             policy.eval()
             
             eval_max_tokens = config["evaluation"].get("max_new_tokens", 2048)
@@ -536,8 +549,6 @@ def train(config_path: str):
             # 在 WandB 里打个标记
             wandb.log({"train/best_reward": best_reward, "train/global_step": global_step}, commit=False)
 
-        # B. 定期保存 (Periodic Save) - 防止意外中断
-        # 建议在 config 里把 save_steps 设小一点，比如 50 或 100
         if global_step % config["training"]["save_steps"] == 0:
             print(f"定期保存中 {global_step}")
             

@@ -77,11 +77,15 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     correct_count = 0      # 完全正确
     ans_error_count = 0    # 格式正确但答案错误
     format_error_count = 0 # 格式错误
-    for i, output in enumerate(outputs):
+    avg_len = 0
+
+    for i,(output, prompt) in enumerate(zip(outputs, prompts)):
         generated_text = output.outputs[0].text
+        avg_len += (len(generated_text) - len(prompt)) / len(outputs)
+        text_for_evaluate = generated_text.replace("</think><answer>", "</think> <answer>")
         example = examples[i]
         truth = example["solution"]
-        metrics = reward_fn(generated_text, truth)
+        metrics = reward_fn(text_for_evaluate, truth)
         if metrics.get("reward", 0.0) == 1.0:
             correct_count += 1
         elif metrics.get("format_reward", 0.0) == 1.0:
@@ -102,9 +106,11 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     print(f"完全正确: {accuracy: .2%}")
     print(f"格式正确，答案错误: {ans_error_count / len(prompts):.2%}")
     print(f"格式错误: {format_error_count / len(prompts):.2%}")
+    print(f"平均response长度: {avg_len:.2f}")
     return results
 
-def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_path: str):
+def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_path: str,
+                  max_tokens: int = 1024, top_p: float = 1.0, temperature: float = 1.0):
     """
     执行端到端的模型评估流程：加载数据、初始化模型、生成并保存结果。
 
@@ -137,8 +143,9 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
 
     llm = LLM(model = model_path, dtype="bfloat16", gpu_memory_utilization = 0.9, trust_remote_code = True)
 
-    eval_params = SamplingParams(temperature = 1.0, top_p = 1.0, max_tokens=1024, stop=["</answer>"],
+    eval_params = SamplingParams(temperature = temperature, top_p = top_p, max_tokens=max_tokens, repetition_penalty=1.05 ,stop=["</answer>"],
                                include_stop_str_in_output=True)
+    print(f"最大输出长度为{max_tokens}")
 
     eval_results = evaluate_vllm(vllm_model=llm, reward_fn=r1_zero_reward_fn, prompts=formatted_input, examples=examples, eval_sampling_params=eval_params)
 
@@ -168,6 +175,7 @@ def parse_arguments() -> Dict[str, Any]:
     parser.add_argument('--prompt_path', type=str, help='Path to the prompt template file.')
     parser.add_argument('--output_path', type=str, help='Path to save evaluation results.')
     parser.add_argument('--model_path', type=str, help='Path to the model checkpoint or HF ID.')
+    parser.add_argument('--max_tokens', type=int, help='Max token limitation for generate output')
 
     args = parser.parse_args()
 
@@ -221,7 +229,9 @@ if __name__ == '__main__':
         example_path=config['example_path'],
         prompt_path=config['prompt_path'],
         output_path=config['output_path'],
-        model_path=config['model_path']
+        model_path=config['model_path'],
+        max_tokens=config.get('max_tokens', 1024),
+        temperature=config.get('temperature', 1.0)
     )
 
 

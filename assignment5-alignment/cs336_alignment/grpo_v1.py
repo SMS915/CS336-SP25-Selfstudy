@@ -83,7 +83,7 @@ def evaluate_sft_model():
     format_error_count = 0
     ans_error_count = 0
     
-    print("📊 Scoring...")
+    print("Scoring...")
     for i, output in enumerate(outputs):
         generated_text = output.outputs[0].text
         example = examples[i]

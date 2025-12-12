@@ -83,15 +83,13 @@ def evaluate_sft_model():
     format_error_count = 0
     ans_error_count = 0
     
-    print("📊 Scoring...")
+    print("Scoring...")
     for i, output in enumerate(outputs):
         generated_text = output.outputs[0].text
         example = examples[i]
         truth = example["solution"]
         text_for_grading = generated_text.replace("</think><answer>", "</think> <answer>")
         # 评分
-        # 注意：generated_text 开头可能没有 <think> (因为它在 prompt 里)
-        # 但 grader 主要看 <answer>，通常没问题。
         metrics = r1_zero_reward_fn(text_for_grading, truth)
         if metrics.get("reward", 0.0) == 1.0:
             correct_count += 1

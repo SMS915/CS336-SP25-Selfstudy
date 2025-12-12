@@ -28,6 +28,7 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
         #     output_ids.append(eos_id)
         # else:
         #     pass
+        output_ids.append(tokenizer.eos_token_id)
         token_ids = prompt_ids + output_ids
         output_mask = [0] * len(prompt_ids) + [1] * len(output_ids)
         if len(token_ids) > max_length:
@@ -39,30 +40,38 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
 
     max_len = max(len(ids) for ids in batch_tokens)
     padded_input_ids = []
-    padded_masks = []
-    padded_labels = []
+    padded_response_masks = []
+    padded_attention_masks = []
     for input_ids, masks in zip(batch_tokens, batch_mask):
         pad_len = max_len - len(input_ids)
         padded_input = F.pad(input=input_ids, pad=(0, pad_len), value=tokenizer.pad_token_id) # 对最后一个dim,左填充0个，右填充pad_len个
-        padded_mask = F.pad(input=masks, pad=(0, pad_len), value=0)
+        pad_res_mask = F.pad(input=masks, pad=(0, pad_len), value=0)
+
+        attn_mask = torch.cat([torch.ones(len(input_ids), dtype=torch.long), torch.zeros(pad_len, dtype=torch.long)])
 
         padded_input_ids.append(padded_input)
-        padded_masks.append(padded_mask)
+        padded_response_masks.append(pad_res_mask)
+        padded_attention_masks.append(attn_mask)
+
 
     batch_input_ids = torch.stack(padded_input_ids)
-    batch_masks = torch.stack(padded_masks)
+    batch_response_masks = torch.stack(padded_response_masks)
+    batch_attention_masks = torch.stack(padded_attention_masks)
 
     shifted_inputs = batch_input_ids[:, :-1]
-    shifted_masks = batch_masks[:, 1:]
+    shifted_attn_masks = batch_attention_masks[:, :-1]
+
     labels = batch_input_ids[:, 1:]
+    shifted_response_masks = batch_response_masks[:, :-1]
 
     return {
         "input_ids": shifted_inputs,
+        "attention_mask": shifted_attn_masks,
         "labels": labels,
-        "response_mask": shifted_masks
+        "response_mask": shifted_response_masks
     }
 
-def get_response_log_probs(model: torch.nn.Module, input_ids:torch.Tensor, labels: torch.Tensor, return_token_entropy: bool = False) -> Dict[str, torch.Tensor]:
+def get_response_log_probs(model: torch.nn.Module, input_ids:torch.Tensor, attention_masks: torch.Tensor, labels: torch.Tensor, return_token_entropy: bool = False) -> Dict[str, torch.Tensor]:
     """
     Args:
         model: PreTrainedModel, HuggingFace model used for scoring (placed on the correct device and in inference mode if gradients should not be computed).
@@ -76,11 +85,11 @@ def get_response_log_probs(model: torch.nn.Module, input_ids:torch.Tensor, label
     Returns:
         dict[str, torch.Tensor].
         "log_probs" shape (batch_size, sequence_length), conditional log-probabilities
-        log pθ(xt | x<t).
+        log pθ(xt | x<t).compute_generation_entropy
         "token_entropy" optional, shape (batch_size, sequence_length), per-token entropy
         for each position (present only if return_token_entropy=True).
     """
-    outputs = model.forward(input_ids)
+    outputs = model.forward(input_ids=input_ids, attention_masks=attention_masks)
     logits = outputs.logits # shape(batch_size, seq_len, vocab_size)
 
     all_log_probs = F.log_softmax(logits.to(torch.float32), dim=-1)
@@ -116,6 +125,29 @@ def masked_normalize(tensor: torch.Tensor, mask: torch.Tensor, normalize_constan
 
     return summation / normalize_constant
 
+def compute_generation_entropy(scores: tuple | None) -> float:
+    """
+    从 generate 返回的 scores 中计算平均熵。
+    Args:
+        scores: tuple of torch.FloatTensor (one for each step)
+    """
+    if not scores:
+        return 0.0ww
+    
+    # 1. 堆叠并转精度: (seq_len, batch_size, vocab_size) -> (seq_len, vocab_size)
+    stacked_logits = torch.stack(scores).squeeze(1).to(torch.float32)
+    
+    # 2. 计算概率
+    # probs = F.softmax(stacked_logits, dim=-1)
+    log_probs = F.log_softmax(stacked_logits, dim=-1)
+    probs = torch.exp(log_probs) 
+    # 3. 计算熵: -sum(p * log_p)
+    token_entropies = -torch.sum(probs * log_probs, dim=-1)
+
+    token_entropies = torch.nan_to_num(token_entropies, nan=0.0)
+    
+    return torch.nan_to_num(token_entropies, nan=0.0).mean().item()
+
 def sft_microbatch_train_step(policy_log_probs: torch.Tensor, response_mask: torch.Tensor, gradient_accumulation_steps: int, normalize_constant: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """
     Execute a forward-and-backward pass on a microbatch.
@@ -131,9 +163,12 @@ def sft_microbatch_train_step(policy_log_probs: torch.Tensor, response_mask: tor
     """
     batch_size = policy_log_probs.shape[0]
     pertoken_loss = -policy_log_probs
-    masked_loss = response_mask * pertoken_loss
-    sum_loss = masked_normalize(masked_loss, response_mask, normalize_constant)
-    mean_loss = sum_loss / batch_size
+    # masked_loss = response_mask * pertoken_loss
+    total_valid_tokens = response_mask.sum().item()
+    if total_valid_tokens == 0:
+        total_valid_tokens = 1
+
+    mean_loss = masked_normalize(pertoken_loss, response_mask, normalize_constant=total_valid_tokens,dim=None)
     actual_loss = mean_loss / gradient_accumulation_steps
     actual_loss.backward()
     log = {
@@ -149,7 +184,7 @@ def log_generations(
     ground_truths: List[str],
     reward_fn: Callable[[str, str], Dict[str, float]],
     num_examples_to_log: int = 4,
-    max_new_tokens: int = 1024,  # 抽查时可以设短一点节省时间，或者保持 1024
+    max_new_tokens: int = 1024,  
 ) -> Dict[str, float]:
     """
     使用 PyTorch 原生 generate 进行抽样评估，计算奖励和熵。
@@ -164,7 +199,6 @@ def log_generations(
     device = model.device
     was_training = model.training
     model.eval()  # 切换到评估模式
-
     total_rewards = []
     format_rewards = []
     answer_rewards = []
@@ -202,8 +236,7 @@ def log_generations(
         # 解析生成的文本 (去掉 Prompt 部分)
         generated_ids = outputs.sequences[0][input_len:]
         generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
-        
-        # --- 计算指标 ---
+
         
         # A. 长度
         lengths.append(len(generated_ids))
@@ -211,23 +244,33 @@ def log_generations(
         # B. 熵 (Entropy)
         # outputs.scores 是一个 tuple，长度为 generated_len
         # 每个元素是 (batch_size=1, vocab_size) 的 logits
-        if outputs.scores:
-            # 堆叠为 (Seq, Vocab)
-            stacked_logits = torch.stack(outputs.scores).squeeze(1)
-            # 计算 Prob 和 LogProb
-            probs = torch.nn.functional.softmax(stacked_logits, dim=-1)
-            log_probs = torch.nn.functional.log_softmax(stacked_logits, dim=-1)
-            # 熵公式: -sum(p * log_p)
-            token_entropies = -(probs * log_probs).sum(dim=-1)
-            # 取平均
-            avg_entropy = token_entropies.mean().item()
-            entropies.append(avg_entropy)
-        else:
-            entropies.append(0.0)
+        # if outputs.scores:
+        #     # 堆叠为 (Seq, Vocab)
+        #     stacked_logits = torch.stack(outputs.scores).squeeze(1).to(torch.float32)
+        #     # 计算 Prob 和 LogProb
+        #     probs = torch.nn.functional.softmax(stacked_logits, dim=-1)
 
+        #     top_prob, _ = torch.max(probs, dim=-1)
+        #     if i == 0: # 只打印第一条样本的
+        #         print(f"DEBUG: Max prob of first token: {top_prob[0].item():.6f}")
+        #         if top_prob[0].item() > 0.9999:
+        #             print("DEBUG: Model is extremely confident (Determininstic)!")
+
+        #     log_probs = torch.nn.functional.log_softmax(stacked_logits , dim=-1)
+        #     # 熵公式: -sum(p * log_p)
+        #     token_entropies = -(probs * log_probs).sum(dim=-1)
+        #     token_entropies = torch.nan_to_num(token_entropies, nan=0.0)
+        #     # 取平均
+        #     avg_entropy = token_entropies.mean().item()
+        #     entropies.append(avg_entropy)
+        # else:
+        #     entropies.append(0.0)
+
+        entropy = compute_generation_entropy(outputs.scores)
+        entropies.append(entropy)
         # C. 奖励 (Reward)
         # 假设 reward_fn 接受 (output, truth)
-        metrics = reward_fn(generated_text, truth)
+        metrics = reward_fn(generated_text.replace("</think><answer>", "</think> <answer>"), truth)
         total_rewards.append(metrics.get("reward", 0.0))
         format_rewards.append(metrics.get("format_reward", 0.0))
         answer_rewards.append(metrics.get("answer_reward", 0.0))

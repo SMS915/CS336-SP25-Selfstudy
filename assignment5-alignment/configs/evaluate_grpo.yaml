@@ -5,9 +5,11 @@ example_path: "data/MATH/validation.jsonl"
 prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/baseline_result.jsonl"
+output_path: "results/grpo_result.jsonl"
 
 # 模型路径 (可以是本地路径或 HuggingFace ID)
-model_path: "models/Qwen2.5-Math-1.5B"
+model_path: "checkpoints/grpo_v2_normalize_adv/checkpoint-step-50"
 
 max_tokens: 4096
+
+temperature: 0.65

@@ -1,9 +1,9 @@
 # configs/grop_config.yaml
 
 model:
-  model_path: "checkpoints/grpo_v1/checkpoint-best"
-  best_reward: 0.6875
-  start_step: 150
+  model_path: "checkpoints/sft_v2/epoch1"
+  best_reward: 0
+  start_step: 0
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
@@ -12,38 +12,41 @@ data:
   train_path: "data/MATH/sft.jsonl"
   valid_path: "data/MATH/validation.jsonl"
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
-  max_seq_length: 3072 # 虽然代码里自动padding，但心里要有数
+  max_seq_length: 4096 # 虽然代码里自动padding，但心里要有数
   max_samples: 5000
 
 training:
-  output_dir: "checkpoints/grpo_v1"
+  output_dir: "checkpoints/grpo_v2_normalize_adv"
   n_grpo_steps: 500
   learning_rate: 2.0e-6
   advantage_eps: 1.0e-6
   rollout_batch_size: 64
   group_size: 8
   sampling_temperature: 1.0
+  repetition_penalty: 1.05
   sampling_min_tokens: 4
-  sampling_max_tokens: 3072
+  sampling_max_tokens: 4096
   epochs_per_rollout_batch: 1
-  train_batch_size: 256
+  # train_batch_size: 256
   save_steps: 50
 
   # 显存优化关键参数 (Target Total Batch Size = 128)
   # 4090 (24G) 建议: micro=4, accum=32 -> 4*32=128
   micro_batch_size: 1
-  gradient_accumulation_steps: 128
+  # gradient_accumulation_steps: 128
   gpu_memory_utilization: 0.25
   loss_type: "grpo_clip"
   clip_range: 0.2
   max_grad_norm: 1.0
 
+  normalize_by_std: True
+
 evaluation:
-  eval_every_steps: 5
+  eval_every_steps: 10
   num_examples_to_log: 4
   max_new_tokens: 4096
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "grpo-qwen-1.5b-baseline"
+  run_name: "grpo_normalize_advantage"
   entity: null
