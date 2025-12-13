@@ -221,7 +221,15 @@ def train(config_path: str):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     
-    wandb.init(project=config["wandb"]["project"], name=config["wandb"]["run_name"], config=config)
+    if config["model"]["wandb_id"] is None:
+        wandb.init(project=config["wandb"]["project"], name=config["wandb"]["run_name"], config=config)
+    else:
+        wandb.init(
+            project=config["wandb"]["project"],
+            id=config["model"]["wandb_id"],   # 指定 ID
+            resume="must",      # 强制续训，如果ID不存在会报错
+            config=config
+        )
     
     device = "cuda"
     output_dir = config["training"]["output_dir"]
@@ -261,6 +269,7 @@ def train(config_path: str):
     )
     # 开启梯度检查点省显存
     policy.gradient_checkpointing_enable()
+    policy.use_cache = False
     policy.train()
 
     
@@ -312,11 +321,12 @@ def train(config_path: str):
     
     start_step = config["model"]["start_step"]
     global_step = start_step if start_step is not None else 0
+    print(f"从第{global_step}步继续训练")
     pbar = tqdm(total=n_grpo_steps, desc="GRPO Steps")
-    
+    pbar.update(global_step)
     # 无限循环数据，直到达到 n_grpo_steps
     data_iter = iter(dataloader)
-    best_reward = config["model"]["best_reward"]
+    best_reward = config["model"]["best_reward"] if config.get("best_reward", 0.0) != 0.0 else 0.0
     while global_step < n_grpo_steps:
         # -----------------------------------------
         # Phase 1: Experience Collection (Rollout)
@@ -563,5 +573,7 @@ def train(config_path: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/grpo_config.yaml")
+    
+    parser.add_argument("--wandb_id", type=str, default=None, help="The ID of the wandb run to resume (e.g., a1b2c3d4)")
     args = parser.parse_args()
     train(args.config)

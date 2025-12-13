@@ -1,18 +1,19 @@
 # configs/grop_config.yaml
 
 model:
-  model_path: "checkpoints/sft_v2/epoch1"
-  best_reward: 0
-  start_step: 0
+  model_path: "checkpoints/grpo_v2_normalize_adv/checkpoint-step-50"
+  best_reward: 0.15625
+  start_step: 51
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
+  wandb_id: "d3tr08cy"
 
 data:
   train_path: "data/MATH/sft.jsonl"
   valid_path: "data/MATH/validation.jsonl"
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
-  max_seq_length: 4096 # 虽然代码里自动padding，但心里要有数
+  max_seq_length: 4096
   max_samples: 5000
 
 training:
@@ -30,8 +31,6 @@ training:
   # train_batch_size: 256
   save_steps: 50
 
-  # 显存优化关键参数 (Target Total Batch Size = 128)
-  # 4090 (24G) 建议: micro=4, accum=32 -> 4*32=128
   micro_batch_size: 1
   # gradient_accumulation_steps: 128
   gpu_memory_utilization: 0.25

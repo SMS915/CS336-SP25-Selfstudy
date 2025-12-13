@@ -8,6 +8,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerBase
 from cs336_alignment.sft import tokenize_prompt_and_output, get_response_log_probs, masked_normalize, sft_microbatch_train_step
+from cs336_alignment.train_sft import SFTDataset
 from cs336_alignment.utils import pertoken_entropy
 from cs336_alignment.grpo import compute_group_normalized_rewards, compute_grpo_clip_loss, compute_naive_policy_gradient_loss, compute_policy_gradient_loss, grpo_microbatch_train_step, masked_mean
 
@@ -34,7 +35,9 @@ def run_tokenize_prompt_and_output(
             "response_mask": torch.Tensor of shape (batch_size, max(prompt_and_output_lens) - 1):
                 a mask on the response tokens in `labels`.
     """
-    return tokenize_prompt_and_output(prompt_strs, output_strs, tokenizer)
+    mapping = tokenize_prompt_and_output(prompt_strs, output_strs, tokenizer)
+    del mapping["attention_mask"]
+    return mapping
 
 
 def run_compute_group_normalized_rewards(
@@ -313,7 +316,8 @@ def get_packed_sft_dataset(
         "input_ids" contains the token IDs for the language modeling inputs, and "labels" contains
         the token IDs for the language modeling labels.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return SFTDataset(dataset_path, )
 
 
 def run_iterate_batches(
