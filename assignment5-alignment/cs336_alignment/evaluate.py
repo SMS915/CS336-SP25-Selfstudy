@@ -53,6 +53,7 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
             返回一个字典，需包含以下键以进行分类统计：
             - "reward": float, 1.0 表示完全正确。
             - "format_reward": float, 1.0 表示格式正确（但答案可能错误）。
+            - "answer_reward": float, 1.0 表示答案正确（实际场景下和reward没区别）
         prompts (List[str]): 输入给模型的 prompt 列表。
         examples (List[Dict]): 包含问题和标准答案的样本列表，需与 prompts 索引一一对应。
             每个字典必须包含 "solution" (标准答案) 和 "problem" (原始问题) 字段。
@@ -77,7 +78,7 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     correct_count = 0      # 完全正确
     ans_error_count = 0    # 格式正确但答案错误
     format_error_count = 0 # 格式错误
-    avg_len = 0
+    avg_len = 0            # 记录回复的字符长度
 
     for i,(output, prompt) in enumerate(zip(outputs, prompts)):
         generated_text = output.outputs[0].text
@@ -106,7 +107,7 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     print(f"完全正确: {accuracy: .2%}")
     print(f"格式正确，答案错误: {ans_error_count / len(prompts):.2%}")
     print(f"格式错误: {format_error_count / len(prompts):.2%}")
-    print(f"平均response长度: {avg_len:.2f}")
+    print(f"平均response字符长度: {avg_len:.2f}")
     return results
 
 def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_path: str,
@@ -133,7 +134,6 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
         根据官方handout, 函数内部使用了硬编码的模型配置：
         - dtype="bfloat16"
         - gpu_memory_utilization=0.9
-        - temperature=1.0, top_p=1.0
         - stop_tokens=["</answer>"]
     """
     examples = load_data(example_path)

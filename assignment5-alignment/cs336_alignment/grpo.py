@@ -10,8 +10,27 @@ def compute_group_normalized_rewards(reward_fn: Callable,
                                      group_size: int, 
                                      advantage_eps: float,
                                      normalize_by_std: bool) -> tuple[torch.Tensor, torch.Tensor, Dict[str, float]]:
-    
+    """
+    计算基于组归一化（Group Normalization）的奖励优势（Advantage）。
 
+    该函数实现了 GRPO (Group Relative Policy Optimization) 的核心逻辑：
+    对同一提示（Prompt）生成的多个回复（Group）进行打分，并计算每个回复相对于组内均值的优势。
+
+    Args:
+        reward_fn (Callable): 奖励函数，接受 (response, ground_truth) 并返回包含 'reward' 键的字典。
+        rollout_responses (List[str]): 模型生成的回复列表，总长度应为 batch_size * group_size。
+        repeated_ground_truths (List[str]): 对应的标准答案列表，长度与 rollout_responses 一致。
+        group_size (int): 每个组包含的样本数量 (GRPO 中的 G)。
+        advantage_eps (float): 防止除以零的小常数。
+        normalize_by_std (bool): 是否使用标准差进行归一化。如果不使用，仅减去均值(Dr.GRPO)。
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor, Dict[str, float]]:
+            - advantage (torch.Tensor): 展平后的优势张量，形状为 (total_samples,)。
+            - raw_tensor (torch.Tensor): 展平后的原始奖励张量，形状为 (total_samples,)。
+            - meta_data (Dict[str, float]): 包含最大、最小和平均奖励的统计信息。
+    """
+    
     raw_rewards_list = [
         reward_fn(response, truth).get('reward', 0.0)
         for response, truth in zip(rollout_responses, repeated_ground_truths)

@@ -28,7 +28,7 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
         #     output_ids.append(eos_id)
         # else:
         #     pass
-        output_ids.append(tokenizer.eos_token_id)
+        # output_ids.append(tokenizer.eos_token_id)
         token_ids = prompt_ids + output_ids
         output_mask = [0] * len(prompt_ids) + [1] * len(output_ids)
         if len(token_ids) > max_length:
@@ -62,7 +62,7 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
     shifted_attn_masks = batch_attention_masks[:, :-1]
 
     labels = batch_input_ids[:, 1:]
-    shifted_response_masks = batch_response_masks[:, :-1]
+    shifted_response_masks = batch_response_masks[:, 1:]
 
     return {
         "input_ids": shifted_inputs,
@@ -89,7 +89,7 @@ def get_response_log_probs(model: torch.nn.Module, input_ids:torch.Tensor, atten
         "token_entropy" optional, shape (batch_size, sequence_length), per-token entropy
         for each position (present only if return_token_entropy=True).
     """
-    outputs = model.forward(input_ids=input_ids, attention_masks=attention_masks)
+    outputs = model.forward(input_ids=input_ids, attention_mask=attention_masks)
     logits = outputs.logits # shape(batch_size, seq_len, vocab_size)
 
     all_log_probs = F.log_softmax(logits.to(torch.float32), dim=-1)
@@ -132,7 +132,7 @@ def compute_generation_entropy(scores: tuple | None) -> float:
         scores: tuple of torch.FloatTensor (one for each step)
     """
     if not scores:
-        return 0.0ww
+        return 0.0
     
     # 1. 堆叠并转精度: (seq_len, batch_size, vocab_size) -> (seq_len, vocab_size)
     stacked_logits = torch.stack(scores).squeeze(1).to(torch.float32)
@@ -164,15 +164,18 @@ def sft_microbatch_train_step(policy_log_probs: torch.Tensor, response_mask: tor
     batch_size = policy_log_probs.shape[0]
     pertoken_loss = -policy_log_probs
     # masked_loss = response_mask * pertoken_loss
-    total_valid_tokens = response_mask.sum().item()
-    if total_valid_tokens == 0:
-        total_valid_tokens = 1
 
-    mean_loss = masked_normalize(pertoken_loss, response_mask, normalize_constant=total_valid_tokens,dim=None)
-    actual_loss = mean_loss / gradient_accumulation_steps
+    loss_sum  = masked_normalize(pertoken_loss, response_mask, normalize_constant=normalize_constant,dim=None)
+    actual_loss = loss_sum / gradient_accumulation_steps / batch_size
     actual_loss.backward()
+
+    valid_tokens_count = response_mask.sum().detach()
+    if valid_tokens_count == 0:
+        valid_tokens_count = 1
+
+    loss_for_log = loss_sum.detach() / valid_tokens_count
     log = {
-        "loss": mean_loss.detach()
+        "loss": loss_for_log
     }
 
     return actual_loss, log
