@@ -179,7 +179,7 @@
 采用官方同样的参数配置
 
 - **模型架构**: LLaMA-like Decoder-Only语言模型 (SwiGLU, RoPE, RMSNorm)。
-  - $n{\_}layers$: 12, $n{\_}heads$: 12, $ d{\_}model$: 768, $d{\_}ff$: 2048, $context{\_}length$: 512, $num{\_}params$: ~122M。
+  - n_layers: 12, n_heads: 12, d_model: 768, d_ff: 2048, context_length: 512, num_params: ~122M。
 - **训练配置**: 11K iterations, 1 GPU(5090), batch size 128。
 - **基线对比 (Baseline)**: OpenWebText (代表人工筛选的高质量Reddit外链数据)。
 - **实验组(Ours)**: 基于 Common Crawl 构建的严选数据集 (Self-Dataset)。
