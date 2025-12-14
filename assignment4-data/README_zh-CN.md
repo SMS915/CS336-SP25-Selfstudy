@@ -170,13 +170,52 @@
 2. **LSH 参数敏感性**: 在 Bands=20 的设置下，产生了 1.9 亿个候选对（平均每文档匹配 138 个候选），导致候选筛选阶段内存飙升至 53GB。这表明在文档已经被行去重高度清洗的情况下，宽松的 LSH 参数会引入大量无效的低相似度候选计算，需在后续优化中调整 Bands 参数以平衡计算开销。
 3. **系统瓶颈**: 当前配置下，内存峰值出现在 LSH 候选生成阶段，是限制单节点处理更大规模数据的主要瓶颈。
 
-现代Transformer 测试：
+
+
+### 4.下游模型性能评估
+
+#### **4.1 实验设置**
+
+采用官方同样的参数配置
+
+- **模型架构**: LLaMA-like Decoder-Only语言模型 (SwiGLU, RoPE, RMSNorm)。
+  - $n\_layers$: 12, $n\_heads$: 12, $ d\_model$: 768, $d\_ff$: 2048, $context\_length$: 512, $num\_params$: ~122M。
+- **训练配置**: 11K iterations, 1 GPU(5090), batch size 128。
+- **基线对比 (Baseline)**: OpenWebText (代表人工筛选的高质量Reddit外链数据)。
+- **实验组(Ours)**: 基于 Common Crawl 构建的严选数据集 (Self-Dataset)。
+- **评估指标**: Validation Loss / Perplexity on **C4(en) validation set**。
 
 
 
+#### 4.2 训练动态对比
+
+![dataset comparison loss curve](/asset/dataset comparison loss curve.png)
+
+如图所示，在保持模型架构（Modernized GPT-2）与超参数完全一致的前提下，对比了自建数据集（Self-Dataset, 青色曲线）与 OpenWebText 基线（OWT, 黄色曲线）在前 11k 步的训练动态。实验呈现出以下显著的统计学现象：
+
+1. **更优的域外泛化能力 (Superior Out-of-Distribution Generalization)**：
+   在 C4 验证集（Validation Set）上，自建数据集的 Loss 曲线（青色虚线）从训练早期（约 2k 步起）便持续低于 OWT 基线（黄色虚线）。尽管两者都未完全收敛，但这种持续性的性能优势（Performance Gap）表明，经过自动化流水线清洗的数据在分布上更接近高质量通用语料，具有更强的泛化能力。
+2. **训练集与验证集的“剪刀差”现象 (Loss Inversion Phenomenon)**：
+   值得注意的是，可以观察到一个反直觉但极具价值的现象：**自建数据集的训练 Loss（实线）始终高于 OWT，但验证 Loss（虚线）却始终低于 OWT。**
+   - **高 Training Loss** 表明训练数据“更难学”。这归功于 MinHash 和精确行去重策略彻底移除了简单的重复模式（Boilerplate）和冗余片段，迫使模型无法通过“死记硬背”来降低 Loss，而必须学习深层的语言规律。
+   - **低 Validation Loss** 表明模型“学得更对”。这证明了模型在“啃硬骨头”的过程中学到的特征具有更强的迁移能力。
+3. **极高的数据训练效率 (Data Efficiency)**：
+   性能差距在训练极早期（前 10% 进度，约 2,000 steps）即已确立并逐渐扩大。这意味着自建数据集具有更高的**信息密度（Information Density）**。模型利用更少的计算资源（Compute Budget）和 Token 消耗，即可达到超越人工筛选数据集（OWT）的性能水平。
+
+<p align='center'>表：自建数据集 (Self) 与 OpenWebText (OWT) 的训练动态对比</p>
+
+| 训练步数 (Steps)   | **Training Loss**  |                  | **Validation Loss (C4)** |                      | Perplexity (C4)    |                      |
+| ------------------ | ------------------ | ---------------- | ------------------------ | -------------------- | ------------------ | -------------------- |
+|                    | **OWT** (Baseline) | **Self** (Ours)  | **OWT** (Baseline)       | **Self** (Ours)      | **OWT** (Baseline) | **Self** (Ours)      |
+| **2,000** (Early)  | 3.94               | 4.15             | 4.62                     | **4.40**             | 101.6              | 82.2                 |
+| **5,000** (Mid)    | 3.68               | 3.83             | 4.29                     | **4.10**             | 79.7               | 60.7                 |
+| **8,000**          | 3.52               | 3.63             | 4.26                     | **4.00**             | 71.0               | 54.7                 |
+| **11,000** (Final) | 3.47               | 3.58             | 4.23                     | **3.94**             | 68.5               | 51.5                 |
+| **`Δ` (Final)**    | -                  | *+0.11 (Higher)* | -                        | ***-0.10 (Better)*** |                    | ***-17.0 (Better)*** |
 
 
-## 4. 项目结构
+
+## 5. 项目结构
 
 本项目的核心逻辑被统一组织在 `cs336_data` 这个Python包中，实现了可复用“库”代码与可执行“脚本”的分离。
 
@@ -217,6 +256,10 @@
 │
 ├── classifier_config.yaml                     # fasttext分词器训练YAML配置文件
 │
+├── configs/
+│   ├── test_pipeline.yaml                     # 用于测试流水线是否能完整工作的小批量配置
+│   └── 5000_scale_config.yaml                 # 5000 wet 文件样本规模配置
+│   
 ├── tests/
 │   ├── adapters.py                            # 官方测试接口适配器
 │   └── ...                                    # 官方测试用例
