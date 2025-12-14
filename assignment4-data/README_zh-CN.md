@@ -53,7 +53,7 @@
    - 使用  fastwarc 和 xxhash 库加速基础IO与哈希计算，确保“廉价过滤”阶段的高吞吐。
 2. **全局精确行去重 (Exact Line Deduplication)**:
    - **目标**: 移除跨文档出现的“样板文字”（Boilerplate），如导航栏、页脚版权信息、通用广告语等。
-   - **策略**: 采用两阶段算法。第一阶段并行扫描所有文档，构建全局行频计数器；第二阶段重写文档，仅保留全局出现频率为 1 的行。这意味着任何重复出现的句子都会被剔除，从而大幅提升语料的独特性密度。
+   - **策略**: 采用两阶段算法。第一阶段并行扫描所有文档，通过哈希构建全局行频计数器；第二阶段重写文档，仅保留全局出现频率为 1 的行。这意味着任何重复出现的句子都会被剔除，从而大幅提升语料的独特性密度。
 3. **模糊去重 (Fuzzy Deduplication - MinHash + LSH)**:
    - 针对内容高度相似但非完全一致的文档（如带有不同时间戳的新闻转载）。
    - **签名生成**: 并行计算文档的 n-gram MinHash 签名。
@@ -179,23 +179,23 @@
 采用官方同样的参数配置
 
 - **模型架构**: LLaMA-like Decoder-Only语言模型 (SwiGLU, RoPE, RMSNorm)。
-  - $n\_layers$: 12, $n\_heads$: 12, $ d\_model$: 768, $d\_ff$: 2048, $context\_length$: 512, $num\_params$: ~122M。
+  - $n{\_}layers$: 12, $n{\_}heads$: 12, $ d{\_}model$: 768, $d{\_}ff$: 2048, $context{\_}length$: 512, $num{\_}params$: ~122M。
 - **训练配置**: 11K iterations, 1 GPU(5090), batch size 128。
 - **基线对比 (Baseline)**: OpenWebText (代表人工筛选的高质量Reddit外链数据)。
 - **实验组(Ours)**: 基于 Common Crawl 构建的严选数据集 (Self-Dataset)。
-- **评估指标**: Validation Loss / Perplexity on **C4(en) validation set**。
+- **评估指标**: Validation Loss / Perplexity on **C4 (en) validation set**。
 
 
 
 #### 4.2 训练动态对比
 
-![dataset comparison loss curve](/asset/dataset comparison loss curve.png)
+![dataset comparison loss curve](asset/loss_curve.png)
 
-如图所示，在保持模型架构（Modernized GPT-2）与超参数完全一致的前提下，对比了自建数据集（Self-Dataset, 青色曲线）与 OpenWebText 基线（OWT, 黄色曲线）在前 11k 步的训练动态。实验呈现出以下显著的统计学现象：
+如图所示，在保持模型架构（LLaMA-like）与超参数完全一致的前提下，对比了自建数据集（Self-Dataset, 青色曲线）与 OpenWebText 基线（OWT, 黄色曲线）在前 11k 步的训练动态。实验呈现出以下显著的统计学现象：
 
 1. **更优的域外泛化能力 (Superior Out-of-Distribution Generalization)**：
    在 C4 验证集（Validation Set）上，自建数据集的 Loss 曲线（青色虚线）从训练早期（约 2k 步起）便持续低于 OWT 基线（黄色虚线）。尽管两者都未完全收敛，但这种持续性的性能优势（Performance Gap）表明，经过自动化流水线清洗的数据在分布上更接近高质量通用语料，具有更强的泛化能力。
-2. **训练集与验证集的“剪刀差”现象 (Loss Inversion Phenomenon)**：
+2. **训练集与验证集的“剪刀差”现象**：
    值得注意的是，可以观察到一个反直觉但极具价值的现象：**自建数据集的训练 Loss（实线）始终高于 OWT，但验证 Loss（虚线）却始终低于 OWT。**
    - **高 Training Loss** 表明训练数据“更难学”。这归功于 MinHash 和精确行去重策略彻底移除了简单的重复模式（Boilerplate）和冗余片段，迫使模型无法通过“死记硬背”来降低 Loss，而必须学习深层的语言规律。
    - **低 Validation Loss** 表明模型“学得更对”。这证明了模型在“啃硬骨头”的过程中学到的特征具有更强的迁移能力。
@@ -217,7 +217,7 @@
 
 ## 5. 项目结构
 
-本项目的核心逻辑被统一组织在 `cs336_data` 这个Python包中，实现了可复用“库”代码与可执行“脚本”的分离。
+本项目的核心逻辑被统一组织在 `cs336_data` 这个Python包中，实现了可复用库代码与可执行脚本的分离。
 
 ```
 ·
@@ -305,8 +305,6 @@
 
 3. **在 `tmux` 会话中执行下载**:
 
-   
-
    在弹出的新`tmux`窗口中，运行下载连接的bash脚本
 
    ```bash
@@ -314,7 +312,7 @@
    scripts/download_wiki_pages.sh
    # <ctrl + b> + d 退出会话
    ```
-
+   
    
 
    如果需要重新接入会话，运行以下命令
@@ -323,7 +321,7 @@
    # 重新接入会话
    tmux attach -t download_wiki_pages
    ```
-
+   
    
 
    下载完成后，杀死会话
@@ -395,6 +393,8 @@ python -m cs336_data.pipeline --config configs/{config_name}.yaml
     uv pip install xxhash  # 精确行去除使用了xxhash中的哈希函数，以最大化效率
     
     uv pip install datasets # 用于下载c4验证集
+    
+    sudo apt-get install tmux # 安装tmux用于长时间会话
     ```
     
     
