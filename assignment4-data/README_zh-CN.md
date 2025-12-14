@@ -1,3 +1,5 @@
+[![English](https://img.shields.io/badge/lang-English-blue.svg)](README.md) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![License](https://img.shields.io/badge/license-MIT-green) ![Course](https://img.shields.io/badge/Course-Stanford_CS336-cardinal)
+
 # CS336 作业4：语言模型数据过滤流水线
 
 
@@ -340,8 +342,8 @@
 1.  **首次抽样**:
     ```bash
     # 从 wet.paths.gz 清单中抽样20个WET文件链接，并生成下载脚本 download_cc_batch_1.sh
-    # 默认只下载WET文件
-    python sample_cc_path.py data/cc_path/wet.paths.gz -n 100 --output-script scripts/download_cc_batch_1.sh
+    # 默认只下载WET文件, 如要下载对应的warc.gz文件，在后面添上 "--download_warc"
+    python sample_cc_path.py data/cc_path/wet.paths.gz -n 100 --output-script scripts/download_cc_batch_1.sh # --download_warc
     ```
 2.  **后续增量抽样**:
     如果需要更多不重复的样本，可以使用 `--skip` 参数。
