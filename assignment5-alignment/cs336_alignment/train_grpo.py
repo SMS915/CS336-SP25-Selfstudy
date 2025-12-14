@@ -19,7 +19,6 @@ from cs336_alignment.sft import (
     log_generations,
     tokenize_prompt_and_output,
     get_response_log_probs,
-    masked_normalize
 )
 from cs336_alignment.grpo import (
     compute_group_normalized_rewards,
@@ -32,13 +31,13 @@ def robust_reward_fn(response: str, ground_truth: str) -> dict[str, float]:
     包装官方的 reward_fn，增加对格式的鲁棒性处理。
     主要修复 </think><answer> 之间缺失空格的问题。
     """
-    # 1. 修复空格问题
+    # 修复空格问题
     cleaned_response = response.replace("</think><answer>", "</think> <answer>")
     
-    # 2. (可选) 修复可能存在的换行问题
+    # 修复可能存在的换行问题
     cleaned_response = cleaned_response.replace("</think>\n<answer>", "</think> <answer>")
     
-    # 3. 调用官方评分函数
+    # 调用官方评分函数
     return r1_zero_reward_fn(cleaned_response, ground_truth)
 
 # ==========================================
@@ -104,69 +103,6 @@ def sync_policy_to_vllm(policy_model: torch.nn.Module, vllm_instance: LLM):
             else:
                 pass
 
-def _vllm_worker_load_from_file(worker, file_path: str):
-    import torch
-    import os
-    
-    if not os.path.exists(file_path):
-        return False
-
-    if hasattr(worker, "model_runner"):
-        model = worker.model_runner.model
-        
-        # 1. 从磁盘加载 (CPU)
-        # map_location="cpu" 防止 worker 显存不足
-        try:
-            state_dict = torch.load(file_path, map_location="cpu")
-        except Exception as e:
-            print(f"[Worker] Load failed: {e}")
-            return False
-            
-        # 2. 转换为 load_weights 需要的格式 [(name, tensor)]
-        gpu_weights = []
-        for name, tensor in state_dict.items():
-            # 转换为 GPU Tensor
-            gpu_weights.append((name, tensor.to("cuda")))
-            
-        # 3. 执行加载
-        model.load_weights(gpu_weights)
-        return True
-        
-    return False
-
-def _vllm_worker_update_weights(worker, weights_dict):
-    import torch
-    
-    if hasattr(worker, "model_runner"):
-        model = worker.model_runner.model
-        
-        gpu_weights = []
-        # 我们现在传的是字典 {name: list_of_floats}
-        # 这样比 list of tuples 更不容易错位
-        for name, data_list in weights_dict.items():
-            # 安全检查
-            if not isinstance(data_list, (list, tuple)):
-                # 如果万一还是传错了，跳过以防崩坏
-                continue
-                
-            # 核心：从纯数字列表重建 Tensor，并直接放到 GPU
-            # dtype=model.dtype 确保精度一致 (如 bfloat16)
-            # 如果不知道 dtype，可以先默认，或者不指定
-            try:
-                param_tensor = torch.tensor(data_list, device="cuda")
-                # 如果维度对不上（比如 scalars），可能需要 reshape，但在 load_weights 里通常会自动处理
-                gpu_weights.append((name, param_tensor))
-            except Exception as e:
-                # 打印错误但不崩溃
-                print(f"Error reconstructing tensor for {name}: {e}")
-                continue
-        
-        # 执行加载
-        if gpu_weights:
-            model.load_weights(gpu_weights)
-        return True
-    return False
-
 # ==========================================
 # 2. 数据集 (只包含 Prompt)
 # ==========================================
@@ -217,7 +153,6 @@ class GRPODataset(Dataset):
 # 3. 训练主循环
 # ==========================================
 def train(config_path: str):
-    # --- Load Config ---
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     
@@ -235,7 +170,7 @@ def train(config_path: str):
     output_dir = config["training"]["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
 
-    # --- Load Tokenizer & Prompt ---
+    # 加载分词器与prompt
     tokenizer = AutoTokenizer.from_pretrained(config["model"]["model_path"])
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -259,7 +194,7 @@ def train(config_path: str):
 
     val_truths = [ex["solution"] for ex in valid_examples]
 
-    # --- 1. Init Policy Model (PyTorch) ---
+    # 初始化策略模型(PyTorch)
     print("加载策略模型 (Training)...")
     policy = AutoModelForCausalLM.from_pretrained(
         config["model"]["model_path"],
@@ -275,10 +210,9 @@ def train(config_path: str):
     
     optimizer = AdamW(policy.parameters(), lr=float(config["training"]["learning_rate"]))
 
-    # --- 2. Init vLLM (Generation) ---
-    # 显存分配关键点：如果是 32G 显存，给 vLLM 40% (12.8G)，给 PyTorch 留 60%
+    # 初始化vllm
     print("加载vllm (Generation)...")
-    gpu_util = config["training"].get("gpu_memory_utilization", 0.4) # 默认改小
+    gpu_util = config["training"].get("gpu_memory_utilization", 0.4) 
     
     llm = LLM(
         model=config["model"]["model_path"],
@@ -326,7 +260,8 @@ def train(config_path: str):
     pbar.update(global_step)
     # 无限循环数据，直到达到 n_grpo_steps
     data_iter = iter(dataloader)
-    best_reward = config["model"]["best_reward"] if config.get("best_reward", 0.0) != 0.0 else 0.0
+    best_reward = config["model"]["best_reward"] if config["model"].get("best_reward", 0.0) != 0.0 else 0.0
+    print(f"当前最佳reward为{best_reward}")
     while global_step < n_grpo_steps:
         # -----------------------------------------
         # Phase 1: Experience Collection (Rollout)
@@ -339,23 +274,11 @@ def train(config_path: str):
             
         prompts = batch["prompt"]
         ground_truths = batch["ground_truth"] # List[str]
-        
-        # 1.1 同步权重: Policy -> vLLM
-        # 这一步在单卡上必须做，确保 vLLM 用的是最新的参数生成
-        # sync_policy_to_vllm_inplace(policy, llm)
-        # weights_to_send = {}
-        # for name, param in policy.named_parameters():
-        #     # 只发送需要梯度的参数（减少数据量，防止 RPC 超时）
-        #     if param.requires_grad:
-        #         # .cpu().tolist() 是最慢但最稳的方法，生成的全是 float
-        #         weights_to_send[name] = param.data.cpu().tolist()
-        sync_policy_to_vllm(policy, llm)
 
-        # (可选) 打印确认
-        # print(f"Synced weights via file: {temp_weight_path}")
+        # 同步权重到vllm
+        sync_policy_to_vllm(policy, llm)
         
-        # 1.2 生成 (vLLM)
-        # outputs 是 list[RequestOutput]，每个包含 G 个 output
+        # 生成 (vLLM)
         generation_outputs = llm.generate(prompts, sampling_params, use_tqdm=False)
         
         # 1.3 整理数据
@@ -372,8 +295,7 @@ def train(config_path: str):
             all_responses.extend(q_responses)
             all_ground_truths.extend(q_truths)
             
-        # 1.4 计算奖励 (Reward & Advantage)
-        # 这一步在 CPU 上做
+        # 计算奖励 (Reward & Advantage)
         advantages, raw_rewards, reward_meta = compute_group_normalized_rewards(
             reward_fn=robust_reward_fn,
             rollout_responses=all_responses,
@@ -391,8 +313,7 @@ def train(config_path: str):
         lengths = []
         
         for r, gt in zip(all_responses, all_ground_truths):
-            # 重新调一次 reward_fn 仅仅为了记录 log (开销很小，字符串操作)
-            # 或者修改 compute_group_norm 让它返回 dict list
+            # 重新调一次 reward_fn, 为了记录 log
             metrics = robust_reward_fn(r, gt)
             format_scores.append(metrics["format_reward"])
             answer_scores.append(metrics["answer_reward"])
@@ -417,7 +338,7 @@ def train(config_path: str):
         # 使用 no_grad
         inference_batch_size = 4 
         old_log_probs_list = []
-        
+        token_entropy_list = []
         policy.eval() # 切换到 Eval 模式更安全
         with torch.no_grad():
             for i in range(0, len(input_ids), inference_batch_size):
@@ -425,18 +346,31 @@ def train(config_path: str):
                 batch_labels = labels[i : i + inference_batch_size]
                 batch_mask = attention_mask[i: i + inference_batch_size]
                 
-                log_probs_dict = get_response_log_probs(policy, batch_input_ids, batch_mask, batch_labels)
+                log_probs_dict = get_response_log_probs(policy, 
+                                                        batch_input_ids, 
+                                                        batch_mask, 
+                                                        batch_labels, 
+                                                        return_token_entropy=True)
+                
+                if "token_entropy" in log_probs_dict:
+                    token_entropy_list.append(log_probs_dict["token_entropy"].detach())
                 old_log_probs_list.append(log_probs_dict["log_probs"].detach())
                 
         old_log_probs = torch.cat(old_log_probs_list, dim=0)
         policy.train() # 恢复 Train 模式
 
+        if token_entropy_list:
+            all_token_entropies = torch.cat(token_entropy_list, dim=0)
+            response_entropies = all_token_entropies[response_mask.bool()]
+            mean_token_entropy = response_entropies.mean().item()
+        else:
+            mean_token_entropy = 0.0
+
         # -----------------------------------------
         # Phase 2: Optimization (Training)
         # -----------------------------------------
-        # 创建一个临时的 Dataset/Loader 来进行 micro-batch 训练
-        # 数据总量 = rollout_batch_size (例如 256)
         train_dataset_len = len(input_ids)
+        # 打乱
         indices = torch.randperm(train_dataset_len)
         
         policy.train()
@@ -470,11 +404,6 @@ def train(config_path: str):
                 mb_policy_log_probs = mb_log_probs_dict["log_probs"]
                 
                 # GRPO Backward
-                # 注意：grad_accum_steps 这里需要怎么算？
-                # 我们希望每一轮 Rollout 更新一次参数。
-                # 所以 accum_steps 应该是 (rollout_batch_size / micro_batch_size)
-                
-                
                 loss, step_metrics = grpo_microbatch_train_step(
                     policy_log_probs=mb_policy_log_probs,
                     response_mask=mb_mask,
@@ -489,7 +418,7 @@ def train(config_path: str):
                 current_epoch_clip += step_metrics["clip_ratio"].item() / actual_accum_steps
                 current_epoch_kl += step_metrics["approx_kl"].item() / actual_accum_steps
                 
-                step_loss += loss.item() / actual_accum_steps
+                step_loss += loss.item() / micro_batch_size
 
             # End of Micro-batches -> Update
             grad_norm = torch.nn.utils.clip_grad_norm_(policy.parameters(), config["training"]["max_grad_norm"])
@@ -516,13 +445,16 @@ def train(config_path: str):
             "train/lr": optimizer.param_groups[0]['lr'],
             "train/grad_norm": grad_norm.item(), # 之前代码里算的
             
-            # 3. 行为特征 (观察 R1 涌现的关键!)
+            # 3. 行为特征
             "train/completion_len_mean": np.mean(lengths),
             "train/completion_len_max": np.max(lengths),
+
+            "train/mean_token_entropy": mean_token_entropy,
             
             # Step
             "train/global_step": global_step
         })
+        
         pbar.set_postfix(reward=reward_meta["mean_reward"])
 
         # --- Evaluation & Saving ---

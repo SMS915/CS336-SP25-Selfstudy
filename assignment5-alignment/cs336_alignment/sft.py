@@ -10,57 +10,83 @@ from transformers.generation.utils import GenerateDecoderOnlyOutput
 
 
 def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], tokenizer: PreTrainedTokenizerBase, max_length: int = 1024):
+    """
+    对提示词（Prompt）和输出（Output）进行分词、拼接、填充，并生成用于训练的掩码。
+
+    该函数处理数据预处理的核心逻辑，包括：
+    1. 清洗特定标签（如 <think>）。
+    2. 将文本转换为 Token ID。
+    3. 构建 Input IDs 和 Attention Mask。
+    4. 构建 Response Mask（仅在计算 Loss 时考虑回复部分）。
+    5. 执行 Padding（右填充）并进行移位（Shift）以适应因果语言模型训练。
+
+    Args:
+        prompt_strs (List[str]): 提示词字符串列表。
+        output_strs (List[str]): 对应的回复/输出字符串列表。
+        tokenizer (PreTrainedTokenizerBase): HuggingFace 分词器。
+        max_length (int): 序列最大长度，超过此长度将被截断。
+
+    Returns:
+        Dict[str, torch.Tensor]: 包含模型输入和标签的字典：
+            - "input_ids": (batch, seq_len) 模型输入 ID。
+            - "attention_mask": (batch, seq_len) 注意力掩码。
+            - "labels": (batch, seq_len) 训练标签（input_ids 向左移一位）。
+            - "response_mask": (batch, seq_len) 回复掩码（仅 Output 部分为 1，用于 Loss 计算）。
+    """
     batch_tokens = []
     batch_mask = []
     for prompt, output in zip(prompt_strs, output_strs):
         prompt_c = prompt.strip()
         output_c = output.strip()
-
+        # 处理 <think> 标签重复的问题
         clean_output = output
         if prompt_c.endswith('<think>') and output_c.startswith('<think>'):
             clean_output = output_c[7:].lstrip()
 
+        # 分词，不自动添加特殊 token
         prompt_ids = tokenizer.encode(prompt, add_special_tokens = False)
         output_ids = tokenizer.encode(clean_output, add_special_tokens = False)
-        # eos_id = tokenizer.eos_token_id
-        # assert isinstance(eos_id, int)
-        # if tokenizer.eos_token_id is not None:
-        #     output_ids.append(eos_id)
-        # else:
-        #     pass
-        # output_ids.append(tokenizer.eos_token_id)
+
         token_ids = prompt_ids + output_ids
+        # 构建掩码: Prompt 部分为 0，Output 部分为 1
         output_mask = [0] * len(prompt_ids) + [1] * len(output_ids)
+        # 截断处理
         if len(token_ids) > max_length:
             token_ids = token_ids[:max_length]
             output_mask = output_mask[:max_length]
             
         batch_tokens.append(torch.tensor(token_ids, dtype=torch.long))
         batch_mask.append(torch.tensor(output_mask, dtype=torch.long))
-
+    # Padding (批处理填充)
     max_len = max(len(ids) for ids in batch_tokens)
     padded_input_ids = []
     padded_response_masks = []
     padded_attention_masks = []
     for input_ids, masks in zip(batch_tokens, batch_mask):
         pad_len = max_len - len(input_ids)
-        padded_input = F.pad(input=input_ids, pad=(0, pad_len), value=tokenizer.pad_token_id) # 对最后一个dim,左填充0个，右填充pad_len个
-        pad_res_mask = F.pad(input=masks, pad=(0, pad_len), value=0)
 
+        # 执行右填充
+        padded_input = F.pad(input=input_ids, pad=(0, pad_len), value=tokenizer.pad_token_id) # 对最后一个dim,左填充0个，右填充pad_len个
+        pad_res_mask = F.pad(input=masks, pad=(0, pad_len), value=0)                          # mask 填充 0
+
+        # 构建 Attention Mask: 有效内容为 1，Padding 部分为 0
         attn_mask = torch.cat([torch.ones(len(input_ids), dtype=torch.long), torch.zeros(pad_len, dtype=torch.long)])
 
         padded_input_ids.append(padded_input)
         padded_response_masks.append(pad_res_mask)
         padded_attention_masks.append(attn_mask)
 
-
+    # 堆叠成 Batch 张量
     batch_input_ids = torch.stack(padded_input_ids)
     batch_response_masks = torch.stack(padded_response_masks)
     batch_attention_masks = torch.stack(padded_attention_masks)
 
+    # 移位处理
+    # 输入: t_0, ..., t_{n - 1}
     shifted_inputs = batch_input_ids[:, :-1]
     shifted_attn_masks = batch_attention_masks[:, :-1]
 
+    # 输出: t_1, ..., t_{n}
     labels = batch_input_ids[:, 1:]
     shifted_response_masks = batch_response_masks[:, 1:]
 
@@ -71,51 +97,57 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
         "response_mask": shifted_response_masks
     }
 
-def get_response_log_probs(model: torch.nn.Module, input_ids:torch.Tensor, attention_masks: torch.Tensor, labels: torch.Tensor, return_token_entropy: bool = False) -> Dict[str, torch.Tensor]:
+def get_response_log_probs(model: PreTrainedModel, input_ids:torch.Tensor, attention_masks: torch.Tensor, labels: torch.Tensor, return_token_entropy: bool = False) -> Dict[str, torch.Tensor]:
     """
+    计算给定输入和标签的对数概率（Log Probabilities）。
+
     Args:
-        model: PreTrainedModel, HuggingFace model used for scoring (placed on the correct device and in inference mode if gradients should not be computed).
-        input_ids: torch.Tensor, shape (batch_size, sequence_length), concatenated prompt +
-                response tokens as produced by your tokenization method.
-        labels: torch.Tensor, shape (batch_size, sequence_length), labels as produced by your
-                tokenization method.
-        return_token_entropy: bool If True, also return per-token entropy by calling
-                            compute_entropy.
+        model (PreTrainedModel): 用于推理的 HuggingFace 模型。
+        input_ids (torch.Tensor): 形状 (batch_size, seq_len)，模型输入。
+        attention_masks (torch.Tensor): 形状 (batch_size, seq_len)，注意力掩码。
+        labels (torch.Tensor): 形状 (batch_size, seq_len)，目标标签。
+        return_token_entropy (bool): 是否计算并返回每个 token 的熵。
 
     Returns:
-        dict[str, torch.Tensor].
-        "log_probs" shape (batch_size, sequence_length), conditional log-probabilities
-        log pθ(xt | x<t).compute_generation_entropy
-        "token_entropy" optional, shape (batch_size, sequence_length), per-token entropy
-        for each position (present only if return_token_entropy=True).
+        Dict[str, torch.Tensor]:
+            - "log_probs": (batch_size, seq_len) 目标 token 的条件对数概率 log p(y|x)。
+            - "token_entropy": (batch_size, seq_len) 每个位置分布的熵（可选）。
     """
+    # 前向传播
     outputs = model.forward(input_ids=input_ids, attention_mask=attention_masks)
     logits = outputs.logits # shape(batch_size, seq_len, vocab_size)
 
+    # 计算全词表的 Log Softmax
     all_log_probs = F.log_softmax(logits.to(torch.float32), dim=-1)
     labels_expanded = labels.unsqueeze(-1)
+
+    # 在 vocab 维度上取 labels 指定索引的值
     selected_log_probs = torch.gather(all_log_probs, dim=-1, index=labels_expanded).squeeze(-1)
-    
-    result = {"log_probs": selected_log_probs}
-    if return_token_entropy:
+    if not return_token_entropy:
+        result = {"log_probs": selected_log_probs}
+    else :
+        # 计算整个分布的熵，用于监控模型的不确定性
+        # 启用的话会产生较大的显存开销，可能需要降低micro_batch_size / inference_batch_size
         token_entropy = pertoken_entropy(logits.to(torch.float32))
-        result["token_entropy"] = token_entropy
+        result = {"log_probs": selected_log_probs,
+                  "token_entropy": token_entropy}
 
     return result
 
 def masked_normalize(tensor: torch.Tensor, mask: torch.Tensor, normalize_constant: float, dim: int | None = None) -> torch.Tensor:
     """
-    Sum over a dimension and normalize by a constant, considering only those elements where mask
-    == 1.
+    计算掩码加权和并进行归一化。
+
+    仅统计 mask == 1 的位置。
+
     Args:
-        tensor: torch.Tensor The tensor to sum and normalize.
-        mask: torch.Tensor Same shape as tensor; positions with 1 are included in the sum.
-        normalize_constant: float the constant to divide by for normalization.
-        dim: int | None the dimension to sum along before normalization. If None, sum over all
-        dimensions.
+        tensor (torch.Tensor): 输入张量。
+        mask (torch.Tensor): 掩码张量，形状同输入。
+        normalize_constant (float): 归一化常数（分母）。
+        dim (int | None): 求和维度。若为 None，则对所有维度求和。
+
     Returns:
-        torch.Tensor the normalized sum, where masked elements (mask == 0) don’t contribute to
-        the sum.
+        torch.Tensor: 归一化后的结果。
     """
     masked_tensor = tensor * mask
     if dim is None:
@@ -129,46 +161,56 @@ def compute_generation_entropy(scores: tuple | None) -> float:
     """
     从 generate 返回的 scores 中计算平均熵。
     Args:
-        scores: tuple of torch.FloatTensor (one for each step)
+        scores (tuple | None): generate 函数返回的 output_scores。
+    Returns:
+        float: 生成序列的平均熵值。
     """
     if not scores:
         return 0.0
     
-    # 1. 堆叠并转精度: (seq_len, batch_size, vocab_size) -> (seq_len, vocab_size)
+    # 堆叠并转精度: (seq_len, batch_size, vocab_size) -> (seq_len, vocab_size)
     stacked_logits = torch.stack(scores).squeeze(1).to(torch.float32)
     
-    # 2. 计算概率
-    # probs = F.softmax(stacked_logits, dim=-1)
+    # 计算概率分布
     log_probs = F.log_softmax(stacked_logits, dim=-1)
     probs = torch.exp(log_probs) 
-    # 3. 计算熵: -sum(p * log_p)
+    
+    # 计算熵: -sum(p * log_p)
     token_entropies = -torch.sum(probs * log_probs, dim=-1)
 
+    # 处理可能的 NaN (如 log(0))
     token_entropies = torch.nan_to_num(token_entropies, nan=0.0)
     
-    return torch.nan_to_num(token_entropies, nan=0.0).mean().item()
+    return token_entropies.mean().item()
 
 def sft_microbatch_train_step(policy_log_probs: torch.Tensor, response_mask: torch.Tensor, gradient_accumulation_steps: int, normalize_constant: int) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """
-    Execute a forward-and-backward pass on a microbatch.
+    执行 SFT (Supervised Fine-Tuning) 的微批次训练步骤。
+    计算负对数似然损失（NLL Loss），并仅在 response_mask 指示的区域进行反向传播。
+
     Args:
-        policy_log_probs: (batch_size, sequence_length), per-token log-probabilities from the
-                          SFT policy being trained.
-        response_mask: (batch_size, sequence_length), 1 for response tokens, 0 for
-                       prompt/padding.   
-        gradient_accumulation_steps: Number of microbatches per optimizer step.
-        normalize_constant:The constant by which to divide the sum. It is fine to leave this as 1.0.
+        policy_log_probs (torch.Tensor): (batch, seq_len) 目标 token 的对数概率。
+        response_mask (torch.Tensor): (batch, seq_len) 掩码，1 表示回复部分，0 表示提示/填充。
+        gradient_accumulation_steps (int): 梯度累积步数，用于缩放 Loss。
+        normalize_constant (int): 归一化常数（通常为 1.0 或 batch 大小等）。
+
     Returns:
-        tuple[torch.Tensor, dict[str, torch.Tensor]].
+        tuple[torch.Tensor, dict[str, torch.Tensor]]:
+            - actual_loss: 用于反向传播的 Loss 张量。
+            - log: 包含用于记录的 detach 后的 Loss 字典。
     """
     batch_size = policy_log_probs.shape[0]
     pertoken_loss = -policy_log_probs
     # masked_loss = response_mask * pertoken_loss
 
+    # 计算有效 token 的总 Loss，并按常数归一化
     loss_sum  = masked_normalize(pertoken_loss, response_mask, normalize_constant=normalize_constant,dim=None)
+
+    # 根据 batch_size 和 梯度累积步数 进一步平均
     actual_loss = loss_sum / gradient_accumulation_steps / batch_size
     actual_loss.backward()
 
+    # 计算有效 token 数量用于显示平均 per-token loss
     valid_tokens_count = response_mask.sum().detach()
     if valid_tokens_count == 0:
         valid_tokens_count = 1
@@ -190,9 +232,23 @@ def log_generations(
     max_new_tokens: int = 1024,  
 ) -> Dict[str, float]:
     """
-    使用 PyTorch 原生 generate 进行抽样评估，计算奖励和熵。
+    使用模型生成回复并记录评估指标。
+
+    抽样部分样本，执行推理，计算奖励（Reward）和熵（Entropy），并打印示例。
+
+    Args:
+        model (PreTrainedModel): 待评估模型。
+        tokenizer (PreTrainedTokenizerBase): 分词器。
+        prompts (List[str]): 提示词列表。
+        ground_truths (List[str]): 标准答案列表。
+        reward_fn (Callable): 奖励计算函数。
+        num_examples_to_log (int): 抽样数量。
+        max_new_tokens (int): 生成最大长度。
+
+    Returns:
+        Dict[str, float]: 包含平均奖励、长度、熵等统计指标的字典。
     """
-    # 1. 采样
+    # 随机抽样
     n = min(num_examples_to_log, len(prompts))
     indices = random.sample(range(len(prompts)), n)
     sampled_prompts = [prompts[i] for i in indices]
@@ -202,6 +258,7 @@ def log_generations(
     device = model.device
     was_training = model.training
     model.eval()  # 切换到评估模式
+    
     total_rewards = []
     format_rewards = []
     answer_rewards = []
@@ -210,18 +267,19 @@ def log_generations(
 
     print(f"\n[Log Generation] Sampling {n} examples...")
 
-    # 3. 逐条生成 (Batch 生成实现稍繁琐，逐条对 log 来说更安全)
+    # 3. 逐条生成与评估
     for i in range(n):
         prompt = sampled_prompts[i]
         truth = sampled_truths[i]
 
-        # Tokenize
+        # Tokenize 输入
         inputs = tokenizer(prompt, return_tensors="pt").to(device)
         input_len = inputs.input_ids.shape[1]
         input_ids = inputs.input_ids
         attention_mask = inputs.attention_mask
 
         with torch.no_grad():
+            # 执行生成
             outputs = model.generate(
                 inputs=input_ids,
                 attention_mask=attention_mask,
@@ -232,47 +290,23 @@ def log_generations(
                 pad_token_id=tokenizer.pad_token_id,
                 eos_token_id=tokenizer.eos_token_id,
                 return_dict_in_generate=True,
-                output_scores=True,  # 关键：请求输出分数以计算熵
+                output_scores=True,  # 请求输出分数以计算熵
             )
-        assert type(outputs) == GenerateDecoderOnlyOutput
+        assert isinstance(outputs, GenerateDecoderOnlyOutput)
 
-        # 解析生成的文本 (去掉 Prompt 部分)
+        # 解析生成的文本 (去掉 Input Prompt 部分)
         generated_ids = outputs.sequences[0][input_len:]
         generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
 
         
-        # A. 长度
+        # 记录长度
         lengths.append(len(generated_ids))
-
-        # B. 熵 (Entropy)
-        # outputs.scores 是一个 tuple，长度为 generated_len
-        # 每个元素是 (batch_size=1, vocab_size) 的 logits
-        # if outputs.scores:
-        #     # 堆叠为 (Seq, Vocab)
-        #     stacked_logits = torch.stack(outputs.scores).squeeze(1).to(torch.float32)
-        #     # 计算 Prob 和 LogProb
-        #     probs = torch.nn.functional.softmax(stacked_logits, dim=-1)
-
-        #     top_prob, _ = torch.max(probs, dim=-1)
-        #     if i == 0: # 只打印第一条样本的
-        #         print(f"DEBUG: Max prob of first token: {top_prob[0].item():.6f}")
-        #         if top_prob[0].item() > 0.9999:
-        #             print("DEBUG: Model is extremely confident (Determininstic)!")
-
-        #     log_probs = torch.nn.functional.log_softmax(stacked_logits , dim=-1)
-        #     # 熵公式: -sum(p * log_p)
-        #     token_entropies = -(probs * log_probs).sum(dim=-1)
-        #     token_entropies = torch.nan_to_num(token_entropies, nan=0.0)
-        #     # 取平均
-        #     avg_entropy = token_entropies.mean().item()
-        #     entropies.append(avg_entropy)
-        # else:
-        #     entropies.append(0.0)
-
+        
+        # 计算并记录熵
         entropy = compute_generation_entropy(outputs.scores)
         entropies.append(entropy)
-        # C. 奖励 (Reward)
-        # 假设 reward_fn 接受 (output, truth)
+        # 记录奖励
+        # 预处理文本格式以适配奖励函数
         metrics = reward_fn(generated_text.replace("</think><answer>", "</think> <answer>"), truth)
         total_rewards.append(metrics.get("reward", 0.0))
         format_rewards.append(metrics.get("format_reward", 0.0))

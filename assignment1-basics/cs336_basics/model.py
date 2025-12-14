@@ -577,7 +577,7 @@ class MultiHeadSelfAttention(nn.Module):
             keys_multi_head = self.rope(keys_multi_head, token_positions)
 
         if not self.flash_attn:
-            # 创建因果掩码，保证位置 i 只能看到 0...i，实际上就是一个对角线为 0 的下三角矩阵。
+            # 创建因果掩码，保证位置 i 只能看到 0...i-1，实际上就是一个对角线为 0 的下三角矩阵。
             mask = torch.tril(torch.ones(context_length, context_length, device=x.device, dtype=torch.bool), diagonal=0)
             # mask = mask.view(1, 1, context_length, context_length) # 显式广播
 
