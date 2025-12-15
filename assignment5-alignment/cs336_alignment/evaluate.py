@@ -7,6 +7,7 @@ import argparse
 from vllm import LLM, SamplingParams
 from typing import List, Dict, Callable, Any
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+from transformers.generation.configuration_utils import GenerationConfig
 
 def load_data(file_path: str) -> List[Dict]:
     examples = []
@@ -141,9 +142,19 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
         prompt_template = f.read()
     formatted_input = formatting_prompt(examples=examples, prompt_template=prompt_template)
 
-    llm = LLM(model = model_path, dtype="bfloat16", gpu_memory_utilization = 0.9, trust_remote_code = True)
+    # rope_scaling_config = {"rope_type": "dynamic", "factor": 2.0}
+    
+    target_max_len = 8192
 
-    eval_params = SamplingParams(temperature = temperature, top_p = top_p, max_tokens=max_tokens, repetition_penalty=1.05 ,stop=["</answer>"],
+    llm = LLM(model = model_path, 
+              dtype="bfloat16", 
+              gpu_memory_utilization = 0.95, 
+              trust_remote_code = True,
+            #   rope_scaling=rope_scaling_config,
+            #   max_model_len=target_max_len
+              )
+
+    eval_params = SamplingParams(temperature = temperature, top_p = top_p, max_tokens=max_tokens, repetition_penalty=1.0 ,stop=["</answer>"],
                                include_stop_str_in_output=True)
     print(f"最大输出长度为{max_tokens}")
 

@@ -1,13 +1,13 @@
 # configs/grop_config.yaml
 
 model:
-  model_path: "checkpoints/sft_v1"
-  best_reward: 0
-  start_step: 0
+  model_path: "checkpoints/drgrpo/checkpoint-step-350"
+  best_reward: 0.5
+  start_step: 351
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
-  wandb_id: null
+  wandb_id: "sy7d5nh8"
 
 data:
   train_path: "data/MATH/sft.jsonl"
@@ -15,16 +15,17 @@ data:
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: 5000
+  start_sample: 5000
 
 training:
-  output_dir: "checkpoints/drgrpo_2e-6"
+  output_dir: "checkpoints/drgrpo"
   n_grpo_steps: 500
   learning_rate: 2.0e-6
   advantage_eps: 1.0e-6
   rollout_batch_size: 64
   group_size: 8
   sampling_temperature: 1.0
-  repetition_penalty: 1.05
+  repetition_penalty: 1.0
   sampling_min_tokens: 4
   sampling_max_tokens: 4096
   epochs_per_rollout_batch: 1
@@ -38,7 +39,7 @@ training:
   clip_range: 0.2
   max_grad_norm: 1.0
 
-  normalize_by_std: True
+  normalize_by_std: False
 
 evaluation:
   eval_every_steps: 10
@@ -47,5 +48,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "drgrpo_old_sft_model"
+  run_name: "drgrpo-2e-6"
   entity: null

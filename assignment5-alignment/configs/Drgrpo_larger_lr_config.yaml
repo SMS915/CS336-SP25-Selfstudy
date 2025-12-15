@@ -1,7 +1,7 @@
 # configs/grop_config.yaml
 
 model:
-  model_path: "checkpoints/sft_v1"
+  model_path: "checkpoints/drgrpo/checkpoint-best"
   best_reward: 0
   start_step: 0
   dtype: "bfloat16"
@@ -17,9 +17,9 @@ data:
   max_samples: 5000
 
 training:
-  output_dir: "checkpoints/drgrpo_2e-6"
+  output_dir: "checkpoints/drgrpo_3e-5"
   n_grpo_steps: 500
-  learning_rate: 2.0e-6
+  learning_rate: 3.0e-5
   advantage_eps: 1.0e-6
   rollout_batch_size: 64
   group_size: 8
@@ -38,7 +38,7 @@ training:
   clip_range: 0.2
   max_grad_norm: 1.0
 
-  normalize_by_std: True
+  normalize_by_std: False
 
 evaluation:
   eval_every_steps: 10
@@ -47,5 +47,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "drgrpo_old_sft_model"
+  run_name: "drgrpo_3e-5"
   entity: null
