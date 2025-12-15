@@ -238,6 +238,7 @@ def main():
                         save_checkpoint(model=model, optimizer=optimizer, iteration=step + 1, out=ckpt_path)
                     print(f"保存检查点: {ckpt_path}\n")
 
+    print("训练完成。")
 
     # 初版 training loop
     # start_step = 0
@@ -313,7 +314,5 @@ def main():
     #             else:
     #                 save_checkpoint(model=model, optimizer=optimizer, iteration= step + 1, out=ckpt_path)
     #             print(f"保存检查点: {ckpt_path}\n")
-
-    print("训练完成。")
 if __name__ == "__main__":
     main()
