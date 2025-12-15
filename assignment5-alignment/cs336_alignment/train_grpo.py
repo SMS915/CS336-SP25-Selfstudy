@@ -107,13 +107,13 @@ def sync_policy_to_vllm(policy_model: torch.nn.Module, vllm_instance: LLM):
 # 2. 数据集 (只包含 Prompt)
 # ==========================================
 class GRPODataset(Dataset):
-    def __init__(self, data_path, prompt_template=None, max_samples=None):
+    def __init__(self, data_path, prompt_template=None, start_sample=None, max_samples=None):
         self.prompts = []
         self.ground_truths = []
         with open(data_path, "r") as f:
             lines = f.readlines()
             if max_samples:
-                lines = lines[:max_samples]
+                lines = lines[start_sample:start_sample+max_samples]
                 
             for line in lines:
                 item = json.loads(line)
@@ -238,6 +238,7 @@ def train(config_path: str):
     dataset = GRPODataset(
         config["data"]["train_path"], 
         prompt_template=prompt_template,
+        start_sample=config["data"]["start_sample"],
         max_samples=config["data"]["max_samples"]
     )
     # DataLoader 这里的 Batch Size 是 "多少个问题"
@@ -336,7 +337,7 @@ def train(config_path: str):
         # 1.6 (Optional) Get Old Log Probs
         # 对于 Reinforce 其实不需要，但为了兼容 Clip Loss，这里通常会计算一次
         # 使用 no_grad
-        inference_batch_size = 4 
+        inference_batch_size = 2
         old_log_probs_list = []
         token_entropy_list = []
         policy.eval() # 切换到 Eval 模式更安全
