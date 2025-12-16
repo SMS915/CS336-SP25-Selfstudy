@@ -6,10 +6,10 @@ from typing import Any, Callable, Literal
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizerBase
-from cs336_alignment.sft import tokenize_prompt_and_output, get_response_log_probs, masked_normalize, sft_microbatch_train_step
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from cs336_alignment.sft import get_response_log_probs, masked_normalize, sft_microbatch_train_step
 from cs336_alignment.train_sft import SFTDataset
-from cs336_alignment.utils import pertoken_entropy
+from cs336_alignment.utils import pertoken_entropy, tokenize_prompt_and_output
 from cs336_alignment.grpo import compute_group_normalized_rewards, compute_grpo_clip_loss, compute_naive_policy_gradient_loss, compute_policy_gradient_loss, grpo_microbatch_train_step, masked_mean
 
 
@@ -83,8 +83,9 @@ def run_compute_group_normalized_rewards(
                 You may choose what you wish to log here
                 (some statistics of the rewards, etc.).
     """
-    return compute_group_normalized_rewards(reward_fn=reward_fn, rollout_responses=rollout_responses, repeated_ground_truths=repeated_ground_truths,
+    advantage_tensor, raw_tensor, meta_data = compute_group_normalized_rewards(reward_fn=reward_fn, rollout_responses=rollout_responses, repeated_ground_truths=repeated_ground_truths,
                                              group_size=group_size, advantage_eps=advantage_eps, normalize_by_std=normalize_by_std)
+    return advantage_tensor, raw_tensor, meta_data
 
 
 def run_compute_entropy(logits: torch.Tensor) -> torch.Tensor:
@@ -121,7 +122,7 @@ def run_get_response_log_probs(
                 we have not masked out the token indices corresponding to the prompt
                 or padding; that is done in the train loop.
     """
-    return get_response_log_probs(model, input_ids, labels, return_token_entropy)
+    return get_response_log_probs(model=model, input_ids = input_ids,attention_masks = None, labels=labels, return_token_entropy=return_token_entropy)
 
 
 def run_compute_naive_policy_gradient_loss(
@@ -288,7 +289,7 @@ The below adapters are used in the optional
 RLHF / safety part of the Alignment assignment.
 """
 
-
+from cs336_alignment.utils import PackedSFTDataset
 def get_packed_sft_dataset(
     tokenizer: PreTrainedTokenizerBase,
     dataset_path: str | os.PathLike,
@@ -316,8 +317,7 @@ def get_packed_sft_dataset(
         "input_ids" contains the token IDs for the language modeling inputs, and "labels" contains
         the token IDs for the language modeling labels.
     """
-    # raise NotImplementedError
-    return SFTDataset(dataset_path, )
+    raise NotImplementedError
 
 
 def run_iterate_batches(

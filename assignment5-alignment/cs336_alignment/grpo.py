@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from .sft import get_response_log_probs
 import torch.nn.functional as F
 from typing import Callable, List, Dict, Literal
@@ -30,12 +31,14 @@ def compute_group_normalized_rewards(reward_fn: Callable,
             - raw_tensor (torch.Tensor): 展平后的原始奖励张量，形状为 (total_samples,)。
             - meta_data (Dict[str, float]): 包含最大、最小和平均奖励的统计信息。
     """
-
-    raw_rewards_list = [
-        reward_fn(response, truth).get('reward', 0.0)
-        for response, truth in zip(rollout_responses, repeated_ground_truths)
-    ]
+    raw_rewards_list = []
+    format_rewards_list = []
+    for response, truth in zip(rollout_responses, repeated_ground_truths):
+        reward_metric = reward_fn(response, truth)
+        raw_rewards_list.append(reward_metric.get('reward', 0.0))
+        format_rewards_list.append(reward_metric.get('format_reward', 0.0))
     # 将奖励转换为Tensor, 并reshape到[batch_size, group_size]的形状
+    
     raw_tensor = torch.tensor(raw_rewards_list, dtype=torch.float32).view(-1, group_size) # batch_size, group_size
     # 计算组内均值
     mean_tensor = raw_tensor.mean(dim=-1, keepdim=True) # (batch_size, 1)
@@ -47,12 +50,12 @@ def compute_group_normalized_rewards(reward_fn: Callable,
         std_tensor = raw_tensor.std(dim = -1, keepdim = True)
         advantage = (raw_tensor - mean_tensor) / (std_tensor + advantage_eps)
 
-    max_reward = raw_tensor.max().item()
-    min_reward = raw_tensor.min().item()
+    # max_reward = raw_tensor.max().item()
+    # min_reward = raw_tensor.min().item()
     mean_reward = mean_tensor.mean().item()
+    format_rate = np.mean(format_rewards_list)
     meta_data = {'mean_reward': mean_reward,
-                 'max_reward': max_reward,
-                 'min_reward': min_reward}
+                 "format_rate": format_rate}
     
     return advantage.flatten(), raw_tensor.flatten(), meta_data
 

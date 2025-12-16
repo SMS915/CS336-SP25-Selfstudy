@@ -1,6 +1,7 @@
 import os
 os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] = "1"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import re
 import yaml
 import argparse
@@ -17,7 +18,6 @@ from vllm import LLM, SamplingParams
 # 引入组件
 from cs336_alignment.sft import (
     log_generations,
-    tokenize_prompt_and_output,
     get_response_log_probs,
 )
 from cs336_alignment.grpo import (
@@ -25,6 +25,8 @@ from cs336_alignment.grpo import (
     grpo_microbatch_train_step
 )
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+
+from cs336_alignment.utils import tokenize_prompt_and_output
 
 def robust_reward_fn(response: str, ground_truth: str) -> dict[str, float]:
     """
@@ -56,7 +58,7 @@ def sync_policy_to_vllm(policy_model: torch.nn.Module, vllm_instance: LLM):
     # 顺序：直接查找 -> 在 engine_core 里查找
     search_targets = [llm_engine]
     if hasattr(llm_engine, "engine_core"):
-        search_targets.append(llm_engine.engine_core)
+        search_targets.append(llm_engine.engine_core) # type: ignore
     
     executor = None
     
@@ -67,23 +69,23 @@ def sync_policy_to_vllm(policy_model: torch.nn.Module, vllm_instance: LLM):
             executor = target.model_executor
             break
         if hasattr(target, "executor"):
-            executor = target.executor
+            executor = target.executor # type: ignore
             break
             
     if executor is None:
         # 调试信息：如果还是找不到，打印 engine_core 的属性
         print("❌ Error: 无法找到 executor。")
         if hasattr(llm_engine, "engine_core"):
-            print(f"Debug: engine_core attrs: {[a for a in dir(llm_engine.engine_core) if not a.startswith('_')]}")
+            print(f"Debug: engine_core attrs: {[a for a in dir(llm_engine.engine_core) if not a.startswith('_')]}") # type: ignore
         raise RuntimeError("无法定位 vLLM Executor，请检查 vLLM 版本结构。")
 
     # 3. 查找底层 Model
     # 通常路径: executor -> driver_worker -> model_runner -> model
     try:
         if hasattr(executor, "driver_worker"):
-            vllm_model = executor.driver_worker.model_runner.model
+            vllm_model = executor.driver_worker.model_runner.model # type: ignore
         elif hasattr(executor, "model_runner"):
-            vllm_model = executor.model_runner.model
+            vllm_model = executor.model_runner.model # type: ignore
     except AttributeError:
         pass
 
@@ -102,6 +104,12 @@ def sync_policy_to_vllm(policy_model: torch.nn.Module, vllm_instance: LLM):
                 count += 1
             else:
                 pass
+
+def load_policy_into_vllm_instance(policy: torch.nn.Module, llm:LLM):
+    state_dict = policy.state_dict()
+    llm_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
+    llm_model.load_weights(state_dict.items())
+
 
 # ==========================================
 # 2. 数据集 (只包含 Prompt)
@@ -241,13 +249,12 @@ def train(config_path: str):
         start_sample=config["data"]["start_sample"],
         max_samples=config["data"]["max_samples"]
     )
-    # DataLoader 这里的 Batch Size 是 "多少个问题"
-    # 实际生成的 Batch Size = rollout_batch_size / group_size
+    # Batch Size = rollout_batch_size / group_size
     questions_per_batch = config["training"]["rollout_batch_size"] // config["training"]["group_size"]
     
     dataloader = DataLoader(dataset, batch_size=questions_per_batch, shuffle=True, drop_last=True)
     
-    # --- GRPO Loop ---
+    # 训练循环
     n_grpo_steps = config["training"]["n_grpo_steps"]
     micro_batch_size = config["training"]["micro_batch_size"]
     epochs_per_batch = config["training"]["epochs_per_rollout_batch"]
@@ -265,7 +272,7 @@ def train(config_path: str):
     print(f"当前最佳reward为{best_reward}")
     while global_step < n_grpo_steps:
         # -----------------------------------------
-        # Phase 1: Experience Collection (Rollout)
+        # 第一阶段：采样
         # -----------------------------------------
         try:
             batch = next(data_iter)
@@ -274,18 +281,19 @@ def train(config_path: str):
             batch = next(data_iter)
             
         prompts = batch["prompt"]
-        ground_truths = batch["ground_truth"] # List[str]
+        ground_truths = batch["ground_truth"]
 
         # 同步权重到vllm
-        sync_policy_to_vllm(policy, llm)
+        # sync_policy_to_vllm(policy, llm)
+        load_policy_into_vllm_instance(policy, llm)
         
         # 生成 (vLLM)
         generation_outputs = llm.generate(prompts, sampling_params, use_tqdm=False)
         
-        # 1.3 整理数据
+        # 整理数据
         all_prompts = []
         all_responses = []
-        all_ground_truths = [] # 需要重复 G 次以匹配 response
+        all_ground_truths = [] # prompts 和 GT 需要重复 gp_size 次以匹配 response
         
         for i, req_output in enumerate(generation_outputs):
             q_prompts = [req_output.prompt] * config["training"]["group_size"]
@@ -309,15 +317,10 @@ def train(config_path: str):
         advantages = advantages.to(device).unsqueeze(1) # (B*G, 1)
         raw_rewards = raw_rewards.to(device).unsqueeze(1)
 
-        format_scores = []
-        answer_scores = []
+
         lengths = []
         
-        for r, gt in zip(all_responses, all_ground_truths):
-            # 重新调一次 reward_fn, 为了记录 log
-            metrics = robust_reward_fn(r, gt)
-            format_scores.append(metrics["format_reward"])
-            answer_scores.append(metrics["answer_reward"])
+        for r in all_responses:
             lengths.append(len(tokenizer.encode(r))) # 估算 Token 长度
         
         # 1.5 Tokenization (准备训练数据)
@@ -334,9 +337,8 @@ def train(config_path: str):
         labels = tokenized_batch["labels"].to(device)
         attention_mask = tokenized_batch["attention_mask"].to(device)
         
-        # 1.6 (Optional) Get Old Log Probs
-        # 对于 Reinforce 其实不需要，但为了兼容 Clip Loss，这里通常会计算一次
-        # 使用 no_grad
+        # 使用生成数据的策略模型计算对数概率。
+        # 这些 "旧的" log_probs 将作为基准，用于在损失函数中计算概率比率。
         inference_batch_size = 2
         old_log_probs_list = []
         token_entropy_list = []
@@ -378,10 +380,8 @@ def train(config_path: str):
         # 记录累积 loss
         step_loss = 0.0
         optimizer.zero_grad()
-        # accum_stats = {"loss": 0.0, "clip_ratio": 0.0, "approx_kl": 0.0}
         # Inner Epochs (On-policy 通常是 1)
         for epoch_idx in range(epochs_per_batch):
-            indices = torch.randperm(train_dataset_len)
             actual_accum_steps = train_dataset_len // micro_batch_size
             epoch_metrics = {"loss": [], "clip_ratio": [], "approx_kl": []}
             current_epoch_loss = 0.0
@@ -415,6 +415,7 @@ def train(config_path: str):
                     cliprange=clip_range
                     # raw_rewards=mb_rewards
                 )
+
                 current_epoch_loss += loss.item()
                 current_epoch_clip += step_metrics["clip_ratio"].item() / actual_accum_steps
                 current_epoch_kl += step_metrics["approx_kl"].item() / actual_accum_steps
@@ -431,25 +432,23 @@ def train(config_path: str):
         global_step += 1
         pbar.update(1)
         
-        # --- Logging ---
+
         wandb.log({
-            # 1. 核心表现
+            # 核心表现
             "train/reward_mean": reward_meta["mean_reward"],
-            "train/reward_std": raw_rewards.std().item(), # 组间方差
-            "train/accuracy": np.mean(answer_scores),     # 真实准确率
-            "train/format_rate": np.mean(format_scores),  # 格式正确率
+            "train/reward_std": raw_rewards.std().item(),    # 组间方差
+            "train/format_rate": reward_meta["format_rate"],  # 格式正确率
             
-            # 2. 训练动态
+            # 训练动态
             "train/loss": np.mean(epoch_metrics["loss"]),
             "train/clip_fraction": np.mean(epoch_metrics["clip_ratio"]),
             "train/approx_kl": np.mean(epoch_metrics["approx_kl"]),
             "train/lr": optimizer.param_groups[0]['lr'],
-            "train/grad_norm": grad_norm.item(), # 之前代码里算的
+            "train/grad_norm": grad_norm.item(),
             
-            # 3. 行为特征
+            # 行为特征
             "train/completion_len_mean": np.mean(lengths),
             "train/completion_len_max": np.max(lengths),
-
             "train/mean_token_entropy": mean_token_entropy,
             
             # Step
@@ -458,11 +457,10 @@ def train(config_path: str):
         
         pbar.set_postfix(reward=reward_meta["mean_reward"])
 
-        # --- Evaluation & Saving ---
         if global_step % config["evaluation"]["eval_every_steps"] == 0:
             policy.eval()
             
-            eval_max_tokens = config["evaluation"].get("max_new_tokens", 2048)
+            eval_max_tokens = config["evaluation"].get("max_new_tokens", 4096)
             eval_stats = log_generations(
                 model=policy,
                 tokenizer=tokenizer,
@@ -506,7 +504,5 @@ def train(config_path: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/grpo_config.yaml")
-    
-    parser.add_argument("--wandb_id", type=str, default=None, help="The ID of the wandb run to resume (e.g., a1b2c3d4)")
     args = parser.parse_args()
     train(args.config)

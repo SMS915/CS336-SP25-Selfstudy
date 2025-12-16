@@ -12,7 +12,8 @@ from torch.optim import AdamW
 
 
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
-from cs336_alignment.sft import get_response_log_probs, tokenize_prompt_and_output, sft_microbatch_train_step, log_generations
+from cs336_alignment.sft import get_response_log_probs, sft_microbatch_train_step, log_generations
+from cs336_alignment.utils import tokenize_prompt_and_output
 
 class SFTDataset(Dataset):
     def __init__(self, data_path, max_samples = None):
@@ -50,8 +51,7 @@ def get_collate_fn(tokenizer, max_length = 1024, prompt_template = None):
                 prompts.append(raw_prompt)
         
         responses = [item["response"] for item in batch_data]
-        # 2. 调用你写的核心 Tokenizer 函数
-        # 这个函数已经处理了 Padding, Mask, Shift 等所有脏活累活
+
         tokenized_batch = tokenize_prompt_and_output(
             prompt_strs=prompts,
             output_strs=responses,
@@ -64,14 +64,13 @@ def get_collate_fn(tokenizer, max_length = 1024, prompt_template = None):
     return collate_fn
 
 def train(config_path: str, args):
-    # --- 加载配置 ---
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     
     print(f"从{config_path}加载配置")
     print(json.dumps(config, indent=2))
 
-    # --- WandB 初始化 ---
+    # WandB 初始化
     if args.wandb_id:
         print(f"Resuming WandB run: {args.wandb_id}")
         wandb.init(
@@ -87,12 +86,13 @@ def train(config_path: str, args):
             config=config
         )
 
-    # --- 路径与设备 ---
+    # 路径与设备
     output_dir = config["training"]["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model_load_path = args.resume_from if args.resume_from else config["model"]["model_path"]
-    # --- 加载模型与 Tokenizer ---
+
+    # 加载模型与 Tokenizer
     print("Loading model and tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(config["model"]["model_path"])
     if tokenizer.pad_token is None:
@@ -108,7 +108,7 @@ def train(config_path: str, args):
     model.config.use_cache = False
     model.train()
 
-    # --- 准备数据 ---
+    # 准备数据
     prompt_path = config["data"]["prompt_path"]
     with open(prompt_path, 'r') as f:
         prompt_template = f.read()
@@ -127,6 +127,7 @@ def train(config_path: str, args):
     with open(config["data"]["valid_path"], "r") as f:
         for line in f:
             valid_examples.append(json.loads(line))
+
     # 加载验证集用于 Log Generation
     val_prompts = []
     for ex in valid_examples:
@@ -135,7 +136,7 @@ def train(config_path: str, args):
         
     val_truths = [ex["solution"] for ex in valid_examples]
 
-    # --- 优化器 ---
+    # 优化器
     optimizer = AdamW(model.parameters(), lr=float(config["training"]["learning_rate"]))
 
     # --- 训练循环变量 ---
@@ -244,11 +245,12 @@ def train(config_path: str, args):
                     torch.cuda.empty_cache() 
                     model.train() # 切回训练模式
 
-        # --- 保存最终模型 ---
+        # 保存该epoch模型
         epoch_output_dir = os.path.join(output_dir, f'epoch{epoch}')
         print(f"正在保存模型到{epoch_output_dir}...")
         model.save_pretrained(epoch_output_dir)
         tokenizer.save_pretrained(epoch_output_dir)
+        
     print("训练完成")
 
 if __name__ == "__main__":
