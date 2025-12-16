@@ -1,7 +1,7 @@
 import regex
 import nltk
 from fasttext import FastText as FTModel
-
+from typing import Dict
 LANG_MODEL_PATH = 'data/classifiers/lid.176.bin'
 NSFW_MODEL_PATH = 'data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin'
 TOXIC_MODEL_PATH = 'data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin'
@@ -20,6 +20,10 @@ MODEL_PATHS = {
     'nsfw': 'data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin',
     'toxic': 'data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin'
 }
+
+PHONE_PATTERN = regex.compile(r'(?<!\d)(?:\+?1[-\s\.]*)?(?:\(\d{3}\)|\d{3})[-\s\.]*\d{3}[-\s\.]*\d{4}\b')
+EMAIL_PATTERN = regex.compile(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+IP_PATTERN = regex.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
 
 
 def _get_model(model_type: str) -> FTModel._FastText:
@@ -194,3 +198,9 @@ def mask_ip_address(text: str, replace_str: str = '|||IP_ADDRESS|||') -> tuple[s
     pattern = regex.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
     masked_text, num_subs = pattern.subn(replace_str, text)
     return masked_text, num_subs
+
+def mask_all_pii(text: str) -> tuple[str, Dict[str, int]]:
+    phone_masked_text, num_phones = PHONE_PATTERN.subn('|||PHONE_NUMBER|||', text)
+    email_masked_text, num_emails = EMAIL_PATTERN.subn('|||EMAIL_ADDRESS|||', text)
+    ip_masked_text, num_ips = IP_PATTERN.subn('|||IP_ADDRESS|||', text)
+    return phone_masked_text, {'phone_count': num_phones, 'email_count': num_emails, 'ip_count': num_ips}

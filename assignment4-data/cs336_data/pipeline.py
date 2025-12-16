@@ -13,7 +13,8 @@ from functools import partial
 
 from fastwarc.warc import ArchiveIterator, WarcRecordType
 from .filter import (gopher_quality_filter, 
-                     classify_text)
+                     classify_text,
+                     mask_all_pii)
 
 from .deduplication import minhash_deduplication, exact_line_deduplication
 from .quality_classifier import QualityClassifier
@@ -47,7 +48,7 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
                             ) -> Tuple[List[str | os.PathLike], Dict[str, int]]:
     
     stats = defaultdict(int)
-
+    masked_dict = defaultdict(int)
     # 为每个wet文件创立对应的二级目录
     web_base_name = os.path.basename(wet_file_path).replace('.warc.wet.gz', '')
     output_subdir = os.path.join(output_dir, web_base_name)
@@ -110,10 +111,13 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
             doc_id = f"doc_{i}.txt"
             doc_output_path = os.path.join(output_subdir, doc_id)
             output_paths.append(doc_output_path)
+            text_masked, masked_count = mask_all_pii(text)
+            for k, v in masked_count.items():
+                masked_dict[k] += v
             with open(doc_output_path, 'w', encoding='utf-8') as f_doc:
-                f_doc.write(text)
+                f_doc.write(text_masked)
 
-    return output_paths, stats
+    return output_paths, stats, masked_dict
 
 def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[str, int]]:
     """
@@ -149,6 +153,7 @@ def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[st
 
     all_output_paths = []
     total_stats = defaultdict(int)
+    total_masked_stats = defaultdict(int)
 
     with multiprocessing.Pool(processes=max_workers, 
                               initializer=_worker_initializer, # 进程启动时加载模型
@@ -171,18 +176,22 @@ def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[st
                        total=len(wet_files),
                        desc="并行过滤 WET 文件")
         
-        for output_paths, stats in results:
+        for output_paths, stats, masked_dicts in results:
             all_output_paths.extend(output_paths)
             for k, v in stats.items():
                 total_stats[k] += v
+            for k, v in masked_dicts.items():
+                total_masked_stats[k] += v
 
     print("初步过滤完成")
     print("并行过滤统计情况如下")
     print(f"过滤后的文件共{len(all_output_paths)}个")
     for k, v in total_stats.items():
         print(f" - {k}: {v}, {v/total_stats['total']:.2%}")
+    for k, v in total_masked_stats.items():
+        print(f" - {k}: {v}个")
     
-    return all_output_paths, total_stats
+    return all_output_paths
 
 def exact_deduplicate(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, config: Dict[str, Any]):
     output_dir = os.path.join(config['paths']['base_output_dir'], 'exact_dedup')
@@ -347,7 +356,7 @@ if __name__ == "__main__":
         # ---------------------------------------------------------
         if not exact_input_files:
             print("\n=== 执行 Stage 1: WET 过滤 ===")
-            exact_input_files, total_stats = filter_wet_files(config)
+            exact_input_files = filter_wet_files(config)
             exact_input_base = filtered_dir
             if not exact_input_files:
                 print("错误：过滤阶段未产生任何文件，程序终止。")
