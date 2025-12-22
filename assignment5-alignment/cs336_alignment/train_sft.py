@@ -188,9 +188,6 @@ def train(config_path: str, args):
             
             accumulated_loss += metrics["loss"].item()
             total_micro_steps += 1
-            
-            # 更新进度条上的 Loss 显示
-            # progress_bar.set_postfix(loss=metrics["loss"].item())
 
             # 4. 梯度累积更新
             if total_micro_steps % grad_accum_steps == 0:

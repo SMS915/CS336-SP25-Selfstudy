@@ -342,7 +342,7 @@ def train(config_path: str):
         inference_batch_size = 2
         old_log_probs_list = []
         token_entropy_list = []
-        policy.eval() # 切换到 Eval 模式更安全
+        policy.eval()
         with torch.no_grad():
             for i in range(0, len(input_ids), inference_batch_size):
                 batch_input_ids = input_ids[i : i + inference_batch_size]
@@ -377,11 +377,10 @@ def train(config_path: str):
         indices = torch.randperm(train_dataset_len)
         
         policy.train()
-        # 记录累积 loss
-        step_loss = 0.0
         optimizer.zero_grad()
         # Inner Epochs (On-policy 通常是 1)
         for epoch_idx in range(epochs_per_batch):
+            assert train_dataset_len % micro_batch_size == 0
             actual_accum_steps = train_dataset_len // micro_batch_size
             epoch_metrics = {"loss": [], "clip_ratio": [], "approx_kl": []}
             current_epoch_loss = 0.0
@@ -419,8 +418,6 @@ def train(config_path: str):
                 current_epoch_loss += loss.item()
                 current_epoch_clip += step_metrics["clip_ratio"].item() / actual_accum_steps
                 current_epoch_kl += step_metrics["approx_kl"].item() / actual_accum_steps
-                
-                step_loss += loss.item() / micro_batch_size
 
             # End of Micro-batches -> Update
             grad_norm = torch.nn.utils.clip_grad_norm_(policy.parameters(), config["training"]["max_grad_norm"])
