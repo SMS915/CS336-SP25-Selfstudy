@@ -707,7 +707,7 @@ class TransformerLM(nn.Module):
     一个完整全功能的、仅解码器（Decoder-Only）的 Transformer 语言模型。
     设计为一个较通用的架构框架，通过调整配置参数，可以重现多种主流大模型的结构
     e.g
-    原始Transformer风格:  pos_emb_type = 'sinusoidal', activation = 'relu', gated_ffn = True, layer_norm = True, post_norm = True
+    原始Transformer风格:  pos_emb_type = 'sinusoidal', activation = 'relu', gated_ffn = False, layer_norm = True, post_norm = True
     GPT-2 风格:           pos_emb_type = 'learned' , activation = 'gelu', gated_ffn = False, layer_norm = True, post_norm = False
     LLaMA 风格:           pos_emb_type = 'rope', activation = 'silu', gated_ffn = True, layer_norm = False, post_norm = False
 
@@ -881,4 +881,3 @@ class TransformerLM(nn.Module):
 
 def SiLU(x: torch.Tensor) -> torch.Tensor:
     return x * torch.sigmoid(x)
-
