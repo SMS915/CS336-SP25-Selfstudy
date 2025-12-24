@@ -93,10 +93,15 @@ def train(config_path: str, args):
     model_load_path = args.resume_from if args.resume_from else config["model"]["model_path"]
 
     # 加载模型与 Tokenizer
+    special_thinking_tag = {'additional_special_tokens': ['<think>', '</think>', '<answer>', '</answer>']}
+
     print("Loading model and tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(config["model"]["model_path"])
+    tokenizer = AutoTokenizer.from_pretrained(model_load_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    num_add_tokens = tokenizer.add_special_tokens(special_thinking_tag)
+    print(f"添加了{num_add_tokens}个特殊token")
         
     model = AutoModelForCausalLM.from_pretrained(
         model_load_path,
@@ -104,6 +109,25 @@ def train(config_path: str, args):
         attn_implementation=config["model"]["attn_implementation"],
         device_map="auto"
     )
+    if num_add_tokens != 0:
+        model.resize_token_embeddings(len(tokenizer))
+        with torch.no_grad():
+            input_embed = model.get_input_embeddings().weight
+            if not model.config.tie_word_embeddings:
+                output_embed = model.get_output_embeddings().weight
+            token_map = {'<think>': 'think', '</think>': 'think', '<answer>': 'answer', '</answer>': 'answer'}
+            for special_token, reference in token_map.items():
+                special_id = tokenizer.convert_tokens_to_ids(special_token)
+                ref_id = tokenizer.convert_tokens_to_ids(reference)
+                input_embed[special_id] = input_embed[ref_id].clone()
+                print(f"已用{reference}的语义初始化{special_token}")
+                if not model.config.tie_word_embeddings:
+                    output_embed[special_id] = output_embed[ref_id].clone()
+
+    model_vocab_size = model.get_input_embeddings().weight.shape[0]
+    tokenizer_vocab_size = len(tokenizer)
+    assert model_vocab_size == tokenizer_vocab_size, "tokenizer与model的词表大小不匹配"
+
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
     model.train()

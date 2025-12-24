@@ -8,10 +8,10 @@ from tqdm import tqdm
 # --- 配置 ---
 INPUT_FILE = "data/MATH/sft.jsonl"
 OUTPUT_FILE = "data/MATH/sft_v3.jsonl"
-MODEL_PATH = "models/Qwen2.5-Math-1.5B" 
+MODEL_PATH = "models/Qwen2.5-Math-1.5B"
 MAX_LEN = 2560
-MIN_LEN = 300 
-NUM_PROCESSES = 30
+MIN_LEN = 500
+NUM_PROCESSES = 8
 
 tokenizer = None
 
@@ -87,6 +87,7 @@ def check_quality_worker(line):
 
 def main():
     # 统计行数用于进度条 (如果文件极大，可以跳过这一步直接设 total=None)
+    print(os.getcwd())
     print("正在计算文件行数...")
     with open(INPUT_FILE, 'r', encoding='utf-8') as f:
         total_lines = sum(1 for _ in f)
@@ -110,7 +111,7 @@ def main():
             
             for is_valid, reason, result_str in tqdm(iterator, total=total_lines):
                 if is_valid:
-                    fout.write(result_str + "\n")
+                    fout.write(result_str.replace("</think><answer>", "</think>\\n<answer>") + "\n")
                     valid_count += 1
                 else:
                     reject_stats[reason] = reject_stats.get(reason, 0) + 1
@@ -131,6 +132,4 @@ def main():
     print("=" * 40)
 
 if __name__ == "__main__":
-    # Windows下必须把代码放在 if __name__ == "__main__": 下
-    # Linux下是个好习惯
     main()
