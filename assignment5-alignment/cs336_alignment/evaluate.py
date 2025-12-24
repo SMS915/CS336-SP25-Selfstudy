@@ -6,7 +6,7 @@ import yaml
 import argparse
 from vllm import LLM, SamplingParams
 from typing import List, Dict, Callable, Any
-from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+from cs336_alignment.utils import robust_reward_fn
 from transformers.generation.configuration_utils import GenerationConfig
 
 def load_data(file_path: str) -> List[Dict]:
@@ -84,10 +84,9 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     for i,(output, prompt) in enumerate(zip(outputs, prompts)):
         generated_text = output.outputs[0].text
         avg_len += (len(generated_text) - len(prompt)) / len(outputs)
-        text_for_evaluate = generated_text.replace("</think><answer>", "</think> <answer>")
         example = examples[i]
         truth = example["solution"]
-        metrics = reward_fn(text_for_evaluate, truth)
+        metrics = reward_fn(generated_text, truth)
         if metrics.get("reward", 0.0) == 1.0:
             correct_count += 1
         elif metrics.get("format_reward", 0.0) == 1.0:
@@ -158,7 +157,7 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
                                include_stop_str_in_output=True)
     print(f"最大输出长度为{max_tokens}")
 
-    eval_results = evaluate_vllm(vllm_model=llm, reward_fn=r1_zero_reward_fn, prompts=formatted_input, examples=examples, eval_sampling_params=eval_params)
+    eval_results = evaluate_vllm(vllm_model=llm, reward_fn=robust_reward_fn, prompts=formatted_input, examples=examples, eval_sampling_params=eval_params)
 
     with open(output_path, 'w') as f:
         for res in eval_results:

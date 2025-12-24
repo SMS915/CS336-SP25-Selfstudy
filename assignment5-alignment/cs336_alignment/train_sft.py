@@ -10,10 +10,8 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from torch.optim import AdamW
 
-
-from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
 from cs336_alignment.sft import get_response_log_probs, sft_microbatch_train_step, log_generations
-from cs336_alignment.utils import tokenize_prompt_and_output
+from cs336_alignment.utils import tokenize_prompt_and_output, robust_reward_fn
 
 class SFTDataset(Dataset):
     def __init__(self, data_path, max_samples = None):
@@ -254,7 +252,7 @@ def train(config_path: str, args):
                         tokenizer=tokenizer,
                         prompts=val_prompts,
                         ground_truths=val_truths,
-                        reward_fn=r1_zero_reward_fn,
+                        reward_fn=robust_reward_fn,
                         num_examples_to_log=config["evaluation"]["num_examples_to_log"],
                         max_new_tokens=eval_max_tokens
                     )

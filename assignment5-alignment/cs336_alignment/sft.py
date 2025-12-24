@@ -218,7 +218,7 @@ def log_generations(
         entropies.append(entropy)
         # 记录奖励
         # 预处理文本格式以适配奖励函数
-        metrics = reward_fn(generated_text.replace("</think><answer>", "</think> <answer>"), truth)
+        metrics = reward_fn(generated_text.replace("</think>\\n<answer>", "</think> <answer>"), truth)
         total_rewards.append(metrics.get("reward", 0.0))
         format_rewards.append(metrics.get("format_reward", 0.0))
         answer_rewards.append(metrics.get("answer_reward", 0.0))

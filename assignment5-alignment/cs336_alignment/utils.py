@@ -1,6 +1,7 @@
 import torch
 from typing import List
 import torch.nn.functional as F
+from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
@@ -9,6 +10,21 @@ def pertoken_entropy(logits: torch.Tensor) -> torch.Tensor:
     probs = torch.exp(log_probs)
     entropy = -torch.sum(probs * log_probs, dim=-1)
     return torch.nan_to_num(entropy, nan=0.0)# batch_size, seq_len
+
+
+def robust_reward_fn(response: str, ground_truth: str) -> dict[str, float]:
+    """
+    包装官方的 reward_fn，增加对格式的鲁棒性处理。
+    主要修复 </think><answer> 之间缺失空格的问题。
+    """
+    # 修复空格问题
+    cleaned_response = response.replace("</think><answer>", "</think> <answer>")
+
+    # 修复可能存在的换行问题
+    cleaned_response = cleaned_response.replace("</think>\n<answer>", "</think> <answer>")
+
+    # 调用官方评分函数
+    return r1_zero_reward_fn(cleaned_response, ground_truth)
 
 
 def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], tokenizer: PreTrainedTokenizerBase, max_length: int = 1024):
