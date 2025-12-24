@@ -154,7 +154,7 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
             #   max_model_len=target_max_len
               )
 
-    eval_params = SamplingParams(temperature = temperature, top_p = top_p, max_tokens=max_tokens, repetition_penalty=1.0 ,stop=["</answer>"],
+    eval_params = SamplingParams(temperature = temperature, top_p = top_p, max_tokens=max_tokens ,stop=["</answer>"],
                                include_stop_str_in_output=True)
     print(f"最大输出长度为{max_tokens}")
 

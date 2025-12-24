@@ -5,10 +5,10 @@ example_path: "data/MATH/validation.jsonl"
 prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/sft_filtered_paneled_epoch2_result.jsonl"
+output_path: "results/sft_v3_epoch1_result.jsonl"
 
 # 模型路径 (可以是本地路径或 HuggingFace ID)
-model_path: "checkpoints/sft_v2/epoch2"
+model_path: "checkpoints/sft_v3/epoch0"
 
 max_tokens: 4096
 
