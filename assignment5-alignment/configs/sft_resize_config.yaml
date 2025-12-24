@@ -6,14 +6,14 @@ model:
   attn_implementation: "sdpa"
 
 data:
-  train_path: "data/MATH/sft_v3.jsonl"
+  train_path: "data/MATH/sft_v5_platinum.jsonl"
   valid_path: "data/MATH/validation.jsonl"
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: null
 
 training:
-  output_dir: "checkpoints/sft_resized_v3"
+  output_dir: "checkpoints/sft_v6"
   learning_rate: 1.0e-5
   epochs: 4
 
@@ -30,5 +30,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "sft-qwen-add-special-tokens-1.5b-v3-epoch1"
+  run_name: "sft-qwen-v6_cleaned_cot"
   entity: null 

@@ -7,11 +7,11 @@ from tqdm import tqdm
 
 # --- 配置 ---
 INPUT_FILE = "data/MATH/sft.jsonl"
-OUTPUT_FILE = "data/MATH/sft_v3.jsonl"
+OUTPUT_FILE = "data/MATH/sft_v4.jsonl"
 MODEL_PATH = "models/Qwen2.5-Math-1.5B"
 MAX_LEN = 2560
 MIN_LEN = 500
-NUM_PROCESSES = 8
+NUM_PROCESSES = 32
 
 tokenizer = None
 

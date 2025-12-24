@@ -31,6 +31,7 @@ training:
   epochs_per_rollout_batch: 1
   # train_batch_size: 256
   save_steps: 50
+  warmup_ratio: 0.1
 
   micro_batch_size: 1
   # gradient_accumulation_steps: 128

@@ -1,7 +1,7 @@
 import torch
 from typing import List
 import torch.nn.functional as F
-from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+from cs336_alignment.drgrpo_grader import r1_zero_reward_fn, r1_zero_reward_fn_with_length_panelty
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
@@ -12,7 +12,7 @@ def pertoken_entropy(logits: torch.Tensor) -> torch.Tensor:
     return torch.nan_to_num(entropy, nan=0.0)# batch_size, seq_len
 
 
-def robust_reward_fn(response: str, ground_truth: str) -> dict[str, float]:
+def robust_reward_fn(response: str, ground_truth: str, length_panelty: bool = False) -> dict[str, float]:
     """
     包装官方的 reward_fn，增加对格式的鲁棒性处理。
     主要修复 </think><answer> 之间缺失空格的问题。
@@ -24,10 +24,13 @@ def robust_reward_fn(response: str, ground_truth: str) -> dict[str, float]:
     cleaned_response = cleaned_response.replace("</think>\n<answer>", "</think> <answer>")
 
     # 调用官方评分函数
-    return r1_zero_reward_fn(cleaned_response, ground_truth)
+    if length_panelty:
+        return r1_zero_reward_fn_with_length_panelty(cleaned_response, ground_truth)
+    else:
+        return r1_zero_reward_fn(cleaned_response, ground_truth)
 
 
-def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], tokenizer: PreTrainedTokenizerBase, max_length: int = 1024):
+def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], tokenizer: PreTrainedTokenizerBase, max_length: int = 1024, sft_train = False):
     """
     对提示词（Prompt）和输出（Output）进行分词、拼接、填充，并生成用于训练的掩码。
 
@@ -59,11 +62,18 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
         # 处理 <think> 标签重复的问题
         clean_output = output
         if prompt_c.endswith('<think>') and output_c.startswith('<think>'):
-            clean_output = output_c[7:].lstrip()
+            if sft_train:
+                last_idx = prompt.rfind('<think>')
+                if last_idx != -1:
+                    # 保留 <think> 之前的所有内容（包括可能的空格）
+                    prompt = prompt[:last_idx] 
+            else:
+                clean_output = output_c[:7].lstrip()
 
         # 分词，不自动添加特殊 token
         prompt_ids = tokenizer.encode(prompt, add_special_tokens = False)
         output_ids = tokenizer.encode(clean_output, add_special_tokens = False)
+        output_ids.append(tokenizer.eos_token_id)
 
         token_ids = prompt_ids + output_ids
         # 构建掩码: Prompt 部分为 0，Output 部分为 1

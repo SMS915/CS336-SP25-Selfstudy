@@ -13,6 +13,7 @@ from tqdm import tqdm
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers.optimization import get_cosine_schedule_with_warmup 
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from vllm import LLM, SamplingParams
 # 引入组件
@@ -247,6 +248,18 @@ def train(config_path: str):
     
     start_step = config["model"]["start_step"]
     global_step = start_step if start_step is not None else 0
+    if "warmup_ratio" in config["training"]:
+        warmup_steps = int(n_grpo_steps * config["training"]["warmup_ratio"])
+
+    print(f"Total Steps: {n_grpo_steps}, Warmup Steps: {warmup_steps}")
+
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=warmup_steps,
+        num_training_steps=n_grpo_steps,
+        last_epoch=global_step - 1 
+    )
+
     print(f"从第{global_step}步继续训练")
     pbar = tqdm(total=n_grpo_steps, desc="GRPO Steps")
     pbar.update(global_step)
@@ -295,7 +308,8 @@ def train(config_path: str):
             repeated_ground_truths=all_ground_truths,
             group_size=config["training"]["group_size"],
             advantage_eps=config["training"]["advantage_eps"],
-            normalize_by_std=normalize_by_std
+            normalize_by_std=normalize_by_std,
+            length_panelty=config["training"].get("length_panelty", False)
         )
         # 转为 Tensor 并移到 GPU
         advantages = advantages.to(device).unsqueeze(1) # (B*G, 1)
@@ -405,11 +419,13 @@ def train(config_path: str):
 
             # End of Micro-batches -> Update
             grad_norm = torch.nn.utils.clip_grad_norm_(policy.parameters(), config["training"]["max_grad_norm"])
+            scheduler.step()
             optimizer.step()
             optimizer.zero_grad()
             epoch_metrics["loss"].append(current_epoch_loss)
             epoch_metrics["clip_ratio"].append(current_epoch_clip)
             epoch_metrics["approx_kl"].append(current_epoch_kl)
+        current_lr = scheduler.get_last_lr()[0]
         global_step += 1
         pbar.update(1)
         
@@ -424,7 +440,7 @@ def train(config_path: str):
             "train/loss": np.mean(epoch_metrics["loss"]),
             "train/clip_fraction": np.mean(epoch_metrics["clip_ratio"]),
             "train/approx_kl": np.mean(epoch_metrics["approx_kl"]),
-            "train/lr": optimizer.param_groups[0]['lr'],
+            "train/lr": current_lr,
             "train/grad_norm": grad_norm.item(),
             
             # 行为特征

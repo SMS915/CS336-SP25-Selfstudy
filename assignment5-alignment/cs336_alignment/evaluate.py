@@ -72,6 +72,7 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     print(f"开始生成{len(prompts)}条数据")
     start_time = time.time()
     # vllm_model.generate 批处理，比逐条循环生成效率更高
+    # prompts = prompts[:500]
     outputs = vllm_model.generate(prompts, eval_sampling_params)
     end_time = time.time()
     print(f"生成完成，共用时{end_time - start_time}秒")

@@ -159,6 +159,13 @@ def log_generations(
     Returns:
         Dict[str, float]: 包含平均奖励、长度、熵等统计指标的字典。
     """
+    try:
+        ans_end_id = tokenizer.convert_tokens_to_ids("</answer>")
+        print(f"Eval Tokenizer </answer> ID: {ans_end_id}")
+        if ans_end_id == tokenizer.unk_token_id:
+            print("❌ FATAL: 评估脚本用的 Tokenizer 不认识 </answer>")
+    except:
+        print("❌ FATAL: Tokenizer 出错")
     # 随机抽样
     n = min(num_examples_to_log, len(prompts))
     indices = random.sample(range(len(prompts)), n)
@@ -175,7 +182,8 @@ def log_generations(
     answer_rewards = []
     lengths = []
     entropies = []
-
+    tag_count = 0
+    run_away_count = 0
     print(f"\n[Log Generation] Sampling {n} examples...")
 
     # 3. 逐条生成与评估
@@ -207,9 +215,13 @@ def log_generations(
 
         # 解析生成的文本 (去掉 Input Prompt 部分)
         generated_ids = outputs.sequences[0][input_len:]
-        generated_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
-
+        generated_text = tokenizer.decode(generated_ids)
+        has_tag = '</answer>' in generated_text
         
+        if has_tag:
+            tag_count += 1
+            if len(generated_ids) >= int(max_new_tokens * 0.95):
+                run_away_count += 1
         # 记录长度
         lengths.append(len(generated_ids))
         
@@ -218,17 +230,24 @@ def log_generations(
         entropies.append(entropy)
         # 记录奖励
         # 预处理文本格式以适配奖励函数
-        metrics = reward_fn(generated_text.replace("</think>\\n<answer>", "</think> <answer>"), truth)
+        metrics = reward_fn(generated_text, truth)
         total_rewards.append(metrics.get("reward", 0.0))
         format_rewards.append(metrics.get("format_reward", 0.0))
         answer_rewards.append(metrics.get("answer_reward", 0.0))
 
         # D. 打印第一条作为直观展示
-        if i == 0:
+        if i < 3:
+            # print(f"Tail IDs: {outputs.sequences[0][-20:].tolist()}")
+            # print(f"Tail Decode: {tokenizer.decode(outputs.sequences[0][-20:], skip_special_tokens=False)}")
+            # ans_end_id = tokenizer.convert_tokens_to_ids("</answer>")
+            # if ans_end_id in generated_ids:
+            #     print(f"✅ 模型确实生成了 ID {ans_end_id}！是解码或Reward函数的问题。")
+            # else:
+            #     print(f"❌ 模型根本没生成 ID {ans_end_id}！是训练的问题。")
             print("-" * 40)
             print(f" Prompt: {prompt[:50]}...")
-            print(f"Generated: {generated_text[:100]}... (Len: {len(generated_ids)})")
-            print(f"Truth: {truth[:50]}...")
+            print(f"Generated: {generated_text[-100:]}... (Len: {len(generated_ids)})")
+            print(f"Truth: {truth[-100:]}...")
             print(f"Metrics: {metrics} | Entropy: {entropies[-1]:.2f}")
             print("-" * 40)
 
@@ -243,6 +262,8 @@ def log_generations(
         "eval/answer_reward": np.mean(answer_rewards),
         "eval/length": np.mean(lengths),
         "eval/entropy": np.mean(entropies) if entropies else 0.0,
+        # "eval/tag_rate": tag_count / n,
+        # "eval/runaway_rate": run_away_count / n
     }
     
     return stats

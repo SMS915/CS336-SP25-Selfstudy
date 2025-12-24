@@ -10,7 +10,8 @@ def compute_group_normalized_rewards(reward_fn: Callable,
                                      repeated_ground_truths: List[str], 
                                      group_size: int, 
                                      advantage_eps: float,
-                                     normalize_by_std: bool) -> tuple[torch.Tensor, torch.Tensor, Dict[str, float]]:
+                                     normalize_by_std: bool,
+                                     length_panelty: bool = False) -> tuple[torch.Tensor, torch.Tensor, Dict[str, float]]:
     """
     计算基于组归一化（Group Normalization）的奖励优势（Advantage）。
 
@@ -34,7 +35,7 @@ def compute_group_normalized_rewards(reward_fn: Callable,
     raw_rewards_list = []
     format_rewards_list = []
     for response, truth in zip(rollout_responses, repeated_ground_truths):
-        reward_metric = reward_fn(response, truth)
+        reward_metric = reward_fn(response, truth, length_panelty)
         raw_rewards_list.append(reward_metric.get('reward', 0.0))
         format_rewards_list.append(reward_metric.get('format_reward', 0.0))
     # 将奖励转换为Tensor, 并reshape到[batch_size, group_size]的形状
