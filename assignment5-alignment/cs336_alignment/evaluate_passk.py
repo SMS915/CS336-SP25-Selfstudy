@@ -81,14 +81,17 @@ def evaluate_vllm_pass_k(
             
             generated_text = output.outputs[0].text
             example = examples[original_idx]
-            truth = example["solution"]
-            
+            truth = example.get("answer") or example.get("solution")
+            if truth is None:
+                print(f"{original_idx} has no answer or solution")
+                truth = ""
+            assert isinstance(truth, str)
             # 调用 Reward 函数评分
             metrics = reward_fn(generated_text, truth)
             
             result_entry = {
                 "problem": example["problem"],
-                "gold_solution": example["solution"],
+                "gold_solution": truth,
                 "generated_text": generated_text,
                 "metrics": metrics,
                 "attempt_id": attempt # 记录是在第几次尝试做出来的
