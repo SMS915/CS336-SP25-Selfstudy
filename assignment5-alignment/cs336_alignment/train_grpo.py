@@ -202,6 +202,8 @@ def train(config_path: str):
 
     
     optimizer = AdamW(policy.parameters(), lr=float(config["training"]["learning_rate"]))
+    for param_group in optimizer.param_groups:
+        param_group['initial_lr'] = float(config["training"]["learning_rate"])
 
     # 初始化vllm
     print("加载vllm (Generation)...")

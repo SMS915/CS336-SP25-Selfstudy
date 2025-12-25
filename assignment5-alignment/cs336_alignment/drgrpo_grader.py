@@ -1058,39 +1058,38 @@ def r1_zero_reward_fn_with_length_panelty(response, ground_truth, fast=True):
     reward = 0.0
 
     if "</think> <answer>" in response and "</answer>" in response:
+        format_reward = 1.0
         model_answer = response.split("<answer>")[-1].replace("</answer>", "")
         if "\\boxed" in model_answer:
-            model_answer = extract_answer(model_answer)
-            if model_answer is None:
-                format_reward = 1.0
+            extracted = extract_answer(model_answer)
+            model_answer = extracted
+        
+        if model_answer is None:
+            pass
+        else:
+            if isinstance(ground_truth, float) or isinstance(ground_truth, int):
+                ground_truth = str(ground_truth)
+            if isinstance(ground_truth, str):
+                is_correct = grade(model_answer, ground_truth, fast)
+            elif isinstance(ground_truth, list):
+                is_correct = False
+                for gt in ground_truth:
+                    is_correct |= grade(model_answer, gt, fast)
+            if is_correct:
+                answer_reward = 1.0
+                reward = 1.0
+
+            else:
                 answer_reward = 0.0
                 reward = 0.0
-
-        if isinstance(ground_truth, float) or isinstance(ground_truth, int):
-            ground_truth = str(ground_truth)
-        if isinstance(ground_truth, str):
-            is_correct = grade(model_answer, ground_truth, fast)
-        elif isinstance(ground_truth, list):
-            is_correct = False
-            for gt in ground_truth:
-                is_correct |= grade(model_answer, gt, fast)
-        if is_correct:
-            format_reward = 1.0
-            answer_reward = 1.0
-            reward = 1.0
-
-        else:
-            # Formatted but wrong answer; no format reward to avoid hacking.
-            format_reward = 1.0
-            answer_reward = 0.0
-            reward = 0.0
     else:
         # Unformatted.
         format_reward = 0.0
         answer_reward = 0.0
         reward = 0.0
-
-    reward -= panelty
+    
+    if format_reward != 0.0:   
+        reward -= panelty
 
     return {
         "format_reward": format_reward,

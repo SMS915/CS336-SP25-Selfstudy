@@ -23,10 +23,12 @@ def calculate_response_token_length(output_path, model_path):
     
     token_lengths = []
     char_lengths = []
-    empty_count = 0
-    format_failed_count = []
+    format_failed_list = []
+    answer_correct_list = []
     length_bound_count = 0
-    
+    correct_count = 0
+    format_count = 0
+
     with open(output_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
         
@@ -38,12 +40,6 @@ def calculate_response_token_length(output_path, model_path):
             # 提取生成的文本
             text = data.get("generated_text", "")
             metrics = data.get("metrics")
-            
-            if not text:
-                empty_count += 1
-                token_lengths.append(0)
-                char_lengths.append(0)
-                continue
 
 
             # 计算字符长度
@@ -52,9 +48,12 @@ def calculate_response_token_length(output_path, model_path):
             # 计算 Token 长度
             tokens = tokenizer.encode(text, add_special_tokens=False)
             if metrics["format_reward"] == 0:
-                format_failed_count.append(len(tokens))
+                format_failed_list.append(len(tokens))
                 if len(tokens) >= 4050:
                     length_bound_count += 1
+            elif metrics["answer_reward"] == 1.0:
+                answer_correct_list.append(len(tokens))
+            
             token_lengths.append(len(tokens))
             
         except json.JSONDecodeError:
@@ -73,19 +72,25 @@ def calculate_response_token_length(output_path, model_path):
     print(f"真实输出长度统计 (基于 {os.path.basename(output_path)})")
     print("="*50)
     print(f"样本总数: {len(token_lengths)}")
-    print(f"空输出数: {empty_count}")
-    print(f"被推理长度限制的failed数:   {length_bound_count}")
-
+    print(f"正确率: {len(answer_correct_list) / len(token_lengths):.2%}")
+    print(f"格式错误率: {len(format_failed_list) / len(token_lengths):.2%}")
+    print(f"格式正确答案错误率: {(len(token_lengths) - len(format_failed_list) - len(answer_correct_list)) / len(token_lengths):.2%}")
     print("-" * 50)
     print("【Token 维度】 (用于检查 max_tokens)")
     print(f"平均长度 (Mean):   {np.mean(token_lengths):.2f}")
     print(f"中位数 (Median):   {np.median(token_lengths):.2f}")
     print(f"最大长度 (Max):    {np.max(token_lengths)}")
     print(f"最小长度 (Min):    {np.min(token_lengths)}")
-    print(f"格式错误平均长度 (Mean):   {np.mean(format_failed_count):.2f}")
-    print(f"格式错误中位数 (Median):   {np.median(format_failed_count):.2f}")
-    print(f"格式错误最大长度 (Max):    {np.max(format_failed_count)}")
-    print(f"格式错误最小长度 (Min):    {np.min(format_failed_count)}")
+    print("\n")
+    print(f"答案正确平均长度 (Mean):   {np.mean(answer_correct_list):.2f}")
+    print(f"答案正确中位数 (Median):   {np.median(answer_correct_list):.2f}")
+    print(f"答案正确最大长度 (Max):    {np.max(answer_correct_list)}")
+    print(f"答案正确最小长度 (Min):    {np.min(answer_correct_list)}")
+    print("\n")
+    print(f"格式错误平均长度 (Mean):   {np.mean(format_failed_list):.2f}")
+    print(f"格式错误中位数 (Median):   {np.median(format_failed_list):.2f}")
+    print(f"格式错误最大长度 (Max):    {np.max(format_failed_list)}")
+    print(f"格式错误最小长度 (Min):    {np.min(format_failed_list)}")
     print("-" * 50)
     print("【字符维度】")
     print(f"平均字符数:        {np.mean(char_lengths):.2f}")
@@ -105,7 +110,7 @@ def calculate_response_token_length(output_path, model_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_path", type=str, required=True, help="你的评估结果jsonl文件路径")
-    parser.add_argument("--model_path", type=str, default="checkpoints/sft_v2/epoch1", help="模型路径")
+    parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B", help="模型路径")
     # parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B", help="模型路径")
     args = parser.parse_args()
     
