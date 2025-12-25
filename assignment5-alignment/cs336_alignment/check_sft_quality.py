@@ -4,13 +4,8 @@ import sys
 import numpy as np
 from tqdm import tqdm
 from typing import List, Dict
+from cs336_alignment.utils import robust_reward_fn
 
-# 尝试导入 reward_fn，确保路径正确
-try:
-    from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
-except ImportError:
-    print("错误: 无法导入 r1_zero_reward_fn。请确保 cs336_alignment 文件夹在当前路径下或 PYTHONPATH 中。")
-    sys.exit(1)
 
 def load_data(file_path: str) -> List[Dict]:
     examples = []
@@ -76,7 +71,7 @@ def evaluate_sft_dataset(file_path: str, output_path: str = None, max_samples: i
         text_for_evaluate = response.replace("</think><answer>", "</think> <answer>")
         
         # 3. 调用 Reward Function
-        metrics = r1_zero_reward_fn(text_for_evaluate, truth)
+        metrics = robust_reward_fn(text_for_evaluate, truth)
         
         # 4. 统计指标 (复刻 evaluate_vllm 的判断逻辑)
         if metrics.get("reward", 0.0) == 1.0:
