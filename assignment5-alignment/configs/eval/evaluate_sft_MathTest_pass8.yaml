@@ -5,17 +5,16 @@ example_path: "data/MATH/validation.jsonl"
 prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/grpo_result.jsonl"
+output_path: "results/sft_v6_pass_8.jsonl"
 
-# 模型路径 (可以是本地路径或 HuggingFace ID)
-model_path: "checkpoints/grpo_v2_normalize_adv/checkpoint-step-50"
+model_path: "checkpoints/sft_v6_no_resize_warmup/epoch0"
 
-max_tokens: 2048
+max_tokens: 4096
 
 temperature: 0.7
 
-max_samples: 500
-
 top_p: 0.95
+
+max_samples: 5000
 
 pass_k: 8
