@@ -247,7 +247,9 @@ def train(config_path: str):
     epochs_per_batch = config["training"]["epochs_per_rollout_batch"]
     clip_range = config["training"]["clip_range"]
     normalize_by_std = config["training"].get("normalize_by_std", True)
-    
+    remove_length_norm = config["training"].get("remove_length_norm", False)
+    fixed_norm_length = config["training"].get("fixed_norm_length", 2048)
+   
     start_step = config["model"]["start_step"]
     global_step = start_step if start_step is not None else 0
     if "warmup_ratio" in config["training"]:
@@ -267,7 +269,8 @@ def train(config_path: str):
     pbar.update(global_step)
     # 无限循环数据，直到达到 n_grpo_steps
     data_iter = iter(dataloader)
-    best_reward = config["model"]["best_reward"] if config["model"].get("best_reward", 0.0) != 0.0 else 0.0
+    best_reward = config["model"].get("best_reward", 0.0)
+
     print(f"当前最佳reward为{best_reward}")
     while global_step < n_grpo_steps:
         # -----------------------------------------
@@ -314,7 +317,7 @@ def train(config_path: str):
             length_panelty=config["training"].get("length_panelty", False)
         )
         # 转为 Tensor 并移到 GPU
-        advantages = advantages.to(device).unsqueeze(1) # (B*G, 1)
+        advantages = advantages.to(device).unsqueeze(1)
         raw_rewards = raw_rewards.to(device).unsqueeze(1)
 
 
@@ -339,7 +342,8 @@ def train(config_path: str):
         
         # 使用生成数据的策略模型计算对数概率。
         # 这些 "旧的" log_probs 将作为基准，用于在损失函数中计算概率比率。
-        inference_batch_size = 2
+
+        inference_batch_size = config["training"].get("inference_batch_size", 2)
         old_log_probs_list = []
         token_entropy_list = []
         policy.eval()
@@ -370,7 +374,7 @@ def train(config_path: str):
             mean_token_entropy = 0.0
 
         # -----------------------------------------
-        # Phase 2: Optimization (Training)
+        # 优化阶段
         # -----------------------------------------
         train_dataset_len = len(input_ids)
         # 打乱
@@ -411,7 +415,9 @@ def train(config_path: str):
                     loss_type=config["training"]["loss_type"],
                     advantages=mb_adv,
                     old_log_probs=mb_old_lp,
-                    cliprange=clip_range
+                    cliprange=clip_range,
+                    remove_length_norm=remove_length_norm,
+                    fixed_norm_length = fixed_norm_length
                     # raw_rewards=mb_rewards
                 )
 

@@ -9,7 +9,7 @@ output_path: "results/sft_gsm8k_pass1.jsonl"
 
 model_path: "checkpoints/sft_v6_no_resize_warmup/epoch0"
 
-max_tokens: 1024
+max_tokens: 2048
 
 temperature: 0
 

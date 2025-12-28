@@ -10,8 +10,8 @@ model:
   wandb_id: "wg24w1ep"
 
 data:
-  train_path: "data/MATH/sft.jsonl"
-  valid_path: "data/MATH/validation.jsonl"
+  train_path: "data/CoT/Bespoke-Stratos-17k-R1-tag.jsonl"
+  valid_path: "data/MATH/test_split.jsonl"
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: 5000
@@ -30,18 +30,27 @@ training:
   sampling_min_tokens: 4
   sampling_max_tokens: 4096
   epochs_per_rollout_batch: 1
-  # train_batch_size: 256
   save_steps: 50
 
   micro_batch_size: 1
-  # gradient_accumulation_steps: 128
-  gpu_memory_utilization: 0.25
+  gradient_checkpointing: True
   loss_type: "grpo_clip"
   clip_range: 0.2
   max_grad_norm: 1.0
 
-  normalize_by_std: True
+  normalize_by_std: False
   length_panelty: True
+  remove_length_norm: True
+
+  # === vllm 参数 ===
+  enforce_eager: True
+  enable_prefix_caching: False
+  gpu_memory_utilization: 0.25
+
+  stop_tokens: ["</answer>"]
+
+  fixed_norm_length: 2048
+  
 
 evaluation:
   eval_every_steps: 10

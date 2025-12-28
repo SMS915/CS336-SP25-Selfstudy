@@ -7,25 +7,28 @@ import argparse
 import numpy as np
 from vllm import LLM, SamplingParams
 from typing import List, Dict, Callable, Any
-# 假设 utils 里有 robust_reward_fn，如果没有请替换为你的实际 reward 函数
-from cs336_alignment.utils import robust_reward_fn
+from transformers.models.auto.tokenization_auto import AutoTokenizer
+
+# 引用你 utils.py 中的函数
+from cs336_alignment.utils import format_prompt_for_instruct
+from cs336_alignment.drgrpo_grader import qwen_instruct_reward_fn
 
 def load_data(file_path: str, max_samples: int = 0) -> List[Dict]:
     examples = []
     with open(file_path, "r", encoding="utf-8") as f:
         for i, line in enumerate(f):
-            # 如果 max_samples > 0 且当前索引已达到限制，则停止读取
             if max_samples > 0 and i >= max_samples:
                 break
             examples.append(json.loads(line))
-
-    print(f"已加载数据: {len(examples)} 条 (限制: {max_samples if max_samples > 0 else '全部'})")
+    print(f"已加载数据: {len(examples)} 条")
     return examples
 
-def formatting_prompt(examples: List[Dict], prompt_template: str) -> List[str]:
+# --- 修改后的格式化函数 ---
+def formatting_prompt_qwen(examples: List[Dict], tokenizer: Any) -> List[str]:
+    """使用官方模板构建适合 Instruct 模型的 Prompt"""
     prompts = []
     for ex in examples:
-        prompt = prompt_template.replace("{question}", ex["problem"])
+        prompt = format_prompt_for_instruct(ex["problem"], tokenizer)
         prompts.append(prompt)
     return prompts
 
@@ -37,98 +40,63 @@ def evaluate_vllm_pass_k(
     eval_sampling_params: SamplingParams,
     pass_k: int = 1,
 ) -> List[Dict]:
-    """
-    实现了 Pass@K 的评估逻辑，并带有 Early Stopping（早停）机制。
-    如果某道题在第 i 次尝试做对了，就不会进行第 i+1 次生成，节省算力。
-    """
+
     total_samples = len(prompts)
-    print(f"开始 Pass@{pass_k} 评估，共 {total_samples} 条数据")
-    
-    # 初始化结果列表，长度与样本一致，初始为 None
-    # 最终这个列表里存的将是：做对的那一次生成的 result，或者（如果K次都错）最后一次错误的 result
     final_results = [None] * total_samples
-    
-    # 记录目前还需要生成的样本索引
-    # 初始状态：所有题目都需要跑
     pending_indices = list(range(total_samples))
     pass_m_history = []
-    
+    solved_indices = set()
     start_time = time.time()
-    solved_indices = set() 
-    # 循环 K 次
+
     for attempt in range(1, pass_k + 1):
-        if not pending_indices:
-            print("所有题目已在之前的尝试中解决，提前结束评估。")
-            current_acc = len(solved_indices) / total_samples
+        if not pending_indices: 
+            print(f"所有题目已在第 {attempt-1} 轮全部解决，正在填充后续数据...")
+            # 将剩余的轮次全部填为 1.0
             while len(pass_m_history) < pass_k:
                 pass_m_history.append(1.0)
             break
-            
         print(f"=== 尝试第 {attempt}/{pass_k} 轮 (剩余 {len(pending_indices)} 题) ===")
-        
-        # 1. 准备当前轮次的 Prompts
         current_prompts = [prompts[i] for i in pending_indices]
-        
-        # 2. 批量生成 (vLLM 内部会自动批处理)
-        # 注意：这里我们每次只生成 1 个 (n=1)，靠外层循环来实现 K
         outputs = vllm_model.generate(current_prompts, eval_sampling_params, use_tqdm=True)
         
-        # 下一轮需要跑的索引列表
         next_pending_indices = []
-        
-        # 3. 检查结果
         for idx_in_pending, output in enumerate(outputs):
-            original_idx = pending_indices[idx_in_pending] # 对应原始数据的索引
-            
+            original_idx = pending_indices[idx_in_pending]
             generated_text = output.outputs[0].text
             example = examples[original_idx]
-            truth = example.get("answer") or example.get("solution")
-            if truth is None:
-                print(f"{original_idx} has no answer or solution")
-                truth = ""
+            truth = example.get("answer") or example.get("solution") or ""
 
-            # 调用 Reward 函数评分
             metrics = reward_fn(generated_text, truth)
-            
             result_entry = {
                 "problem": example["problem"],
                 "gold_solution": truth,
                 "generated_text": generated_text,
                 "metrics": metrics,
-                "attempt_id": attempt # 记录是在第几次尝试做出来的
+                "attempt_id": attempt
             }
-            
-            # 更新最终结果 (无论对错先存进去，如果是错的，可能会被下一轮覆盖)
             final_results[original_idx] = result_entry
             
-            # 判断是否做对 (Reward == 1.0)
             if metrics.get("reward", 0.0) == 1.0:
                 solved_indices.add(original_idx)
-                pass 
-            else:
-                # 没做对，如果还有剩余次数，加入下一轮
-                if attempt < pass_k:
-                    next_pending_indices.append(original_idx)
-        
-        # 更新待处理列表
-        pending_indices = next_pending_indices
-        current_acc = len(solved_indices) / total_samples
-        pass_m_history.append(current_acc)
+            elif attempt < pass_k:
+                next_pending_indices.append(original_idx)
 
-        print(f">>> 累计解决率 (Pass@{attempt}): {current_acc:.2%}")
-    
+        pending_indices = next_pending_indices
+        pass_m_history.append(len(solved_indices) / total_samples)
+
+        print(f">>> 累计解决率 (Pass@{attempt}): {len(solved_indices) / total_samples:.2%}")
+
     print("\n" + "="*20)
     print(f"Pass@1 to Pass@{pass_k} 趋势数据:")
-    print("[", end=' ')
+    print("[", end='')
     for i, acc in enumerate(pass_m_history):
-        print(f"{acc:.3f}", end=', ') if i != len(pass_m_history) - 1 else print(f"{acc:.3f}")
+        print(f"{acc:.3f}", end=', ') if i != len(pass_m_history) - 1 else print(f"{acc:.3f}", end="")
     print("]")
     print("="*20 + "\n")
 
     end_time = time.time()
     print(f"评估完成，Pass@{pass_k} 总耗时: {end_time - start_time:.2f}秒")
 
-    # --- 统计最终结果 ---
     correct_count = 0
     ans_error_count = 0
     format_error_count = 0
@@ -158,60 +126,59 @@ def evaluate_vllm_pass_k(
     print(f"格式错误 (最终状态): {format_error_count / total_samples:.2%}")
     print(f"平均生成的字符长度: {avg_len:.2f}")
     print("="*40 + "\n")
-    
+
     return final_results
 
 def run_evaluate(config: Dict[str, Any]):
-    """
-    Args:
-        config (Dict): 包含所有参数的字典
-    """
     max_samples = config.get('max_samples', 0)
     examples = load_data(config['example_path'], max_samples)
-    with open(config['prompt_path'], 'r') as f:
-        prompt_template = f.read()
     
-    formatted_input = formatting_prompt(examples=examples, prompt_template=prompt_template)
+    # 1. 加载 Tokenizer (用于 Prompt 模板渲染)
+    tokenizer = AutoTokenizer.from_pretrained(config['model_path'], trust_remote_code=True)
+
+    test_prompt = format_prompt_for_instruct("1+1=?", tokenizer)
+    print(f"--- Prompt Sample ---\n{test_prompt}\n---------------------")
     
-    # vLLM 初始化
+    # 2. 格式化 Prompt
+    formatted_input = formatting_prompt_qwen(examples=examples, tokenizer=tokenizer)
+    
+    # 3. 初始化 vLLM
     llm = LLM(
         model=config['model_path'], 
         dtype="bfloat16", 
-        gpu_memory_utilization=0.95, 
+        gpu_memory_utilization=0.90, # 稍微调低一点点防止突发 OOM
         trust_remote_code=True,
-        # max_model_len=8192 # 如果遇到显存不够可以开启
     )
 
-    # 采样参数配置
-    # 注意：这里 max_tokens 起到了“长度截断”的作用
-    # 如果模型生成超过这个长度，vLLM 会强制停止，且 finish_reason 为 length
+    # 4. 适配 Qwen-Instruct 的采样参数
+    # Qwen-Math-Instruct 官方推荐停止符
+    stop_tokens = ["<|im_end|>", "<|endoftext|>", "\n\n\n"] 
+    if config.get('use_r1_format', False):
+        stop_tokens.append("</answer>")
+
     eval_params = SamplingParams(
-        temperature=config.get('temperature', 1.0), 
-        top_p=config.get('top_p', 1.0), 
-        max_tokens=config.get('max_tokens', 1024),
-        stop=["</answer>"], # 遇到这个标签停止
+        temperature=config.get('temperature', 0.7),
+        top_p=config.get('top_p', 0.9), 
+        max_tokens=config.get('max_tokens', 2048),
+        stop=stop_tokens,
         include_stop_str_in_output=True,
-        n=1 # 每次只生成一个，通过外层循环控制 Pass@K
+        n=1
     )
-    
-    print(f"最大输出 Token 限制 (截断): {config.get('max_tokens', 1024)}")
-    print(f"Temperature: {config.get('temperature', 1.0)}")
-    print(f"Pass K: {config.get('pass_k', 1)}")
 
-    # 执行 Pass@K 评估
+    # 执行评估
     eval_results = evaluate_vllm_pass_k(
         vllm_model=llm, 
-        reward_fn=robust_reward_fn, 
+        reward_fn=qwen_instruct_reward_fn, 
         prompts=formatted_input, 
         examples=examples, 
         eval_sampling_params=eval_params,
         pass_k=config.get('pass_k', 1)
     )
 
+    # 保存结果
     with open(config['output_path'], 'w') as f:
         for res in eval_results:
             f.write(json.dumps(res) + "\n")
-    print(f"结果已保存至: {config['output_path']}")
 
 def parse_arguments() -> Dict[str, Any]:
     parser = argparse.ArgumentParser(description="Evaluate vLLM model performance with Pass@K.")
@@ -221,7 +188,6 @@ def parse_arguments() -> Dict[str, Any]:
 
     # 核心参数
     parser.add_argument('--example_path', type=str, help='Evaluation dataset (jsonl).')
-    parser.add_argument('--prompt_path', type=str, help='Prompt template file.')
     parser.add_argument('--output_path', type=str, help='Save path.')
     parser.add_argument('--model_path', type=str, help='Model checkpoint.')
     
@@ -260,7 +226,7 @@ def parse_arguments() -> Dict[str, Any]:
     return final_config
 
 def validate_config(config: Dict[str, Any]) -> None:
-    required_keys = ['example_path', 'prompt_path', 'output_path', 'model_path']
+    required_keys = ['example_path', 'output_path', 'model_path']
     missing_keys = [key for key in required_keys if key not in config]
     if missing_keys:
         print(f"Error: Missing required keys: {missing_keys}")

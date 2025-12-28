@@ -124,3 +124,16 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
         "labels": labels,
         "response_mask": shifted_response_masks
     }
+
+def format_prompt_for_instruct(problem: str, tokenizer: PreTrainedTokenizerBase):
+    messages = [
+        {"role": "system", "content": "Please reason step by step, and put your final answer within \\boxed{}."},
+        {"role": "user", "content": problem}
+    ]
+    # 使用官方模板处理 (自动添加 <|im_start|> 等)
+    text = tokenizer.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=True
+    )
+    return text

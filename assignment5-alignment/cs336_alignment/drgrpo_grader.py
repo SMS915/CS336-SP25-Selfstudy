@@ -1129,3 +1129,45 @@ def question_only_reward_fn(response, ground_truth, fast=True):
             "answer_reward": 0.0,
             "reward": 0.0
         }
+    
+
+
+def qwen_instruct_reward_fn(response, ground_truth, fast=True):
+    res = {"reward": 0.0, "format_reward": 0.0, "answer_reward": 0.0}
+
+    # 检查格式，这里比较简单，不要求think tag
+    if "\\boxed" not in response:
+        return res
+    
+    res["format_reward"] = 1.0
+    model_answer = extract_answer(response)
+
+    # 检查解析是否成功
+    if model_answer is None or str(model_answer).strip() == "":
+        return res
+
+    # 统一转换数值类型
+    if isinstance(ground_truth, (float, int)):
+        ground_truth = str(ground_truth)
+
+    is_correct = False
+    if isinstance(ground_truth, str):
+        is_correct = grade(model_answer, ground_truth, fast)
+    elif isinstance(ground_truth, list):
+        for gt in ground_truth:
+            if grade(model_answer, gt, fast):
+                is_correct = True
+                break
+
+    # 更新 Reward
+    if is_correct:
+        res["answer_reward"] = 1.0
+        res["reward"] = 1.0
+    else:
+        res["answer_reward"] = 0.0
+        res["reward"] = 0.0
+
+    return res
+    
+    
+

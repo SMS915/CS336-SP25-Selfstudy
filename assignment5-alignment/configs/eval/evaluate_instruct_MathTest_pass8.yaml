@@ -1,9 +1,6 @@
 # 数据集路径
 example_path: "data/MATH/validation.jsonl"
 
-# Prompt 模板路径
-prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
-
 # 结果保存路径
 output_path: "results/instruct_pass_8.jsonl"
 

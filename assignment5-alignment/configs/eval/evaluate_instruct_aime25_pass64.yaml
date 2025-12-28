@@ -1,8 +1,8 @@
 # 数据集路径
-example_path: "data/MATH/validation.jsonl"
+example_path: "data/AIME/aime2025_test.jsonl"
 
 # 结果保存路径
-output_path: "results/instruct_math500_pass_64.jsonl"
+output_path: "results/baseline_pass_64.jsonl"
 
 model_path: "models/Qwen2.5-Math-1.5B-Instruct"
 
@@ -12,6 +12,6 @@ temperature: 0.7
 
 top_p: 0.95
 
-max_samples: 500
+max_samples: 30
 
 pass_k: 64

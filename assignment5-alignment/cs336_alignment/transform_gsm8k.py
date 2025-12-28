@@ -4,9 +4,9 @@ from tqdm import tqdm
 
 # --- 配置路径 ---
 # 你的本地源文件路径
-INPUT_FILE = "data/gsm8k/test.jsonl"
+INPUT_FILE = "data/gsm8k/train.jsonl"
 # 输出给评测脚本用的文件路径
-OUTPUT_FILE = "data/gsm8k/test_clean.jsonl"
+OUTPUT_FILE = "data/gsm8k/train_clean.jsonl"
 
 def process_gsm8k():
     if not os.path.exists(INPUT_FILE):
