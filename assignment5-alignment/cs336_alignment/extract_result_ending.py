@@ -26,29 +26,30 @@ def extract_tail(input_file, output_file, key_name="generated_text", length=30, 
 
                 try:
                     data = json.loads(line)
-
-                    # --- 核心筛选逻辑 ---
-                    # 1. 获取 attempt_id (如果没有，默认为 1，确保兼容旧数据)
-                    # 2. 如果指定了 pass_k，且当前 attempt_id > pass_k，则跳过
+                    # 获取 attempt_id (如果没有，默认为 1，确保兼容旧数据)
                     current_attempt = data.get("attempt_id")
 
+                    # 如果指定了 pass_k，且当前 attempt_id > pass_k，则跳过
                     if pass_k is not None and current_attempt is not None:
                         if current_attempt > pass_k:
                             continue
 
-                            # --- 提取内容逻辑 ---
                     # 兼容常见字段名
                     content = data.get(key_name) or data.get("generatedtext") or data.get("response") or data.get(
                         "output")
 
                     if content:
                         # 提取最后 N 个字符
-                        tail = content[-length:]
+                        tag_idx = content.rfind('</think>')
+                        if tag_idx != -1:
+                            tail = content[tag_idx:]
+                        else:
+                            tail = content[-length:]
 
                         # 将换行符转义，保证 txt 一行对应一条数据
                         tail_escaped = tail.replace('\n', '\\n').replace('\r', '\\r')
 
-                        # 可选：可以在前面加上 attempt_id 方便 Debug
+                        # 在前面加上 attempt_id 方便查看
                         prefix = f"[id:{current_attempt}] " if current_attempt is not None else ""
 
                         fout.write(f"{prefix}{tail_escaped}\n")
@@ -63,12 +64,12 @@ def extract_tail(input_file, output_file, key_name="generated_text", length=30, 
                     continue
 
         print("-" * 40)
-        print(f"✅ 完成！结果已保存至: {output_file}")
+        print(f"完成！结果已保存至: {output_file}")
         print(f"原始行数: {len(lines)}")
         print(f"提取行数: {extracted_count}")
 
     except FileNotFoundError:
-        print(f"❌ 错误: 找不到文件 {input_file}")
+        print(f"错误: 找不到文件 {input_file}")
 
 
 if __name__ == "__main__":
