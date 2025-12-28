@@ -54,11 +54,12 @@ def evaluate_vllm_pass_k(
     pass_m_history = []
     
     start_time = time.time()
-    
+    solved_indices = set() 
     # 循环 K 次
     for attempt in range(1, pass_k + 1):
         if not pending_indices:
             print("所有题目已在之前的尝试中解决，提前结束评估。")
+            current_acc = len(solved_indices) / total_samples
             while len(pass_m_history) < pass_k:
                 pass_m_history.append(1.0)
             break
@@ -85,7 +86,7 @@ def evaluate_vllm_pass_k(
             if truth is None:
                 print(f"{original_idx} has no answer or solution")
                 truth = ""
-            assert isinstance(truth, str)
+
             # 调用 Reward 函数评分
             metrics = reward_fn(generated_text, truth)
             
@@ -102,7 +103,7 @@ def evaluate_vllm_pass_k(
             
             # 判断是否做对 (Reward == 1.0)
             if metrics.get("reward", 0.0) == 1.0:
-                # 做对了！不需要进入下一轮 pending 列表
+                solved_indices.add(original_idx)
                 pass 
             else:
                 # 没做对，如果还有剩余次数，加入下一轮
@@ -111,14 +112,17 @@ def evaluate_vllm_pass_k(
         
         # 更新待处理列表
         pending_indices = next_pending_indices
-        solved_count = total_samples - len(pending_indices)
-        current_acc = solved_count / total_samples
+        current_acc = len(solved_indices) / total_samples
         pass_m_history.append(current_acc)
+
         print(f">>> 累计解决率 (Pass@{attempt}): {current_acc:.2%}")
     
     print("\n" + "="*20)
     print(f"Pass@1 to Pass@{pass_k} 趋势数据:")
-    print(pass_m_history)
+    print("[", end=' ')
+    for i, acc in enumerate(pass_m_history):
+        print(f"{acc:.3f}", end=', ') if i != len(pass_m_history) - 1 else print(f"{acc:.3f}")
+    print("]")
     print("="*20 + "\n")
 
     end_time = time.time()

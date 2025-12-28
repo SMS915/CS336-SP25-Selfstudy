@@ -57,6 +57,9 @@ def load_dataset_signatures(file_path, name):
                         problem = problem.split("User:", 1)[1].split("Assistant:", 1)[0].strip()
                     except:
                         pass # 提取失败就用原文本
+
+                if "Return your final response within \\boxed{}. " in problem:
+                    problem = problem.replace('Return your final response within \\boxed{}. ', '')
                 
                 m = get_minhash(problem)
                 signatures.append(m)
@@ -121,27 +124,26 @@ def check_self_duplication(name, sigs, threshold=0.98):
     print(f"结果: 发现潜在重复样本。") 
 
 def main():
-    # 1. 加载所有数据集的 MinHash
+    # 加载所有数据集的 MinHash
     db = {}
     for name, path in DATASETS.items():
         sigs, texts = load_dataset_signatures(path, name)
         db[name] = {"sigs": sigs, "texts": texts}
 
-    # 2. 关键检查：MATH-500 是否是 Full Test 的子集？
+    # MATH-500 是否是 Full Test 的子集？
     if db["MATH_500"]["sigs"] and db["MATH_FULL_TEST"]["sigs"]:
         check_overlap("MATH_500", db["MATH_500"]["sigs"], 
                       "MATH_FULL_TEST", db["MATH_FULL_TEST"]["sigs"])
 
-    # 3. 致命检查：数据泄露 (Data Leakage)
     # MATH-500 是否出现在了 SFT 训练集中？
     if db["MATH_500"]["sigs"] and db["SFT_TRAIN"]["sigs"]:
-        print("\n🚨 [关键检查] 数据泄露检测: 测试集是否混入了训练集？")
+        print("[关键检查] 数据泄露检测: 测试集是否混入了训练集？")
         ratio = check_overlap("MATH_500", db["MATH_500"]["sigs"], 
                               "SFT_TRAIN", db["SFT_TRAIN"]["sigs"])
         if ratio > 0.05:
-            print("⚠️  警告: 存在显著的数据泄露风险！模型可能背过了测试题。")
+            print("警告: 存在显著的数据泄露风险！模型可能背过了测试题。")
         else:
-            print("✅ 安全: 未发现明显的数据泄露。")
+            print("安全: 未发现明显的数据泄露。")
 
     # 4. 训练集内部去重检查
     if db["SFT_TRAIN"]["sigs"]:

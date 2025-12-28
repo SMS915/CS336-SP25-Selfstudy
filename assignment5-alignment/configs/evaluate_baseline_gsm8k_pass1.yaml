@@ -1,0 +1,20 @@
+# 数据集路径
+example_path: "data/gsm8k/test_clean.jsonl"
+
+# Prompt 模板路径
+prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
+
+# 结果保存路径
+output_path: "results/baseline_gsm8k_pass1.jsonl"
+
+model_path: "models/Qwen2.5-Math-1.5B"
+
+max_tokens: 1024
+
+temperature: 0
+
+top_p: 0.95
+
+max_samples: 0
+
+pass_k: 1
