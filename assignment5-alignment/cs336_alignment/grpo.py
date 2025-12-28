@@ -51,8 +51,6 @@ def compute_group_normalized_rewards(reward_fn: Callable,
         std_tensor = raw_tensor.std(dim = -1, keepdim = True)
         advantage = (raw_tensor - mean_tensor) / (std_tensor + advantage_eps)
 
-    # max_reward = raw_tensor.max().item()
-    # min_reward = raw_tensor.min().item()
     mean_reward = mean_tensor.mean().item()
     format_rate = np.mean(format_rewards_list)
     meta_data = {'mean_reward': mean_reward,
@@ -195,11 +193,13 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor, dim: int | None = None
 def grpo_microbatch_train_step(policy_log_probs: torch.Tensor,
                                response_mask: torch.Tensor,
                                gradient_accumulation_steps: int,
+                               fixed_norm_length: int,
                                loss_type: Literal["no_baseline", "reinforce_with_baseline", "grpo_clip"],
                                raw_rewards: torch.Tensor | None = None,
                                advantages: torch.Tensor | None = None,
                                old_log_probs: torch.Tensor | None = None,
-                               cliprange: float | None = None):
+                               cliprange: float | None = None,
+                               remove_length_norm: bool = False):
     
     """
     执行 GRPO 的单个微批次（Micro-batch）训练步骤。
@@ -226,7 +226,11 @@ def grpo_microbatch_train_step(policy_log_probs: torch.Tensor,
     # 计算每个 token 的策略梯度损失
     step_loss, metadata = compute_policy_gradient_loss(policy_log_probs, loss_type, raw_rewards, advantages, old_log_probs, cliprange)
     # 应用掩码并计算每个样本的平均损失，只计算 response 部分的 loss
-    perexample_loss = masked_mean(step_loss, response_mask, dim=-1)
+    if not remove_length_norm:
+        perexample_loss = masked_mean(step_loss, response_mask, dim=-1)
+    else:
+        perexample_loss = (step_loss * response_mask).sum(dim=-1) / fixed_norm_length
+
     # 计算整个 batch 的平均损失
     mean_loss = perexample_loss.mean()
     # 根据梯度累积步数缩放损失

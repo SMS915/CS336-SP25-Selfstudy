@@ -9,7 +9,7 @@ output_path: "results/drgrpo_gsm8k_pass1.jsonl"
 
 model_path: "checkpoints/drgrpo_v6_5e-6/checkpoint-step-450"
 
-max_tokens: 1024
+max_tokens: 2048
 
 temperature: 0
 
