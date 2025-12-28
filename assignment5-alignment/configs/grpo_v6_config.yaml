@@ -1,13 +1,13 @@
 # configs/grop_config.yaml
 
 model:
-  model_path: "checkpoints/sft_v6_no_resize_warmup/epoch0"
-  best_reward: 0
-  start_step: 0
+  model_path: "checkpoints/grpo_v6_5e-6/checkpoint-step-450"
+  best_reward: 0.6875
+  start_step: 451
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
-  wandb_id: null
+  wandb_id: "wg24w1ep"
 
 data:
   train_path: "data/MATH/sft.jsonl"
@@ -15,7 +15,7 @@ data:
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: 5000
-  start_sample: 0
+  start_sample: 3609
 
 training:
   output_dir: "checkpoints/grpo_v6_5e-6"

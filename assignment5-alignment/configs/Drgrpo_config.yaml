@@ -1,4 +1,4 @@
-# configs/grop_config.yaml
+# configs/drgrpo_config.yaml
 
 model:
   model_path: "checkpoints/drgrpo/checkpoint-step-350"
