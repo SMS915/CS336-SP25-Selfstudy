@@ -1,9 +1,9 @@
 # configs/grop_config.yaml
 
 model:
-  model_path: "checkpoints/drgrpo_v6_5e-6/checkpoint-step-100"
-  best_reward: 0.4531
-  start_step: 101
+  model_path: "checkpoints/drgrpo_v6_5e-6/checkpoint-step-450"
+  best_reward: 0.64063
+  start_step: 451
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
@@ -15,7 +15,7 @@ data:
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: 5000
-  start_sample: 801
+  start_sample: 3609
 
 training:
   output_dir: "checkpoints/drgrpo_v6_5e-6"
