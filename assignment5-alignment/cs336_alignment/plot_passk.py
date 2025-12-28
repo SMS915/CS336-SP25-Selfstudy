@@ -213,6 +213,7 @@ def plot_pass_k_curve(results_list, task_name: str, show_k_list=[1, 2, 4, 8]):
         os.makedirs(save_dir)
 
     save_name = f'{task_name} Pass@{show_k_list[-1]}对比图.png'
+    # save_name = f'{task_name} Pass@{show_k_list[-1]}对比图-无标注.png'
     save_path = os.path.join(save_dir, save_name)
     plt.savefig(save_path, dpi=300)
     print(f"图表已成功保存至: {save_path}")
@@ -221,6 +222,7 @@ if __name__ == "__main__":
     baseline_full_pass8_result = {'baseline': (0.123, 0.216, 0.294, 0.348, 0.392, 0.428, 0.454, 0.482)}
     sft_full_pass8_result      = {'sft'     : (0.445, 0.587, 0.654, 0.695, 0.722, 0.743, 0.758, 0.770)}
     no_std_norm_grpo_full_pass8_result   = {'no_std_norm_grpo'  : (0.619, 0.731, 0.780, 0.803, 0.821, 0.833, 0.843, 0.851)}
+    grpo_full_pass8_result = {'grpo': (0.598, 0.721, 0.769, 0.795, 0.814, 0.825, 0.838, 0.847)}
 
     baseline_500_pass64_result = {'baseline': (0.144, 0.262, 0.320, 0.414, 0.482, 0.524, 0.578, 0.614,
                                                0.642, 0.664, 0.700, 0.710, 0.714, 0.734, 0.750, 0.758,
@@ -240,7 +242,8 @@ if __name__ == "__main__":
                                                0.982, 0.982, 0.982, 0.982, 0.982, 0.982, 0.982, 0.982,
                                                0.982, 0.982, 0.982, 0.982, 0.982, 0.982, 0.982, 0.982)}
 
-    no_std_norm_grpo_500_pass64_result   = {'no_std_norm_grpo'  : (0.834, 0.916, 0.952, 0.956, 0.962, 0.966, 0.966, 0.968,
+    no_std_norm_grpo_500_pass64_result   = {'no_std_norm_grpo'  :
+                                              (0.834, 0.916, 0.952, 0.956, 0.962, 0.966, 0.966, 0.968,
                                                0.968, 0.972, 0.974, 0.974, 0.974, 0.974, 0.974, 0.974,
                                                0.974, 0.976, 0.976, 0.976, 0.976, 0.976, 0.976, 0.976,
                                                0.976, 0.976, 0.976, 0.976, 0.976, 0.978, 0.978, 0.980,
@@ -269,7 +272,8 @@ if __name__ == "__main__":
                                                  0.233, 0.233, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267)}
 
 
-    no_std_norm_grpo_aime24_pass64_result  = {'no_std_norm_grpo':   (0.033, 0.033, 0.067, 0.133, 0.133, 0.167, 0.167, 0.200,
+    no_std_norm_grpo_aime24_pass64_result  = {'no_std_norm_grpo':
+                                                (0.033, 0.033, 0.067, 0.133, 0.133, 0.167, 0.167, 0.200,
                                                  0.200, 0.200, 0.233, 0.233, 0.267, 0.300, 0.333, 0.367,
                                                  0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367,
                                                  0.367, 0.367, 0.367, 0.367, 0.400, 0.400, 0.400, 0.400,
@@ -298,7 +302,8 @@ if __name__ == "__main__":
                                                  0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233,
                                                  0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233)}
 
-    no_std_norm_grpo_aime25_pass64_result = {'no_std_norm_grpo'   : (0.033, 0.100, 0.100, 0.100, 0.167, 0.167, 0.200, 0.200,
+    no_std_norm_grpo_aime25_pass64_result = {'no_std_norm_grpo'   :
+                                                (0.033, 0.100, 0.100, 0.100, 0.167, 0.167, 0.200, 0.200,
                                                  0.200, 0.200, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233,
                                                  0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233,
                                                  0.267, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267,
@@ -325,7 +330,8 @@ if __name__ == "__main__":
                                                  0.699, 0.699, 0.699, 0.699, 0.699, 0.711, 0.711, 0.723,
                                                  0.723, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735)}
 
-    no_std_norm_grpo_AMC12_pass64_result   = {'no_std_norm_grpo'  : (0.325, 0.398, 0.470, 0.530, 0.554, 0.566, 0.566, 0.590,
+    no_std_norm_grpo_AMC12_pass64_result   = {'no_std_norm_grpo'  :
+                                                (0.325, 0.398, 0.470, 0.530, 0.554, 0.566, 0.566, 0.590,
                                                  0.602, 0.614, 0.627, 0.627, 0.651, 0.663, 0.675, 0.675,
                                                  0.675, 0.675, 0.687, 0.699, 0.699, 0.699, 0.699, 0.699,
                                                  0.699, 0.723, 0.723, 0.723, 0.723, 0.723, 0.723, 0.723,
@@ -409,7 +415,7 @@ if __name__ == "__main__":
 
 
 
-    math_full_pass8_results  = [baseline_full_pass8_result, sft_full_pass8_result, no_std_norm_grpo_full_pass8_result, instruct_math_pass8_result]
+    math_full_pass8_results  = [baseline_full_pass8_result, sft_full_pass8_result, no_std_norm_grpo_full_pass8_result, grpo_full_pass8_result, instruct_math_pass8_result]
     math500_pass64_results   = [baseline_500_pass64_result, sft_500_pass64_result, no_std_norm_grpo_500_pass64_result, grpo_500_pass64_result, instruct_500_pass64_result]
     amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, no_std_norm_grpo_AMC12_pass64_result, grpo_AMC12_pass64_result, instruct_AMC_12_pass64_result]
     aime_2025_pass64_results = [baseline_aime25_pass64_result, sft_aime25_pass64_result, no_std_norm_grpo_aime25_pass64_result, grpo_aime25_pass64_result, instruct_aime25_pass64_result]

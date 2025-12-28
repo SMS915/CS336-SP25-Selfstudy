@@ -163,9 +163,10 @@ def log_generations(
     #     ans_end_id = tokenizer.convert_tokens_to_ids("</answer>")
     #     print(f"Eval Tokenizer </answer> ID: {ans_end_id}")
     #     if ans_end_id == tokenizer.unk_token_id:
-    #         print("❌ FATAL: 评估脚本用的 Tokenizer 不认识 </answer>")
+    #         print("FATAL: 评估脚本用的 Tokenizer 不认识 </answer>")
     # except:
-    #     print("❌ FATAL: Tokenizer 出错")
+    #     print("FATAL: Tokenizer 出错")
+
     # 随机抽样
     n = min(num_examples_to_log, len(prompts))
     indices = random.sample(range(len(prompts)), n)
@@ -240,9 +241,11 @@ def log_generations(
         # print(f"Tail Decode: {tokenizer.decode(outputs.sequences[0][-20:], skip_special_tokens=False)}")
         # ans_end_id = tokenizer.convert_tokens_to_ids("</answer>")
         # if ans_end_id in generated_ids:
-        #     print(f"✅ 模型确实生成了 ID {ans_end_id}！是解码或Reward函数的问题。")
+        #     print(f"模型确实生成了 ID {ans_end_id}, 是解码或Reward函数的问题。")
         # else:
-        #     print(f"❌ 模型根本没生成 ID {ans_end_id}！是训练的问题。")
+        #     print(f"模型根本没生成 ID {ans_end_id}, 是训练的问题。")
+
+
         print("-" * 40)
         print(f" Prompt: {prompt[:50]}...")
         print(f"Generated: {generated_text[-100:]}... (Len: {len(generated_ids)})")
