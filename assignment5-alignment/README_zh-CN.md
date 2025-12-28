@@ -4,11 +4,11 @@
 
 ## 1. 项目概述
 
-本项目在单卡 (48GB VRAM) 上成功复现了 R1-Zero 的训练流程。通过**数据蒸馏 (Data Distillation)** 和 **Dr.GRPO** 算法，将一个 1.5B 小模型的数学推理能力推向了极限。
+本项目在单卡 (48GB VRAM) 上成功复现了 R1-Zero 的训练流程。从基模Qwen-2.5-Math-1.5B出发，通过**监督微调 (Supervised Fine-tuning, SFT)** 和 **组相对策略优化(Group Relative Policy Optimization, GRPO)** 算法，将一个 1.5B 小模型的数学推理能力推向了高峰。
 
 - 将模型在 **Hendryck/MATH 全量验证集** 上的准确率从 Baseline 的 **2.80%** 提升至 **61.90% ~ 64.20%**，并实现了显著的格式规范化和推理长度优化。
-- 在 MATH-500 测试集上达到 **83.4% Pass@1** 和 **98.8% Pass@64**，超越了官方 Instruct 模型。
--  仅使用 **3,000 条** 高质量 SFT 数据即完成冷启动。
+- 在 MATH-500 测试集上达到 **83.4% Pass@1** 和 **98.8% Pass@64**，其中Pass@64与官方Instruct模型不分伯仲
+-  仅使用 **3,000 条** 高质量 SFT 数据的单个epoch即完成冷启动。
 
 
 
@@ -16,10 +16,9 @@
 
 ### 2.1 数据源策略
 *   **SFT 数据 (Warm-up)**: 选用 `HuggingFaceH4/Bespoke-Stratos-17k`。
-    *   *理由*: 包含高质量的 DeepSeek-R1 风格思维链 (CoT)，采用 `<|begin_of_thought|>...<|end_of_thought|><|begin_of_solution|>...<|end_of_thought|>` 格式。
-    *   *处理*: 对标签进行替换，适配reward function
-*   **RL 数据 (Prompt)**: 复用 SFT 数据集中的 Prompt 部分。
-*   **评估数据 (Evaluation)**: 选用 `xDAN2099/lighteval-MATH`（标准 5k Test Split）和`HuggingFaceH4/MATH-500`作为验证集。
+    *   理由: 包含高质量的 DeepSeek-R1 风格思维链 (CoT)，采用 `<|begin_of_thought|>...<|end_of_thought|><|begin_of_solution|>...<|end_of_thought|>` 格式，方便对标签进行替换，适配R1-zero的think tag
+*   **RL 数据 (Prompt)**: 复用`Bespoke-Stratos-17k`数据集中的 Prompt 和思维链的答案部分。
+*   **评估数据 (Evaluation)**: 选用GSM8K, `xDAN2099/lighteval-MATH`(MATH数据集 Test Split), `HuggingFaceH4/MATH-500`, AMC12作为验证集。
 
 ### 2.2 关键策略：从模仿到强化
 *   **Stage 1: SFT (Behavior Cloning)**: 
@@ -28,7 +27,7 @@
 *   **Stage 2: GRPO (Group Relative Policy Optimization)**:
     *   目标是通过组内相对优势（Group Relative Advantage）激发模型的自我修正和推理能力。
     *   放弃了传统的 Value Model（PPO），大幅降低显存开销。
-    *   采用了 **Dr. GRPO** 改进策略（去除 Advantage 计算中的标准差归一化），进一步提升了小 Batch 下的稳定性。
+    *   采用了 **Dr. GRPO** 改进策略（去除 Advantage 计算中的标准差归一化与动态长度归一化），进一步提升了小 Batch 下的稳定性。
 
 ### 2.3 核心算法策略
 * **Trust Region Clipping**: 实现了 PPO 风格的 Clip 机制，无需额外的 Reference Model 即可维持训练稳定（KL ~ 0.01）。
@@ -48,11 +47,11 @@
 | **SFT v1 (Epoch 5)**                   | 随机抽取 5k (含噪) |    5k/25k     | **18.00%** |   77.64%   |   2,913   | **噪声模仿与截断**。模型不仅学会了推理，也学会了原始数据中的冗余废话。由于缺乏筛选，过长的生成导致大部分样本在输出最终答案前被物理截断。 |
 | **SFT v2 (Epoch 2)**                   | 长度小于4k过滤     |    9k/18k     | **15.64%** | **76.86%** |   2,849   | **死循环现象**。在去除长样本后，模型反而表现出一种病态的重复行为（如反复输出 "Wait..."），这表明模型在长程推理中容易迷失方向，导致上下文耗尽。 |
 | **SFT v2 (Epoch 2, 加入重复惩罚1.05)** | 长度小于4k过滤     |    9k/18k     | **45.54%** |   35.72%   |   1,890   | **强行干预推理**。重复惩罚作为一种推理时的外部干预，强行打断了模型的死循环。虽然挽救了准确率，但这掩盖了模型本身未能学会“何时停止”的缺陷。 |
-| **SFT v3 (Epoch 1)**                   | 长度+格式清洗$^*$  |     5k/5k     | **40.02%** |   45.30%   |   2,425   | **截断主导的错误**。模型已具备解题能力，但严重缺乏停止机制。数据显示格式错误样本的中位数长度达 **3931**（逼近上限），表明绝大多数错误并非逻辑崩坏，而是单纯因未预测到 EOS 导致的物理截断。。 |
+| **SFT v3 (Epoch 1)**                   | 长度+格式清洗$^*$  |     5k/5k     | **40.02%** |   45.30%   |   2,425   | **截断主导错误**。模型已具备解题能力，但严重缺乏停止机制。数据显示格式错误样本的中位数长度达 **3931**（逼近上限），表明绝大多数错误并非逻辑崩坏，而是单纯因未预测到 EOS 导致的物理截断。。 |
 | **SFT v3 (Epoch 2)**                   | 长度+格式清洗      |    5k/10k     | **49.48%** |   37.06%   |   2,403   | **风格过拟合**。准确率提升的同时，**正确样本的中位数长度从 1374 膨胀至 1520**。模型似乎习得了“冗长=正确”的偏见，导致即便在做对的题目上也更加啰嗦，且截断风险依然处于高位。。 |
 | **SFT v4 (Epoch 1)**                   | **清洗+蒸馏$^*$**  |   **3k/3k**   | **44.10%** | **42.16%** | **2,158** | **结构化分离**。通过数据蒸馏移除了思考过程中的答案泄露，并强制 `<answer>` 极简。这种强约束迫使模型学会了“思考”与“表达”的明确界限，生成的正样本极其干净。 |
 
-> $^*$:格式清洗指对于所有样本调用reward_fn进行评分，选出那些通过格式检查，即think tag和answer tag对干净规整的样本
+> $^*$:格式清洗指对于所有样本调用reward_fn进行评分，选出那些通过格式检查，format_reward = 1, 即think tag和answer tag对干净规整的样本
 >
 >    清洗指筛选出所有符合“纯粹"思考标准的样本，即think tag内不包含\\boxed{}样式的样本，通过该标准删减掉了2000条样本。
 >
@@ -92,31 +91,39 @@
 
 ## 5. 推理能力验证
 
-为了全面评估模型从 Baseline 到 SFT 再到 Dr.GRPO 的演进过程，我们在 **MATH-500** 测试集，AIME-2024测试集和AIME-2025测试集，gsm8k和AMC12等多个数据集上进行了 **Pass@k** $(k∈{1,…,64})$ 性能评估。这不仅测试了模型单次推理的准确性（Pass@1），也探究了模型潜在的知识边界（Pass@64）。
+为了全面评估模型从 Baseline 到 SFT 再到 Dr.GRPO 的演进过程，同时探索与官方模型的差距，我们在 **MATH-500** 测试集，AIME-2024测试集和AIME-2025测试集，gsm8k和AMC12等多个数据集上进行了 **Pass@k** $(k∈{1,…,64})$ 性能评估。这不仅测试了模型单次推理的准确性（Pass@1），也探究了模型潜在的知识边界（Pass@64）。
+
+实验超参数默认配置:
+
+- max_tokens: 4096
+- temperature: 0.7
+- top_p: 0.95
 
 
 
-|    Dataset    | Metric  | 🔴 Baseline | 🔵 SFT (v6) | 🟢 Dr.GRPO |              Gain (RL vs SFT)               |
-| :-----------: | :-----: | :--------: | :--------: | :-------: | :-----------------------------------------: |
-|   **GSM8K**   | Pass@1  |   20.9%    |   45.5%    | **79.6%** | <span style="color:green">**+34.1%**</span> |
-| **MATH-500**  | Pass@1  |   14.4%    |   66.8%    | **83.4%** | <span style="color:green">**+16.6%**</span> |
-| **MATH-Test** | Pass@1  |   12.3%    |   44.1%    | **61.2%** | <span style="color:green">**+17.1%**</span> |
-|   **AMC12**   | Pass@1  |    2.4%    |   21.7%    | **32.5%** | <span style="color:green">**+10.8%**</span> |
-|               |         |            |            |           |                                             |
-| **MATH-500**  | Pass@64 |   91.6%    |   98.2%    | **98.8%** | <span style="color:green">**+0.6%**</span>  |
-|   **AMC12**   | Pass@64 |   56.6%    |   73.5%    | **75.9%** | <span style="color:green">**+2.4%**</span>  |
-| **AIME 2024** | Pass@64 |   13.3%    |   26.7%    | **40.0%** | <span style="color:green">**+13.3%**</span> |
-| **AIME 2025** | Pass@64 |    3.3%    |   23.3%    | **30.0%** | <span style="color:green">**+6.7%**</span>  |
+|    Dataset    | Metric  | 🔵Base | 🟠 SFT |   🔴GRPO   | 🟢no-std-normGRPO | ​Dr.GRPO |   Inst.    |                $\nabla$Gap                 |
+| :-----------: | :-----: | :---: | :---: | :-------: | :--------------: | :-----: | :--------: | :----------------------------------------: |
+| **GSM8K$^*$** | Pass@1  | 20.9% | 45.5% |   79.0%   |    **79.6%**     |         | **85.14%** |     <font color="red">**-5.5%**</font>     |
+| **MATH-500**  | Pass@1  | 14.4% | 66.8% |   80.8%   |    **83.4%**     |         | **92.00%** |  <span style="color:red">**-8.6%**</span>  |
+| **MATH-Test** | Pass@1  | 12.3% | 44.1% |   59.8%   |    **61.2%**     |         | **74.88%** | <span style="color:red">**-13.68%**</span> |
+|   **AMC12**   | Pass@1  | 2.4%  | 21.7% | **36.1%** |      32.5%       |         | **44.6%**  | <span style="color:red">**-12.1%**</span>  |
+|               |         |       |       |           |                  |         |            |                                            |
+| **MATH-500**  | Pass@64 | 91.6% | 98.2% | **99.4%** |      98.8%       |         | **99.0%**  |  <span style="color:red">**-0.2%**</span>  |
+|   **AMC12**   | Pass@64 | 56.6% | 73.5% |   75.9%   |    **75.9%**     |         | **84.3%**  |  <span style="color:red">**-8.4%**</span>  |
+| **AIME 2024** | Pass@64 | 13.3% | 26.7% |   30.0%   |    **40.0%**     |         | **46.67%** | <span style="color:red">**-6.67%**</span>  |
+| **AIME 2025** | Pass@64 | 3.3%  | 23.3% |   30.0%   |    **30.0%**     |         | **40.00%** | <span style="color:red">**-10.0%**</span>  |
+
+>$^*$: GSM8K max_token限制为1024，temperature为0
 
 
 
-![MATH-500](asset/MATH-500 Pass@64对比图.png)
+![MATH-500](asset/MATH-500 Pass@64对比图.png) 
 
 <p align="center">MATH-500 Pass@64曲线图</p>
 
 
 
-![MATH-TEST](asset/MATH Pass@8对比图.png)
+![MATH-TEST](asset/MATH-test Pass@8对比图.png)
 
 <p align="center">MATH-测试集 Pass@8曲线图</p>
 
@@ -136,7 +143,7 @@
 
 ![AIME-2025](asset/AIME-2025 Pass@64对比图.png)
 
-<p align="center">AIME-2025训练集 Pass@64曲线图</p>
+<p align="center">AIME-2025 Pass@64曲线图</p>
 
 
 
