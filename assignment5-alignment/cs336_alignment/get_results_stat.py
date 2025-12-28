@@ -2,7 +2,7 @@ import json
 import os
 import argparse
 import numpy as np
-from transformers import AutoTokenizer
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 from tqdm import tqdm
 
 
@@ -59,21 +59,37 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", type=str, default="./results", help="结果文件夹")
     parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B")
-    parser.add_argument("--output_file", type=str, default="batch_summary.txt")
+    parser.add_argument("--output_file", type=str, default="./results/batch_summary.txt")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
     # 定义配置：(模型前缀, 数据集关键字, 筛选Pass@K)
     configs = [
-        ("baseline", "gsm8k", 1),
-        ("sft", "gsm8k", 1),
-        ("drgrpo", "gsm8k", 1),
-        ("baseline", "aime24", 64),
-        ("sft", "aime24", 64),
-        ("drgrpo", "aime24", 64),
-        ("sft", "aime_pass", 64),  # 匹配 sft_aime_pass_64.jsonl
-        ("drgrpo", "aime_pass", 64),
+        # --- GSM8K (Pass@1) ---
+        ("baseline", "gsm8k_pass1", 1),
+        ("sft", "gsm8k_pass1", 1),
+        ("drgrpo", "gsm8k_pass1", 1),
+
+        # --- MATH-500 (对比 Pass@64) ---
+        ("baseline", "math500_pass_64", 64),
+        ("sft", "math500_pass_64", 64),
+        ("drgrpo", "math500_pass_64", 64),
+
+        # --- AMC (American Mathematics Competitions) ---
+        ("baseline", "amc_pass_64", 64),
+        ("sft", "amc_pass_64", 64),
+        ("drgrpo", "amc_pass_64", 64),
+
+        # --- AIME 2024 (高难度竞赛题) ---
+        ("baseline", "aime24_pass_64", 64),
+        ("sft", "aime24_pass_64", 64),
+        ("drgrpo", "aime24_pass_64", 64),
+
+        # --- AIME 2025  ---
+        ("baseline", "aime25_pass_64", 64),
+        ("sft", "aime25_pass_64", 64),
+        ("drgrpo", "aime25_pass_64", 64),
     ]
 
     all_files = os.listdir(args.input_dir)

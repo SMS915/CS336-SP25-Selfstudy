@@ -1,13 +1,13 @@
 # configs/grop_config.yaml
 
 model:
-  model_path: "checkpoints/sft_v6_no_resize_warmup/epoch0"
-  best_reward: 0
-  start_step: 0
+  model_path: "checkpoints/drgrpo/checkpoint-step-350"
+  best_reward: 0.5
+  start_step: 351
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
-  wandb_id: null
+  wandb_id: "sy7d5nh8"
 
 data:
   train_path: "data/MATH/sft.jsonl"
@@ -15,13 +15,12 @@ data:
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: 5000
-  start_sample: 0
+  start_sample: 5000
 
 training:
-  output_dir: "checkpoints/grpo_v6_5e-6"
+  output_dir: "checkpoints/drgrpo"
   n_grpo_steps: 500
-  warmup_ratio: 0.1
-  learning_rate: 5.0e-6
+  learning_rate: 2.0e-6
   advantage_eps: 1.0e-6
   rollout_batch_size: 64
   group_size: 8
@@ -32,6 +31,7 @@ training:
   epochs_per_rollout_batch: 1
   # train_batch_size: 256
   save_steps: 50
+  warmup_ratio: 0.1
 
   micro_batch_size: 1
   # gradient_accumulation_steps: 128
@@ -40,8 +40,7 @@ training:
   clip_range: 0.2
   max_grad_norm: 1.0
 
-  normalize_by_std: True
-  length_panelty: True
+  normalize_by_std: False
 
 evaluation:
   eval_every_steps: 10
@@ -50,5 +49,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "grpo_v6"
+  run_name: "drgrpo-2e-6"
   entity: null
