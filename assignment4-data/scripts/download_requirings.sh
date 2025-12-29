@@ -47,6 +47,6 @@ CRAWL_LINKS_DIR="data/cc_path/"
 mkdir -p $CRAWL_LINKS_DIR
 CRAWL_NAME="CC-MAIN-2025-18"
 
-wget -c -P $CRAWL_LINKS_DIR https://data.commoncrawl.org/crawl-data/${CRAWL_NAME}/wet.paths.gz"
+wget -c -P "$CRAWL_LINKS_DIR" "https://data.commoncrawl.org/crawl-data/${CRAWL_NAME}/wet.paths.gz"
 
 echo -e "所有必需的源数据都已成功下载到 'data/' 目录中"
