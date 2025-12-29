@@ -18,7 +18,7 @@ data:
   start_sample: 3609
 
 training:
-  output_dir: "checkpoints/grpo_v6_5e-6"
+  output_dir: "checkpoints/grpo_no_std_norm_v6_5e-6"
   n_grpo_steps: 500
   warmup_ratio: 0.1
   learning_rate: 5.0e-6
@@ -38,9 +38,11 @@ training:
   clip_range: 0.2
   max_grad_norm: 1.0
 
+  # 部分修改的grpo配置，移除std标准化
   normalize_by_std: False
+  remove_length_norm: False
+
   length_panelty: True
-  remove_length_norm: True
 
   # === vllm 参数 ===
   enforce_eager: True
@@ -49,7 +51,7 @@ training:
 
   stop_tokens: ["</answer>"]
 
-  fixed_norm_length: 2048
+  fixed_norm_length: null
   
 
 evaluation:
