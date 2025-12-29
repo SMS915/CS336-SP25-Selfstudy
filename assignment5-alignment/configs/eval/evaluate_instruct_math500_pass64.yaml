@@ -1,10 +1,8 @@
-# 数据集路径
-example_path: "data/MATH/validation.jsonl"
+example_path: data/MATH/math500-test.jsonl
 
-# 结果保存路径
-output_path: "results/instruct_math500_pass_64.jsonl"
+output_path: results/instruct_math500_pass_64.jsonl
 
-model_path: "models/Qwen2.5-Math-1.5B-Instruct"
+model_path: models/Qwen2.5-Math-1.5B-Instruct
 
 max_tokens: 4096
 
@@ -15,3 +13,4 @@ top_p: 0.95
 max_samples: 500
 
 pass_k: 64
+
