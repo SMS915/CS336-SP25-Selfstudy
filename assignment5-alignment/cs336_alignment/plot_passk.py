@@ -414,10 +414,20 @@ if __name__ == "__main__":
                                                     0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300)}
 
 
+    drgrpo_amc_pass64_result   = {'drgrpo':     (0.301, 0.434, 0.458, 0.542, 0.578, 0.602, 0.602, 0.614,
+                                                    0.614, 0.614, 0.614, 0.627, 0.627, 0.639, 0.651, 0.651,
+                                                    0.651, 0.651, 0.651, 0.651, 0.675, 0.675, 0.675, 0.675,
+                                                    0.675, 0.675, 0.687, 0.699, 0.699, 0.723, 0.723, 0.723,
+                                                    0.723, 0.723, 0.723, 0.723, 0.723, 0.723, 0.735, 0.735,
+                                                    0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735,
+                                                    0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747,
+                                                    0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747)}
+
+
 
     math_full_pass8_results  = [baseline_full_pass8_result, sft_full_pass8_result, no_std_norm_grpo_full_pass8_result, grpo_full_pass8_result, instruct_math_pass8_result]
     math500_pass64_results   = [baseline_500_pass64_result, sft_500_pass64_result, no_std_norm_grpo_500_pass64_result, grpo_500_pass64_result, instruct_500_pass64_result]
-    amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, no_std_norm_grpo_AMC12_pass64_result, grpo_AMC12_pass64_result, instruct_AMC_12_pass64_result]
+    amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, no_std_norm_grpo_AMC12_pass64_result, grpo_AMC12_pass64_result, drgrpo_amc_pass64_result, instruct_AMC_12_pass64_result]
     aime_2025_pass64_results = [baseline_aime25_pass64_result, sft_aime25_pass64_result, no_std_norm_grpo_aime25_pass64_result, grpo_aime25_pass64_result, instruct_aime25_pass64_result]
     aime_2024_pass64_results = [baseline_aime24_pass64_result, sft_aime24_pass64_result, no_std_norm_grpo_aime24_pass64_result, grpo_aime24_pass64_result, instruct_aime24_pass64_result]
 
