@@ -1,20 +1,21 @@
 #!/bin/bash
 # 定义日志文件
-LOG_FILE="evaluate-drpo-350.log"
+LOG_FILE="logs/evaluate-drpo-350.log"
 
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-CONFIG_DIR="configs/eval/drgrpo-350"
-EVAL_SCRIPT="cs336_alignment/evaluate_passk.py"
-# EVAL_SCRIPT="cs336_alignment/evaluate_instruct_passk.py"
+CONFIG_DIR="configs/eval/instruct/"
+# EVAL_SCRIPT="cs336_alignment/evaluate_passk.py"
+EVAL_SCRIPT="cs336_alignment/evaluate_instruct_passk.py"
 tasks=(
-    "evaluate_drgrpo_gsm8k_pass1.yaml"
-    "evaluate_drgrpo_math500_pass64.yaml"
-    "evaluate_drgrpo_amc_pass64.yaml"
-    "evaluate_drgrpo_aime24_pass64.yaml"
-    "evaluate_drgrpo_aime25_pass64.yaml"
-    "evaluate_drgrpo_MathTest_pass8.yaml"
+    "evaluate_instruct_aime24_pass64.yaml"
 )
+# "evaluate_drgrpo_gsm8k_pass1.yaml"
+# "evaluate_drgrpo_math500_pass64.yaml"
+# "evaluate_drgrpo_amc_pass64.yaml"
+# "evaluate_drgrpo_aime24_pass64.yaml"
+# "evaluate_drgrpo_aime25_pass64.yaml"
+# "evaluate_drgrpo_MathTest_pass8.yaml"
 
 echo "========== 开始批量评估任务: $(date) =========="
 total=${#tasks[@]}

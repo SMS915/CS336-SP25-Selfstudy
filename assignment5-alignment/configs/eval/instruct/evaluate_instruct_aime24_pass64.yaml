@@ -2,7 +2,7 @@
 example_path: "data/AIME/aime2024_test.jsonl"
 
 # 结果保存路径
-output_path: "results/baseline_pass_64.jsonl"
+output_path: "results/instruct/instruct_aime24_pass_64.jsonl"
 
 model_path: "models/Qwen2.5-Math-1.5B-Instruct"
 
