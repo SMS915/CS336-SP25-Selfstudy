@@ -56,7 +56,7 @@ def get_collate_fn(tokenizer, max_length = 1024, prompt_template = None):
             output_strs=responses,
             tokenizer=tokenizer,
             max_length=max_length,
-            sft_train=True
+            sft_train=False
         )
         # if not hasattr(collate_fn, "has_printed"):
         #     input_ids = tokenized_batch["input_ids"][0] # 取第一个样本

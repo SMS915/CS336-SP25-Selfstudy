@@ -1,0 +1,20 @@
+# 数据集路径
+example_path: "data/AIME/aime2024_test.jsonl"
+
+# Prompt 模板路径
+prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
+
+# 结果保存路径
+output_path: "results/grpo_aime25_pass_64.jsonl"
+
+model_path: "checkpoints/grpo_5e-6/checkpoint-step-450"
+
+max_tokens: 4096
+
+temperature: 0.7
+
+top_p: 0.95
+
+max_samples: 30
+
+pass_k: 64

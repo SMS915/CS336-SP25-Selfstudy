@@ -1,13 +1,13 @@
 # 数据集路径
-example_path: "data/AMC/AMC12.jsonl"
+example_path: "data/AIME/aime2024_test.jsonl"
 
 # Prompt 模板路径
 prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/drgrpo_amc_pass_64.jsonl"
+output_path: "results/baseline_aime24_pass_64.jsonl"
 
-model_path: "checkpoints/drgrpo_v6_5e-6/checkpoint-step-450"
+model_path: "models/Qwen2.5-Math-1.5B"
 
 max_tokens: 4096
 
@@ -15,6 +15,6 @@ temperature: 0.7
 
 top_p: 0.95
 
-max_samples: 0
+max_samples: 30
 
 pass_k: 64

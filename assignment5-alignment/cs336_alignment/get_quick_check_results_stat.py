@@ -6,7 +6,7 @@ from transformers.models.auto.tokenization_auto import AutoTokenizer
 from tqdm import tqdm
 
 
-def analyze_file(file_path, tokenizer, attempt_id_threshold=None):
+def analyze_file(file_path, tokenizer):
     """分析单个文件并返回统计数据字典"""
     token_lengths = []
     answer_correct_list = []
@@ -18,11 +18,6 @@ def analyze_file(file_path, tokenizer, attempt_id_threshold=None):
                 data = json.loads(line)
 
                 # 筛选 attempt_id
-                current_attempt = data.get("attempt_id")
-                if attempt_id_threshold is not None and current_attempt is not None:
-                    if int(current_attempt) > attempt_id_threshold:
-                        continue
-
                 text = data.get("generated_text") or data.get("response") or ""
                 metrics = data.get("metrics", {})
 
@@ -57,65 +52,33 @@ def analyze_file(file_path, tokenizer, attempt_id_threshold=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir", type=str, default="./results", help="结果文件夹")
+    parser.add_argument("--input_dir", type=str, default="./results/scan_grpo_no_std_norm", help="结果文件夹")
     parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B")
-    parser.add_argument("--output_file", type=str, default="./results/batch_summary.txt")
+    parser.add_argument("--output_file", type=str, default="./results/grpo_no_std_norm_check_summary.txt")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
     # 定义配置：(模型前缀, 数据集关键字, 筛选Pass@K)
     configs = [
-        # --- GSM8K ---
-        ("baseline", "gsm8k_pass1", 1),
-        ("sft", "gsm8k_pass1", 1),
-        ("grpo", "gsm8k_pass1", 1),
-        ("grpo_no_std_norm", "gsm8k_pass1", 1),
-        ("drgrpo", "gsm8k_pass1", 1),
-        ("instruct", "gsm8k_pass1", 1),
+        ('aime2024', 50),
+        ('aime2024', 100),
+        ('aime2024', 150),
+        ('aime2024', 200),
+        ('aime2024', 250),
+        ('aime2024', 300),
+        ('aime2024', 350),
+        ('aime2024', 400),
 
-        # --- MATH-500 ---
-        ("baseline", "math500_pass_64", 64),
-        ("sft", "math500_pass_64", 64),
-        ("grpo", "math500_pass_64", 64),
-        ("grpo_no_std_norm", "math500_pass_64", 64),
-        ("drgrpo", "math500_pass_64", 64),
-        ("instruct", "math500_pass_64", 64),
+        ('math500', 50),
+        ('math500', 100),
+        ('math500', 150),
+        ('math500', 200),
+        ('math500', 250),
+        ('math500', 300),
+        ('math500', 350),
+        ('math500', 400),
 
-        # --- MathTest ---
-        ("baseline", "MathTest_pass_8", 8),
-        ("sft", "MathTest_pass_8", 8),
-        ("grpo", "MathTest_pass_8", 8),
-        ("grpo_no_std_norm", "MathTest_pass_8", 8),
-        ("drgrpo", "MathTest_pass_8", 8),
-        ("instruct", "MathTest_pass_8", 64),
-
-        # --- AMC ---
-        ("baseline", "math500_pass_64", 64),
-
-        # --- AMC (American Mathematics Competitions) ---
-        ("baseline", "amc_pass_64", 64),
-        ("sft", "amc_pass_64", 64),
-        ("grpo", "amc_pass_64", 64),
-        ("grpo_no_std_norm", "amc_pass_64", 64),
-        ("drgrpo", "amc_pass_64", 64),
-        ("instruct", "amc_pass_64", 64),
-
-        # --- AIME 2024 ---
-        ("baseline", "aime24_pass_64", 64),
-        ("sft", "aime24_pass_64", 64),
-        ("grpo", "aime24_pass_64", 64),
-        ("grpo_no_std_norm", "aime24_pass_64", 64),
-        ("drgrpo", "aime24_pass_64", 64),
-        ("instruct", "aime24_pass_64", 64),
-
-        # --- AIME 2025 ---
-        ("baseline", "aime25_pass_64", 64),
-        ("sft", "aime25_pass_64", 64),
-        ("grpo", "aime25_pass_64", 64),
-        ("grpo_no_std_norm", "aime25_pass_64", 64),
-        ("drgrpo", "aime25_pass_64", 64),
-        ("instruct", "aime25_pass_64", 64),
     ]
 
     all_files = os.listdir(args.input_dir)
@@ -128,11 +91,11 @@ def main():
         log_f.write(f"模型微调阶段对比统计报告\n源目录: {args.input_dir}\n")
         log_f.write("=" * 80 + "\n\n")
 
-        for model_prefix, dataset_key, pass_k in configs:
+        for dataset_key, ckpt_idx in configs:
             # 检索符合条件的文件
             target_file = None
             for f in all_files:
-                if f.startswith(model_prefix) and dataset_key in f and f.endswith(".jsonl"):
+                if f.startswith(dataset_key) and str(ckpt_idx) in f and f.endswith(".jsonl"):
                     target_file = f
                     break
 
@@ -140,13 +103,13 @@ def main():
                 continue
 
             file_path = os.path.join(args.input_dir, target_file)
-            print(f"正在分析: {target_file} (Pass@{pass_k})")
+            print(f"正在分析: {target_file}")
 
-            stats = analyze_file(file_path, tokenizer, pass_k)
+            stats = analyze_file(file_path, tokenizer)
 
             if stats:
                 report = (
-                        f"【项目】: {model_prefix.upper()} | {dataset_key.upper()} | Pass@{pass_k}\n"
+                        f"【项目】: grpo_no_std_norm step{ckpt_idx} | {dataset_key}\n"
                         f"  - 文件: {target_file}\n"
                         f"  - 样本数: {stats['count']}\n"
                         f"  - 正确率: {stats['acc']:.2%} | 格式错误率: {stats['format_err']:.2%}\n"

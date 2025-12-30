@@ -5,9 +5,9 @@ example_path: "data/AMC/AMC12.jsonl"
 prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/grpo_amc_pass_64.jsonl"
+output_path: "results/sft_amc_pass_64.jsonl"
 
-model_path: "checkpoints/grpo_v6_5e-6/checkpoint-step-450"
+model_path: "checkpoints/sft_v4/epoch0"
 
 max_tokens: 4096
 

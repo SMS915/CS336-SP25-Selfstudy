@@ -41,11 +41,13 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
     4. 构建 Response Mask（仅在计算 Loss 时考虑回复部分）。
     5. 执行 Padding（右填充）并进行移位（Shift）以适应因果语言模型训练。
 
+
     Args:
         prompt_strs (List[str]): 提示词字符串列表。
         output_strs (List[str]): 对应的回复/输出字符串列表。
         tokenizer (PreTrainedTokenizerBase): HuggingFace 分词器。
         max_length (int): 序列最大长度，超过此长度将被截断。
+        sft_train (bool): 为了验证一个猜想，即SFT阶段如果mask掉作为引导的think tag,让模型自主学习预测，
 
     Returns:
         Dict[str, torch.Tensor]: 包含模型输入和标签的字典：
@@ -68,7 +70,7 @@ def tokenize_prompt_and_output(prompt_strs: List[str], output_strs: List[str], t
                     # 保留 <think> 之前的所有内容（包括可能的空格）
                     prompt = prompt[:last_idx] 
             else:
-                clean_output = output_c[:7].lstrip()
+                clean_output = output_c[7:].lstrip()
 
         # 分词，不自动添加特殊 token
         prompt_ids = tokenizer.encode(prompt, add_special_tokens = False)
