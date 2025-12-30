@@ -59,47 +59,60 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", type=str, default="./results", help="结果文件夹")
     parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B")
-    parser.add_argument("--output_file", type=str, default="./results/summary-all.txt")
+    parser.add_argument("--output_file", type=str, default="./results/summary-modified-mask.txt")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
     # 定义配置：(模型前缀, 数据集关键字, 筛选Pass@K)
     configs = [
-        # --- GSM8K (Pass@1) ---
+        # --- GSM8K ---
         ("baseline", "gsm8k_pass1", 1),
         ("sft", "gsm8k_pass1", 1),
         ("grpo", "gsm8k_pass1", 1),
         ("grpo_no_std_norm", "gsm8k_pass1", 1),
         ("drgrpo", "gsm8k_pass1", 1),
+        ("instruct", "gsm8k_pass1", 1),
 
-        # --- MATH-500 (对比 Pass@64) ---
+        # --- MATH-500 ---
         ("baseline", "math500_pass_64", 64),
         ("sft", "math500_pass_64", 64),
         ("grpo", "math500_pass_64", 64),
         ("grpo_no_std_norm", "math500_pass_64", 64),
         ("drgrpo", "math500_pass_64", 64),
+        ("instruct", "math500_pass_64", 64),
 
-        # --- AMC (American Mathematics Competitions) ---
+        # --- MathTest ---
+        ("baseline", "MathTest_pass_8", 8),
+        ("sft", "MathTest_pass_8", 8),
+        ("grpo", "MathTest_pass_8", 8),
+        ("grpo_no_std_norm", "MathTest_pass_8", 8),
+        ("drgrpo", "MathTest_pass_8", 8),
+        ("instruct", "MathTest_pass_8", 64),
+
+        # --- AMC ---
         ("baseline", "amc_pass_64", 64),
         ("sft", "amc_pass_64", 64),
         ("grpo", "amc_pass_64", 64),
         ("grpo_no_std_norm", "amc_pass_64", 64),
         ("drgrpo", "amc_pass_64", 64),
+        ("instruct", "amc_pass_64", 64),
 
-        # --- AIME 2024 (高难度竞赛题) ---
+        # --- AIME 2024 ---
         ("baseline", "aime24_pass_64", 64),
         ("sft", "aime24_pass_64", 64),
         ("grpo", "aime24_pass_64", 64),
         ("grpo_no_std_norm", "aime24_pass_64", 64),
         ("drgrpo", "aime24_pass_64", 64),
+        ("instruct", "aime24_pass_64", 64),
 
-        # --- AIME 2025  ---
+        # --- AIME 2025 ---
         ("baseline", "aime25_pass_64", 64),
         ("sft", "aime25_pass_64", 64),
         ("grpo", "aime25_pass_64", 64),
         ("grpo_no_std_norm", "aime25_pass_64", 64),
         ("drgrpo", "aime25_pass_64", 64),
+        ("instruct", "aime25_pass_64", 64),
     ]
 
     all_files = os.listdir(args.input_dir)

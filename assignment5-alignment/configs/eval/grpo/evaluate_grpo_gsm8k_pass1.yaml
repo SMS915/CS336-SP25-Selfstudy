@@ -7,7 +7,7 @@ prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
 # 结果保存路径
 output_path: "results/grpo_gsm8k_pass1.jsonl"
 
-model_path: "checkpoints/grpo_v6_5e-6/checkpoint-step-450"
+model_path: "checkpoints/grpo_5e-6/checkpoint-step-450"
 
 max_tokens: 1024
 

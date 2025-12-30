@@ -6,14 +6,14 @@ model:
   attn_implementation: "sdpa"
 
 data:
-  train_path: "data/MATH/sft_v5_platinum.jsonl"
-  valid_path: "data/MATH/validation.jsonl"
+  train_path: "data/CoT/Bespoke-Stratos-17k-Distill-3k.jsonl"
+  valid_path: "data/MATH/test_split.jsonl"
   prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: null
 
 training:
-  output_dir: "checkpoints/sft_v6_no_resize_warmup"
+  output_dir: "checkpoints/sft_v4_original_mask"
   learning_rate: 2.0e-5
   epochs: 6
   warmup_ratio: 0.05
@@ -31,5 +31,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "sft-qwen-1.5b-v6_warmup"
+  run_name: "sft-qwen-1.5b-distilled_original_mask"
   entity: null 

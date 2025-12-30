@@ -78,7 +78,7 @@ if __name__ == "__main__":
     parser.add_argument("input_file", type=str, help="输入的 jsonl 文件路径")
     parser.add_argument("--output", type=str, default="tails_output.txt", help="输出的 txt 文件路径")
     parser.add_argument("--key", type=str, default="generated_text", help="要提取的 JSON 字段名")
-    parser.add_argument("--len", type=int, default=30, help="提取末尾字符的长度")
+    parser.add_argument("--len", type=int, default=40, help="提取末尾字符的长度")
 
     # 新增参数
     parser.add_argument("--pass_k", type=int, default=None, help="仅提取 attempt_id <= k 的样本。不填则提取所有。")
