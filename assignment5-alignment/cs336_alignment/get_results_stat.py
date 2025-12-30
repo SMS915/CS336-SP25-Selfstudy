@@ -66,15 +66,20 @@ def main():
 
     # 定义配置：(模型前缀, 数据集关键字, 筛选Pass@K)
     configs = [
-        # --- GSM8K (Pass@1) ---
+        # --- GSM8K (Pass@1) 按这个顺序来 ---
         ("baseline", "gsm8k_pass1", 1),
         ("sft", "gsm8k_pass1", 1),
+        ("grpo", "gsm8k_pass1", 1),
+        ("grpo_no_std_norm", "gsm8k_pass1", 1),
         ("drgrpo", "gsm8k_pass1", 1),
+        ("instruct", "gsm8k_pass1", 1),
 
         # --- MATH-500 (对比 Pass@64) ---
         ("baseline", "math500_pass_64", 64),
         ("sft", "math500_pass_64", 64),
         ("drgrpo", "math500_pass_64", 64),
+
+        ("baseline", "math500_pass_64", 64),
 
         # --- AMC (American Mathematics Competitions) ---
         ("baseline", "amc_pass_64", 64),

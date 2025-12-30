@@ -2,22 +2,96 @@ import os
 import re
 import typing
 import torch
-import torch.nn as nn
 
 def save_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer,
                     iteration: int, out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]):
-    torch.save({'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'iteration': iteration}, out)
+    """
+    保存训练检查点（Model, Optimizer, Iteration），
+    对于直接文件保存情况，采用原子写入策略（先写临时文件再重命名），防止因系统故障导致检查点损坏。
+    预期磁盘存储占用(Per Parameter)：
+    - FP32 训练: ~12 Bytes (4 Bytes 模型权重 + 8 Bytes 优化器状态)
+    - BF16 训练: ~10 Bytes (2 Bytes 模型权重 + 8 Bytes 优化器状态)
+     (注: 即使模型为 BF16，AdamW 状态通常仍需以 FP32 存储以保证精度)
+
+    Args:
+        model (torch.nn.Module):需要保存的模型实例，仅保存 state_dict 以实现解耦。
+
+        optimizer (torch.optim.Optimizer): 需要保存的优化器实例。
+            常规的 AdamW 含一阶(m)和二阶(v)动量，每个参数需 2 个 Float32，共 8 Bytes。
+
+        iteration (int): 当前训练步数，用于恢复 LR Schedule 等状态
+
+        out (str | os.PathLike | typing.BinaryIO | typing.IO[Bytes]): 输出路径或流对象。
+            若传入二进制流，无法保证写入原子性。
+
+    Returns:
+        None.
+    """
+
+    checkpoint_dict = {'model_state_dict': model.state_dict(),
+                       'optimizer_state_dict': optimizer.state_dict(),
+                       'iteration': iteration}
+
+    if isinstance(out, (str, os.PathLike)):
+        # 采用原子化写入策略，以保证保存只有完全成功和失败两种状态，而不会出现损坏状态
+        temp_path = str(out) + '.tmp'
+        torch.save(checkpoint_dict, temp_path)
+        os.rename(temp_path, out)
+    else:
+        # 写入二进制流，不保证结果的原子性
+        torch.save(checkpoint_dict, out)
     
 def save_amp_checkpoint(model: torch.nn.Module, optimizer: torch.optim.Optimizer,scaler: torch.cuda.amp.GradScaler,
                     iteration: int, out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]):
-    torch.save({'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scaler_state_dict': scaler.state_dict(),
-                'iteration': iteration}, out)
+    """
+    保存混合精度(FP16)训练检查点（Model, Optimizer, Scaler, Iteration）
 
-def load_checkpoint(src: str | os.PathLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer):
+    相比标准检查点，额外保存了 GradScaler 状态，这对恢复 FP16 训练的数值稳定性至关重要。
+    采用原子写入策略。
+
+    预期磁盘存储占用(Per Parameter):
+    FP16: ~ 10 Bytes (2 Bytes 模型权重 + 8 Bytes 优化器状态)
+
+    Args:
+        model (torch.nn.Module): 需要保存的模型实例，仅保存 state_dict 以解耦代码结构。
+            在 FP16 混合精度下，模型权重通常存储为 Half (2 Bytes)。
+
+        optimizer (torch.optim.Optimizer): 需要保存的优化器状态, 大小一般约为 num_params * 8 Bytes (一阶动量和二阶动量，分别 4 Bytes)。
+        scaler (torch.cuda.amp.GradScaler): 梯度缩放器实例，保存了当前的缩放因子，增长/退避因子，计数器(均为单个数字) 等重要状态。
+        iteration (int): 当前训练步数，用于恢复 LR Schedule 等状态
+        out (str | os.PathLike | typing.BinaryIO | typing.IO[Bytes]): 输出路径或流对象。
+            若传入二进制流，无法保证写入原子性。
+
+    Returns:
+        None.
+
+    """
+    checkpoint_dict = {'model_state_dict': model.state_dict(),
+                       'optimizer_state_dict': optimizer.state_dict(),
+                       'scaler_state_dict': scaler.state_dict(),  # 多保存一个梯度缩放器状态
+                       'iteration': iteration}
+
+    if isinstance(out, (str, os.PathLike)):
+        # 同样原子化写入策略
+        temp_path = str(out) + '.tmp'
+        torch.save(checkpoint_dict, temp_path)
+        os.rename(temp_path, out)
+    else:
+        # 写入二进制流，不保证结果的原子性
+        torch.save(checkpoint_dict, out)
+
+def load_checkpoint(src: str | os.PathLike, model: torch.nn.Module, optimizer: torch.optim.Optimizer, compiled: bool = False):
+    """
+    加载常规检查点，将
+    Args:
+        src:
+        model:
+        optimizer:
+        compiled:
+
+    Returns:
+
+    """
     checkpoint = torch.load(src)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

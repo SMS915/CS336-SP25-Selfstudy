@@ -413,8 +413,18 @@ if __name__ == "__main__":
                                                     0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300,
                                                     0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300)}
 
+    drgrpo_math500_pass64_result  = {'drgrpo':     (0.554, 0.696, 0.754, 0.782, 0.794, 0.802, 0.810, 0.822,
+                                                    0.832, 0.838, 0.846, 0.850, 0.854, 0.858, 0.860, 0.860,
+                                                    0.860, 0.864, 0.868, 0.872, 0.874, 0.880, 0.880, 0.888,
+                                                    0.888, 0.890, 0.892, 0.896, 0.900, 0.900, 0.900, 0.902,
+                                                    0.904, 0.904, 0.904, 0.908, 0.910, 0.910, 0.912, 0.914,
+                                                    0.914, 0.914, 0.914, 0.914, 0.914, 0.916, 0.916, 0.916,
+                                                    0.916, 0.916, 0.916, 0.916, 0.916, 0.916, 0.916, 0.918,
+                                                    0.918, 0.918, 0.920, 0.920, 0.920, 0.920, 0.920, 0.920)}
 
-    drgrpo_amc_pass64_result   = {'drgrpo':     (0.301, 0.434, 0.458, 0.542, 0.578, 0.602, 0.602, 0.614,
+
+
+    drgrpo_amc_pass64_result   = {'drgrpo':        (0.301, 0.434, 0.458, 0.542, 0.578, 0.602, 0.602, 0.614,
                                                     0.614, 0.614, 0.614, 0.627, 0.627, 0.639, 0.651, 0.651,
                                                     0.651, 0.651, 0.651, 0.651, 0.675, 0.675, 0.675, 0.675,
                                                     0.675, 0.675, 0.687, 0.699, 0.699, 0.723, 0.723, 0.723,
@@ -423,13 +433,21 @@ if __name__ == "__main__":
                                                     0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747,
                                                     0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747)}
 
+    drgrpo_aime24_pass64_result = {'drgrpo':       (0.100, 0.100, 0.167, 0.167, 0.200, 0.233, 0.233, 0.233,
+                                                    0.233, 0.233, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267,
+                                                    0.267, 0.267, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300,
+                                                    0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300,
+                                                    0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300,
+                                                    0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333,
+                                                    0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333,
+                                                    0.333, 0.367, 0.367, 0.400, 0.400, 0.400, 0.400, 0.400)}
 
 
     math_full_pass8_results  = [baseline_full_pass8_result, sft_full_pass8_result, no_std_norm_grpo_full_pass8_result, grpo_full_pass8_result, instruct_math_pass8_result]
     math500_pass64_results   = [baseline_500_pass64_result, sft_500_pass64_result, no_std_norm_grpo_500_pass64_result, grpo_500_pass64_result, instruct_500_pass64_result]
     amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, no_std_norm_grpo_AMC12_pass64_result, grpo_AMC12_pass64_result, drgrpo_amc_pass64_result, instruct_AMC_12_pass64_result]
     aime_2025_pass64_results = [baseline_aime25_pass64_result, sft_aime25_pass64_result, no_std_norm_grpo_aime25_pass64_result, grpo_aime25_pass64_result, instruct_aime25_pass64_result]
-    aime_2024_pass64_results = [baseline_aime24_pass64_result, sft_aime24_pass64_result, no_std_norm_grpo_aime24_pass64_result, grpo_aime24_pass64_result, instruct_aime24_pass64_result]
+    aime_2024_pass64_results = [baseline_aime24_pass64_result, sft_aime24_pass64_result, no_std_norm_grpo_aime24_pass64_result, grpo_aime24_pass64_result, drgrpo_aime24_pass64_result, instruct_aime24_pass64_result]
 
 
 

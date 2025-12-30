@@ -343,7 +343,7 @@
     ```bash
     # 从 wet.paths.gz 清单中抽样20个WET文件链接，并生成下载脚本 download_cc_batch_1.sh
     # 默认只下载WET文件, 如要下载对应的warc.gz文件，在后面添上 "--download_warc"
-    python sample_cc_path.py data/cc_path/wet.paths.gz -n 100 --output-script scripts/download_cc_batch_1.sh # --download_warc
+    python -m cs336_data.sample_cc_path data/cc_path/wet.paths.gz -n 100 --output-script scripts/download_cc_batch_1.sh # --download_warc
     ```
 2.  **后续增量抽样**:
     如果需要更多不重复的样本，可以使用 `--skip` 参数。
