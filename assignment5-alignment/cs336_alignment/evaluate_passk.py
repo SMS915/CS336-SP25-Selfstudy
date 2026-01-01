@@ -7,7 +7,6 @@ import argparse
 import numpy as np
 from vllm import LLM, SamplingParams
 from typing import List, Dict, Callable, Any
-# 假设 utils 里有 robust_reward_fn，如果没有请替换为你的实际 reward 函数
 from cs336_alignment.utils import robust_reward_fn
 
 def load_data(file_path: str, max_samples: int = 0) -> List[Dict]:
@@ -70,7 +69,7 @@ def evaluate_vllm_pass_k(
         current_prompts = [prompts[i] for i in pending_indices]
         
         # 2. 批量生成 (vLLM 内部会自动批处理)
-        # 注意：这里我们每次只生成 1 个 (n=1)，靠外层循环来实现 K
+        # 每次只生成 1 个 (n=1)，靠外层循环来实现 K
         outputs = vllm_model.generate(current_prompts, eval_sampling_params, use_tqdm=True)
         
         # 下一轮需要跑的索引列表
@@ -179,12 +178,12 @@ def run_evaluate(config: Dict[str, Any]):
         dtype="bfloat16", 
         gpu_memory_utilization=0.95, 
         trust_remote_code=True,
-        # max_model_len=8192 # 如果遇到显存不够可以开启
     )
 
     # 采样参数配置
-    # 注意：这里 max_tokens 起到了“长度截断”的作用
-    # 如果模型生成超过这个长度，vLLM 会强制停止，且 finish_reason 为 length
+    # 这里 max_tokens 起到了长度截断的作用
+    # 如果模型生成超过这个长度，vLLM 会强制停止
+
     eval_params = SamplingParams(
         temperature=config.get('temperature', 1.0), 
         top_p=config.get('top_p', 1.0), 
