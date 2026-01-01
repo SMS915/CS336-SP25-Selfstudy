@@ -5,9 +5,9 @@ example_path: "data/gsm8k/test_clean.jsonl"
 prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/grpo/grpo_gsm8k_pass_1.jsonl"
+output_path: "results/grpo_no_std_norm/grpo_no_std_norm_gsm8k_pass1.jsonl"
 
-model_path: "checkpoints/grpo_5e-6/checkpoint-step-450"
+model_path: "checkpoints/grpo_no_std_norm_5e-6/checkpoint-step-450"
 
 max_tokens: 2048
 

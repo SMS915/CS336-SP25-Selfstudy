@@ -59,7 +59,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", type=str, default="./results", help="结果文件夹")
     parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B")
-    parser.add_argument("--output_file", type=str, default="./results/batch_summary.txt")
+    parser.add_argument("--output_file", type=str, default="./results/results_stats_summary.txt")
     args = parser.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
@@ -67,12 +67,12 @@ def main():
     # 定义配置：(模型前缀, 数据集关键字, 筛选Pass@K)
     configs = [
         # --- GSM8K ---
-        ("baseline", "gsm8k_pass1", 1),
-        ("sft", "gsm8k_pass1", 1),
-        ("grpo", "gsm8k_pass1", 1),
-        ("grpo_no_std_norm", "gsm8k_pass1", 1),
-        ("drgrpo", "gsm8k_pass1", 1),
-        ("instruct", "gsm8k_pass1", 1),
+        ("baseline", "gsm8k_pass_1", 1),
+        ("sft", "gsm8k_pass_1", 1),
+        ("grpo", "gsm8k_pass_1", 1),
+        ("grpo_no_std_norm", "gsm8k_pass_1", 1),
+        ("drgrpo", "gsm8k_pass_1", 1),
+        ("instruct", "gsm8k_pass_1", 1),
 
         # --- MATH-500 ---
         ("baseline", "math500_pass_64", 64),
@@ -129,18 +129,29 @@ def main():
         log_f.write("=" * 80 + "\n\n")
 
         for model_prefix, dataset_key, pass_k in configs:
-            # 检索符合条件的文件
+            # 1. 构建子文件夹路径 (例如: ./results/drgrpo)
+            sub_dir = os.path.join(args.input_dir, model_prefix)
+
+            if not os.path.exists(sub_dir):
+                print(f"跳过: 文件夹不存在 {sub_dir}")
+                continue
+
+            # 2. 在子文件夹中检索文件
             target_file = None
-            for f in all_files:
-                if f.startswith(model_prefix) and dataset_key in f and f.endswith(".jsonl"):
+            sub_all_files = os.listdir(sub_dir)
+            for f in sub_all_files:
+                # 匹配规则：文件名包含数据集关键字 且 以 .jsonl 结尾
+                if dataset_key in f and f.endswith(".jsonl"):
                     target_file = f
                     break
 
             if not target_file:
+                print(f"未找到匹配文件: {model_prefix} -> {dataset_key}")
                 continue
 
-            file_path = os.path.join(args.input_dir, target_file)
-            print(f"正在分析: {target_file} (Pass@{pass_k})")
+            # 3. 拼接完整路径进行分析
+            file_path = os.path.join(sub_dir, target_file)
+            print(f"正在分析: {model_prefix}/{target_file} (Pass@{pass_k})")
 
             stats = analyze_file(file_path, tokenizer, pass_k)
 
