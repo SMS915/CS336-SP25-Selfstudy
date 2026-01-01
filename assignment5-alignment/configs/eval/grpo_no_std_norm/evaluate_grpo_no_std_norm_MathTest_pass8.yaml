@@ -3,9 +3,9 @@ example_path: data/MATH/test_split.jsonl
 
 prompt_path: cs336_alignment/prompts/r1_zero.prompt
 
-output_path: results/drgrpo_pass_8.jsonl
+output_path: results/grpo_no_std_norm/grpo_no_std_norm_pass_8.jsonl
 
-model_path: checkpoints/drgrpo_5e-6/checkpoint-step-450
+model_path: checkpoints/grpo_no_std_norm_5e-6/checkpoint-step-450
 
 max_tokens: 4096
 
