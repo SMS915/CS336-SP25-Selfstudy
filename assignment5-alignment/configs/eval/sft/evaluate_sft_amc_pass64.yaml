@@ -2,7 +2,7 @@
 example_path: "data/AMC/AMC12.jsonl"
 
 # Prompt 模板路径
-prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
+prompt_path: "prompts/r1_zero.prompt"
 
 # 结果保存路径
 output_path: "results/sft_amc_pass_64.jsonl"

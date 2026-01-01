@@ -1,10 +1,10 @@
-example_path: data/MATH/test_split.jsonl
+example_path: "data/MATH/test_split.jsonl"
 
-prompt_path: cs336_alignment/prompts/r1_zero.prompt
+prompt_path: "prompts/r1_zero.prompt"
 
-output_path: results/drgrpo_v6_step_350_pass_8.jsonl
+output_path: "results/drgrpo_v6_step_350_pass_8.jsonl"
 
-model_path: checkpoints/drgrpo_5e-6/checkpoint-step-350
+model_path: "checkpoints/drgrpo_5e-6/checkpoint-step-350"
 
 max_tokens: 4096
 

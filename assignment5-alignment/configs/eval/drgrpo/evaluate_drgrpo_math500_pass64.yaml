@@ -1,10 +1,10 @@
-example_path: data/MATH/math500-test.jsonl
+example_path: "data/MATH/math500-test.jsonl"
 
-prompt_path: cs336_alignment/prompts/r1_zero.prompt
+prompt_path: "prompts/r1_zero.prompt"
 
-output_path: results/drgrpo_math500_pass_64.jsonl
+output_path: "results/drgrpo_math500_pass_64.jsonl"
 
-model_path: checkpoints/drgrpo_5e-6/checkpoint-step-450
+model_path: "checkpoints/drgrpo_5e-6/checkpoint-step-450"
 
 max_tokens: 4096
 
