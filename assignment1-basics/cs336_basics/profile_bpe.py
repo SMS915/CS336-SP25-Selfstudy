@@ -2,15 +2,15 @@ import cProfile
 import pstats
 import os
 from cs336_basics.bpe_fast import BPETokenizer as FastTokenizer
-from cs336_basics.bpe_naive import BPETokenizer as BaseTokenizer
+from cs336_basics.bpe_naive import BPETokenizer as NaiveTokenizer
 from cs336_basics.bpe_naive import train_bpe_run
 
+
 def run_training_for_profile():
-    # 1. 设置参数
+    # 设置参数
     input_path = "data/TinyStoriesV2-GPT4-train.txt"
     vocab_size = 10000
     special_tokens = ["<|endoftext|>"]
-
 
 
     # bpe_fast 训练逻辑

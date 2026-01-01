@@ -6,9 +6,9 @@ import argparse
 from typing import List, Tuple
 from tqdm import tqdm
 
-from cs336_basics.bpe_fast import find_chunk_boundaries
-from cs336_basics.bpe_fast import BPETokenizer as FastTokenizer
-from cs336_basics.bpe_naive import BPETokenizer as NaiveTokenizer
+from cs336_basics.BPE.bpe_fast import find_chunk_boundaries
+from cs336_basics.BPE.bpe_fast import BPETokenizer as FastTokenizer
+from cs336_basics.BPE.bpe_naive import BPETokenizer as NaiveTokenizer
 
 TOKEN_DTYPE = np.uint16  # 对于 GPT-2 级别的词表 (50257)，uint16 (0-65535) 足够且节省空间
 CHUNK_MULTIPLIER = 4     # 任务块数量是核心数的倍数，让调度更灵活
@@ -130,9 +130,10 @@ def main():
     
     parser.add_argument("--inputs", nargs='+', help="输入文本文件路径列表 (.txt)。如果不指定，默认使用代码中定义的 DATA_DIR 下的文件。")
     parser.add_argument("--model_dir", type=str, default="BPE_File", help="包含 vocab.json 和 merges.txt 的目录")
-    parser.add_argument("--workers", type=int, default=15, help="并行工作的进程数") # 这里由于autodl的CPU核心数与系统信息不一致，需要手动指定自己分配的CPU核心数量，否则进程太多反而会限制进程性能
+    parser.add_argument("--workers", type=int, default=15, help="并行工作的进程数") # 这里由于autodl的CPU核心数与系统信息不一致，需要手动指定自己分配的CPU核心数量，否则进程太多反而会限制单进程性能
     parser.add_argument("--vocab_file", type=str, default="gpt2_vocab.json", help="词表文件名")
     parser.add_argument("--merges_file", type=str, default="gpt2_merges.txt", help="Merges 文件名")
+    parser.add_argument("--bpe_version", type=str, default="fast", help="采用BPE的具体版本, fast 或 naive")
     
     args = parser.parse_args()
 
@@ -143,24 +144,31 @@ def main():
         print(f"错误: 找不到模型文件。\n请检查 {vocab_path} 和 {merges_path}")
         return
 
+
     # 加载分词器
     print(f"正在加载分词器 (PID: {os.getpid()})...")
     t_load = time.time()
+    bpe_version = args.bpe_version.tolower()
 
-    # fastTokenizer
-    # tokenizer = FastTokenizer.from_files(
-    #     vocab_filepath=vocab_path,
-    #     merges_filepath=merges_path,
-    #     special_tokens=["<|endoftext|>"]
-    # )
+    assert bpe_version == 'fast' or bpe_version == 'naive', "BPE 必须是 fast 和 naive 两个版本之一"
 
-    # naiveTokenizer
-    tokenizer = NaiveTokenizer.from_files(
-        vocab_filepath=vocab_path,
-        merges_filepath=merges_path,
-        special_tokens=["<|endoftext|>"]
-    )
-    print(f"分词器加载完成，耗时 {time.time() - t_load:.2f} 秒。")
+
+    if args.bpe_version == 'fast':
+        # fastTokenizer
+        tokenizer = FastTokenizer.from_files(
+            vocab_filepath=vocab_path,
+            merges_filepath=merges_path,
+            special_tokens=["<|endoftext|>"]
+        )
+    else:
+        # naiveTokenizer
+        tokenizer = NaiveTokenizer.from_files(
+            vocab_filepath=vocab_path,
+            merges_filepath=merges_path,
+            special_tokens=["<|endoftext|>"]
+        )
+
+    print(f"{bpe_version}分词器加载完成，耗时 {time.time() - t_load:.2f} 秒。")
 
     # 确定要处理的文件列表
     if args.inputs:

@@ -58,10 +58,10 @@ def main():
     torch.manual_seed(config.get('seed', 42))
 
     wandb.init(
-        project=config.get('wandb_project', 'CS336-TransformerLM-Training'),
+        project=config.get('wandb_project'),
         config=config
     )
-
+    compiled = False
     # 初始化模型
     model = TransformerLM(
         vocab_size=config['vocab_size'],
@@ -85,6 +85,9 @@ def main():
     model.count_params()
     # print(f"模型总参数量: {model.count_params()}")
 
+    print("尝试编译模型")
+    model = torch.compile(model, mode='default') # 需要跟踪 compile 情况
+
 
     betas = (config.get('beta1', 0.9), config.get('beta2', 0.95))
     print(type(config['max_learning_rate']))
@@ -97,17 +100,35 @@ def main():
         eps = config.get('eps', 1e-8)
     )
     ckpt_dir = config.get('checkpoint_path', 'checkpoints/')
-    amp_enabled = (device.type == 'cuda')
+
     amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    print(f"Using AMP with dtype: {amp_dtype}")
-    scaler = torch.amp.GradScaler(enabled=amp_enabled)
-    if config.get('load_ckpt', False) == True:
+
+    amp_enabled = not config.get('disable_amp', False)
+
+    if amp_enabled and amp_dtype == torch.bfloat16:
+        # BF16动态范围和FP32等同，很难溢出，不需要GradScaler
+        use_scaler = False
+
+    elif amp_enabled and amp_dtype == torch.float16:
+        # FP16动态范围小，必须使用GradScaler
+        use_scaler = True
+
+    else:
+        use_scaler = False
+
+    print(f"AMP enabled: {amp_enabled}, Dtype: Using half precision with dtype: {amp_dtype}, Enable amp traing: {amp_enabled}")
+
+    scaler = torch.amp.GradScaler(enabled=use_scaler)
+
+    # 配置从检查点开始训练
+    resume_training = config.get('load_ckpt', False)
+    if resume_training:
         ckpt_list = os.listdir(ckpt_dir) if os.path.exists(ckpt_dir) else []
         if ckpt_list:
             ckpt_path = get_latest_checkpoint(ckpt_dir)
             checkpoint = torch.load(ckpt_path)
             if 'scaler_state_dict' in checkpoint:
-                start_step = load_amp_checkpoint(ckpt_path, model, optimizer, scaler)
+                start_step = load_checkpoint(ckpt_path, model, optimizer, scaler)
             else :
                 start_step = load_checkpoint(ckpt_path, model, optimizer)
             print(f"从检查点 {ckpt_path} 恢复，起始迭代次数: {start_step}")
@@ -116,9 +137,6 @@ def main():
             print("未找到检查点，开始新的训练")
     else:
         start_step = 0
-
-    print("尝试编译模型")
-    model = torch.compile(model, mode='default')
 
     train_loader = create_dataloader(config, is_train=True)
 
@@ -239,80 +257,5 @@ def main():
                     print(f"保存检查点: {ckpt_path}\n")
 
     print("训练完成。")
-
-    # 初版 training loop
-    # start_step = 0
-
-    # 初始化数据加载器
-    # train_loader = DataLoader(
-    #     dataset_path=config['train_data_path'],
-    #     context_length=config['context_length'],
-    #     batch_size=config['batch_size'],
-    #     seed=config.get('seed', 42),
-    #     device=device.type,
-    #     token_dtype=np.dtype(config.get('token_dtype', 'uint16'))
-    # )
-
-    # val_loader = DataLoader(
-    #     dataset_path=config['val_data_path'],
-    #     context_length=config['context_length'],
-    #     batch_size=config['batch_size'],
-    #     seed=config.get('seed', 42),
-    #     device=device.type,
-    #     token_dtype=np.dtype(config.get('token_dtype', 'uint16'))
-    # )
-
-    # current_epoch = 0
-    # train_iter = train_loader.__iter__()
-    # for step in range(start_step, config['max_steps']):
-    #     new_lr = get_lr_schedule(t=step, t_warm=config['warmup_steps'], t_cycle=config['cycle_steps'], lr_max=config['max_learning_rate'], lr_min=config['min_learning_rate'])
-    #     for param_group in optimizer.param_groups:
-    #         param_group['lr'] = new_lr
-    #     epoch_for_dataloader = step // config['steps_per_epoch']
-    #     if epoch_for_dataloader != current_epoch:
-    #         current_epoch = epoch_for_dataloader
-    #         train_iter = train_loader.__iter__()
-    #     with torch.amp.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
-    #         inputs, targets = next(train_iter)
-    #         logits = model(inputs, token_positions = None)  # batch_size seq_len vocab_size
-    #         loss = cross_entropy_loss(logits.view(-1, config['vocab_size']), targets.view(-1))
-    #     # scaled_loss = loss * s
-    #     optimizer.zero_grad()
-    #     scaler.scale(loss).backward()
-    #     scaler.unscale_(optimizer)
-    #     clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
-    #     # torch.nn.utils.clip_grad_norm_(model.parameters(), config.get('max_grad_norm', 1.0))
-    #     scaler.step(optimizer)
-    #     scaler.update()
-
-    #     wandb.log({'train/loss': loss.item(), 'learning_rate': optimizer.param_groups[0]['lr']}, step=step)
-    #     if step % config.get('log_interval', 100) == 0:
-    #         print(f"Step {step}: Train Loss = {loss.item():.4f}")
-
-    #     if (step + 1) % config['eval_interval'] == 0:
-    #         model.eval()
-    #         val_loss = 0.0
-    #         with torch.no_grad():
-    #             val_iter = val_loader.__iter__()
-    #             for _ in range(config['eval_steps']):
-    #                 val_inputs, val_targets = next()
-    #                 val_logits = model(val_inputs, token_positions = None)
-    #                 val_loss += cross_entropy_loss(val_logits.view(-1, config['vocab_size']), val_targets.view(-1)).item()
-
-    #             avg_val_loss = val_loss / config['eval_steps']
-    #             perplexity = math.exp(avg_val_loss)
-    #             wandb.log({'val/loss': avg_val_loss, 'val/perplexity': perplexity}, step=step)
-    #         model.train()
-
-    #         if (step + 1) % config['checkpoint_interval'] == 0:
-    #             if not os.path.exists(ckpt_dir):
-    #                 os.makedirs(ckpt_dir)
-    #             ckpt_filename = f"ckpt_step_{step:07d}_loss_{val_loss:.4f}.pt"
-    #             ckpt_path = os.path.join(ckpt_dir, ckpt_filename)
-    #             if scaler is not None:
-    #                 save_amp_checkpoint(model=model, optimizer=optimizer,scaler=scaler, iteration= step + 1, out=ckpt_path)
-    #             else:
-    #                 save_checkpoint(model=model, optimizer=optimizer, iteration= step + 1, out=ckpt_path)
-    #             print(f"保存检查点: {ckpt_path}\n")
 if __name__ == "__main__":
     main()

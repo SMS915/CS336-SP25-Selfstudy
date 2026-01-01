@@ -111,7 +111,7 @@
 
 #### 3.3.1 测试环境与配置
 
-- **输入数据**: 5,000 个 Common Crawl WET 文件（包含约 1.34 亿条原始网页记录，原始压缩体积约 375GB）。
+- **输入数据**: 5,000 个 Common Crawl WET 文件（包含约 1.34 亿条原始网页记录，压缩体积约 375GB， 原始体积约为 4 $\times$ 375 $\approx$ **1.5TB**）。
 - **硬件环境**:
   - CPU: 32 vCPU (Intel Xeon Platinum)
   - RAM: 120GB

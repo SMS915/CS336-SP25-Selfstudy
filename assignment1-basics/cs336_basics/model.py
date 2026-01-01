@@ -58,7 +58,7 @@ class Linear(nn.Module):
         Returns:
             torch.Tensor: 输出张量，形状为 (..., out_features)。
         """
-        output = x @ self.weight.T
+        output = x @ self.weight.T # (confused: 这里x @ W.T，在线性代数中是X 左乘 W.T，还是 X 右乘 W.T,是前者的话，实际上就是X 往 W.T 空间的线性映射吗，也就是将X投影到W.T的线性空间)
         if self.bias is not None:
             output = output + self.bias
         return output

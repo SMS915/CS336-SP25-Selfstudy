@@ -1,59 +1,62 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
 
-# data = [
-#     ['baseline', 'aime24', 20.00], ['baseline', 'aime25', 13.33], ['baseline', 'amc', 8.43],
-#     ['baseline', 'gsm8k', 0.38], ['baseline', 'math500', 0.40], ['baseline', 'MathTest', 3.98],
-#     ['drgrpo', 'aime24', 83.33], ['drgrpo', 'aime25', 83.33], ['drgrpo', 'amc', 60.24],
-#     ['drgrpo', 'gsm8k', 9.55], ['drgrpo', 'math500', 13.20], ['drgrpo', 'MathTest', 32.88],
-#     ['grpo', 'aime24', 73.33], ['grpo', 'aime25', 83.33], ['grpo', 'amc', 60.24],
-#     ['grpo', 'gsm8k', 8.19], ['grpo', 'math500', 10.40], ['grpo', 'MathTest', 28.92],
-#     ['grpo_no_std_norm', 'aime24', 83.33], ['grpo_no_std_norm', 'aime25', 83.33],
-#     ['grpo_no_std_norm', 'amc', 55.42], ['grpo_no_std_norm', 'gsm8k', 12.81],
-#     ['grpo_no_std_norm', 'math500', 13.20], ['grpo_no_std_norm', 'MathTest', 30.76],
-#     ['instruct', 'amc', 14.46], ['instruct', 'gsm8k', 0.53], ['instruct', 'math500', 0.60],
-#     ['instruct', 'MathTest', 2.66],
-#     ['sft', 'aime24', 93.33], ['sft', 'aime25', 90.00], ['sft', 'amc', 72.29],
-#     ['sft', 'gsm8k', 42.84], ['sft', 'math500', 40.40], ['sft', 'MathTest', 59.36]
-# ]
-# df = pd.DataFrame(data, columns=['Model', 'Dataset', 'Collapse_Ratio'])
+def main():
+    # 1. 模拟数据加载 (请确保你的文件名正确)
+    df = pd.read_csv('results/collapse_analysis.csv')
+    if df['Collapse_Ratio'].dtype == 'object':
+        df['Collapse_Ratio'] = df['Collapse_Ratio'].str.rstrip('%').astype('float')
+    # 2. 设置绘图风格
+    sns.set_theme(style="whitegrid", palette="muted")
 
-# 1. 模拟数据加载 (请确保你的文件名正确)
-df = pd.read_csv('results/collapse_analysis.csv')
-# 2. 设置绘图风格
-sns.set_theme(style="whitegrid", palette="muted")
-plt.figure(figsize=(14, 7))
+    # 3. 按任务难度排序 (从易到难)
+    dataset_order = ['gsm8k', 'math500', 'MathTest', 'amc', 'aime24', 'aime25']
 
-# 3. 按任务难度排序 (从易到难)
-dataset_order = ['gsm8k', 'math500', 'MathTest', 'amc', 'aime24', 'aime25']
+    # 3. 绘制柱状图
+    # 使用更高级的颜色映射，区分 SFT 与 RL
+    palette = {
+        # 官方/基准系列
+        "baseline": "#4F4F4F",  # 深灰 (Base)
+        "instruct": "#607D8B",  # 蓝灰 (官方 Instruct，保持独立感)
 
-# 4. 绘制分组柱状图
-ax = sns.barplot(
-    data=df,
-    x='Dataset',
-    y='Collapse_Ratio',
-    hue='Model',
-    order=dataset_order,
-    palette="viridis"
-)
+        # 用户训练系列
+        "sft": "#D32F2F",  # 红色 (用户 SFT 基础)
 
-# 5. 图表美化
-plt.title('Comparison of Mode Collapse Ratios Across Models and Datasets', fontsize=16, fontweight='bold')
-plt.ylabel('Collapse Ratio (%)', fontsize=12)
-plt.xlabel('Evaluation Datasets (Ordered by Difficulty)', fontsize=12)
-plt.ylim(0, 100)
-plt.legend(title='Model Type', bbox_to_anchor=(1.05, 1), loc='upper left')
+        "grpo": "#81D4FA",   # 浅蓝(标准 RL)
+        "grpo_no_std_norm": "#7db8ef",  # 深蓝
+        "drgrpo": "#82a1e2" ,
+        "drgrpo_best": "#F57C00" # 橙色 (你的最终优化版本，最显眼)
+    }
 
-# 在柱状图上方标注数值 (可选，适合展示具体数据)
-for p in ax.patches:
-    if p.get_height() > 0:
-        ax.annotate(f'{p.get_height():.1f}%',
-                    (p.get_x() + p.get_width() / 2., p.get_height()),
-                    ha='center', va='center',
-                    fontsize=8, color='black', rotation=90, xytext=(0, 15),
-                    textcoords='offset points')
+    hue_order = ['baseline', 'sft', 'grpo', 'grpo_no_std_norm', 'drgrpo', 'drgrpo_best', 'instruct']
 
-plt.tight_layout()
-plt.savefig('collapse_ratio_comparison.png', dpi=300)
-plt.show()
+    plt.figure(figsize=(12, 16))  # 增加高度
+    ax = sns.barplot(
+        data=df,
+        y='Dataset',  # 任务名作为 Y 轴
+        x='Collapse_Ratio',  # 比例作为 X 轴
+        hue='Model',
+        order=dataset_order,
+        hue_order=hue_order,
+        palette=palette,
+        orient='h'  # 强制水平方向
+    )
+
+    # 标注数字移动到柱子右侧
+    for container in ax.containers:
+        ax.bar_label(container, fmt='%.1f%%', padding=5, fontsize=14)
+
+    plt.xlabel('Mode Collapse Ratio (%)', fontsize=16)
+    plt.ylabel('Datasets', fontsize=16)
+    plt.legend(title='Model Stage', loc='upper right', frameon=True)
+
+    plt.tick_params(labelsize=14)
+
+    plt.tight_layout()
+    plt.savefig('asset/collapse_analysis.png', dpi=300)
+    plt.close()
+
+if __name__ == '__main__':
+    main()

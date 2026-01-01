@@ -30,66 +30,6 @@ from cs336_alignment.utils import tokenize_prompt_and_output, robust_reward_fn
 # ==========================================
 # 1. 辅助函数：权重同步
 # ==========================================
-def sync_policy_to_vllm(policy_model: torch.nn.Module, vllm_instance: LLM):
-    """
-    单卡专用：将 PyTorch 训练模型 (policy) 的权重原地更新到 vLLM 推理模型中。
-    适配 vLLM 0.7.x 及 V0 Engine 架构 (engine_core).
-    """
-    # 1. 获取 LLMEngine
-    llm_engine = vllm_instance.llm_engine
-    vllm_model = None
-    
-    # 定义查找 Executor 的候选对象列表
-    # 顺序：直接查找 -> 在 engine_core 里查找
-    search_targets = [llm_engine]
-    if hasattr(llm_engine, "engine_core"):
-        search_targets.append(llm_engine.engine_core) # type: ignore
-    
-    executor = None
-    
-    # 2. 深度查找 Executor
-    for target in search_targets:
-        # 尝试常见的属性名
-        if hasattr(target, "model_executor"):
-            executor = target.model_executor
-            break
-        if hasattr(target, "executor"):
-            executor = target.executor # type: ignore
-            break
-            
-    if executor is None:
-        # 调试信息：如果还是找不到，打印 engine_core 的属性
-        print("❌ Error: 无法找到 executor。")
-        if hasattr(llm_engine, "engine_core"):
-            print(f"Debug: engine_core attrs: {[a for a in dir(llm_engine.engine_core) if not a.startswith('_')]}") # type: ignore
-        raise RuntimeError("无法定位 vLLM Executor，请检查 vLLM 版本结构。")
-
-    # 3. 查找底层 Model
-    # 通常路径: executor -> driver_worker -> model_runner -> model
-    try:
-        if hasattr(executor, "driver_worker"):
-            vllm_model = executor.driver_worker.model_runner.model # type: ignore
-        elif hasattr(executor, "model_runner"):
-            vllm_model = executor.model_runner.model # type: ignore
-    except AttributeError:
-        pass
-
-    if vllm_model is None:
-        raise RuntimeError("找到了 Executor 但无法定位 Model，请确保 enforce_eager=True")
-
-    # 4. 执行更新 (In-place Copy)
-    policy_params = dict(policy_model.named_parameters())
-    
-    with torch.no_grad():
-        count = 0
-        for name, vllm_param in vllm_model.named_parameters():
-            if name in policy_params:
-                # 确保数据在同一设备，执行原地拷贝
-                vllm_param.copy_(policy_params[name])
-                count += 1
-            else:
-                pass
-
 def load_policy_into_vllm_instance(policy: torch.nn.Module, llm:LLM):
     state_dict = policy.state_dict()
     llm_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
@@ -285,8 +225,7 @@ def train(config_path: str):
         prompts = batch["prompt"]
         ground_truths = batch["ground_truth"]
 
-        # 同步权重到vllm
-        # sync_policy_to_vllm(policy, llm)
+        # 同步权重到vllm，以确保训练和推理模型的一致性
         load_policy_into_vllm_instance(policy, llm)
         
         # 生成 (vLLM)
@@ -326,8 +265,7 @@ def train(config_path: str):
         for r in all_responses:
             lengths.append(len(tokenizer.encode(r))) # 估算 Token 长度
         
-        # 1.5 Tokenization (准备训练数据)
-        # 复用 SFT 的 Tokenizer
+        # 1.5 准备训练数据
         tokenized_batch = tokenize_prompt_and_output(
             prompt_strs=all_prompts,
             output_strs=all_responses,
@@ -339,16 +277,14 @@ def train(config_path: str):
         response_mask = tokenized_batch["response_mask"].to(device)
         labels = tokenized_batch["labels"].to(device)
         attention_mask = tokenized_batch["attention_mask"].to(device)
-        
-        # 使用生成数据的策略模型计算对数概率。
-        # 这些 "旧的" log_probs 将作为基准，用于在损失函数中计算概率比率。
 
         inference_batch_size = config["training"].get("inference_batch_size", 2)
         old_log_probs_list = []
         token_entropy_list = []
         policy.eval()
         with torch.no_grad():
-            for i in range(0, len(input_ids), inference_batch_size):
+            # 分批计算
+            for i in tqdm(range(0, len(input_ids), inference_batch_size), desc="Calculating Ref LogProbs"):
                 batch_input_ids = input_ids[i : i + inference_batch_size]
                 batch_labels = labels[i : i + inference_batch_size]
                 batch_mask = attention_mask[i: i + inference_batch_size]

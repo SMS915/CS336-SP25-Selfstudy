@@ -99,7 +99,7 @@ def compute_grpo_clip_loss(advantages: torch.Tensor,
             - loss (torch.Tensor): 计算后的 per-token 损失。
             - metadata (Dict): 包含裁剪比例、近似 KL 散度等监控指标。
     """
-    # 计算重要性采样比率 (Importance Sampling Ratio): pi_new / pi_old
+    # 计算重要性采样比率: pi_new / pi_old
     ratio = torch.exp(policy_log_probs - old_log_probs.detach())
     # 未裁剪的目标部分
     part1 = ratio * advantages
@@ -227,8 +227,10 @@ def grpo_microbatch_train_step(policy_log_probs: torch.Tensor,
     step_loss, metadata = compute_policy_gradient_loss(policy_log_probs, loss_type, raw_rewards, advantages, old_log_probs, cliprange)
     # 应用掩码并计算每个样本的平均损失，只计算 response 部分的 loss
     if not remove_length_norm:
+        # grpo做法，按照样本长度对每个advantage进行归一化
         perexample_loss = masked_mean(step_loss, response_mask, dim=-1)
     else:
+        # drgrpo做法，按照统一分母归一化
         perexample_loss = (step_loss * response_mask).sum(dim=-1) / fixed_norm_length
 
     # 计算整个 batch 的平均损失

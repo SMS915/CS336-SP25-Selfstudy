@@ -5,7 +5,7 @@ import os
 
 from cs336_basics.model import TransformerLM
 from cs336_basics.bpe_naive import BPETokenizer
-from cs336_basics.checkpointing import get_latest_checkpoint, get_best_checkpoint, load_amp_checkpoint
+from cs336_basics.checkpointing import get_latest_checkpoint, get_best_checkpoint, load_checkpoint
 from cs336_basics.generation_utils import generate_text
 
 def main():
@@ -55,13 +55,13 @@ def main():
 
     ckpt_dir = args.checkpoint_dir or config.get('checkpoint_path', './checkpoints')
 
-    best_ckpt_path = get_best_checkpoint(ckpt_dir)
+    flag, best_ckpt_path = get_best_checkpoint(ckpt_dir)
     
-    if best_ckpt_path:
+    if flag:
         print(f"正在从最佳检查点加载权重: {best_ckpt_path}")
         try:
-            # 加载检
-            step = load_amp_checkpoint(best_ckpt_path, model, optimizer=None, scaler=None)
+            # 加载检查点
+            step = load_checkpoint(best_ckpt_path, model, optimizer=None, scaler=None, model_compiled=False)
             print(f"权重加载成功 (Step {step})。")
         
         except Exception as e:

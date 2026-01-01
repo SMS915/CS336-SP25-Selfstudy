@@ -2,7 +2,7 @@
 # ==========================================
 # 1. 基础与系统设置 (General & System)
 # ==========================================
-project_name: "CS336-TransformerLM-OpenWebText"
+project_name: "CS336-TransformerLM-OpenWebText-ablation"
 seed: 42                                  # 固定随机种子，保证实验可复现
 device: "cuda"                            # 训练设备
 load_ckpt: False                          # 是否加载旧权重（Resume Training）
@@ -53,6 +53,8 @@ log_interval: 50                          # WandB/控制台打印频率
 eval_interval: 500                        # 验证集评估频率
 eval_steps: 50                            # 每次评估使用的 Batch 数量
 checkpoint_interval: 500                  # 模型保存频率
+
+disable_amp: False                        # 是否关闭混合精度训练，即使用原生Float32进行训练
 
 # ==========================================
 # 5. 优化器与调度器 (Optimizer & Scheduler)

@@ -7,6 +7,7 @@ device: "cuda"
 load_ckpt: False
 save_ckpt: False
 checkpoint_path: "./checkpoints/"
+run_name: "ablation_performance + relu"
 
 # ==========================================
 # 2. 数据设置 (Data Configuration)
@@ -53,6 +54,8 @@ log_interval: 100
 eval_interval: 1000
 eval_steps: 50
 checkpoint_interval: 4000
+
+disable_amp: False
 
 # ==========================================
 # 5. 优化器与调度器 (Optimizer & Scheduler)

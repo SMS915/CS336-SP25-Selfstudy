@@ -8,7 +8,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 TASKS = {
     # "GSM8K": ("gsm8k", "main", "test"),
-    "AMC12": ("AI-MO/aimo-validation-amc", None, "train"),  # AI-MO把验证集放在train split里
+    "AMC12": ("AI-MO/aimo-validation-amc", None, "train"),
     "OmniMATH": ("KbsdJames/Omni-MATH", None, "test")
 }
 

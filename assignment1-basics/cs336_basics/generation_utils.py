@@ -1,12 +1,25 @@
-__package__ = "cs336_basics"
-
 import torch
 from cs336_basics.model import TransformerLM
 from cs336_basics.checkpointing import *
-from cs336_basics.bpe_naive import BPETokenizer
+from cs336_basics.BPE.bpe_fast import BPETokenizer
 from cs336_basics.utils import Softmax
 
 def generate_text(model: TransformerLM, tokenizer: BPETokenizer, prompt: str, max_new_tokens: int, temperature: float = 1.0, top_k: int | None = None) -> str:
+    """
+    文本生成核心函数，给定提示词，循环进行自回归文本生成
+    Args:
+        model (TransformerLM): TransformerLM 实例
+        tokenizer (BPETokenizer): BPE分词器实例
+        prompt (str): 输入的提示词
+        max_new_tokens (int): 最大文本生成长度
+        temperature (float): 模型温度，间接控制模型输出logits的分布的尖锐性，以控制模型输出的确定性。
+            调高可以使得模型输出更加多样，但可能会不够精确，连贯
+            调低则可以使得模型输出确定化，保持连贯准确
+        top_k (int): 控制模型从最可能的 k 个词中选取下一个词，k最大，生成文本越多样，否则则越确定性
+    Returns:
+        str:
+
+    """
     model.eval()
     input_ids = tokenizer.encode(prompt)
     input_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)  # Shape: (1, seq_len)

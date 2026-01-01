@@ -179,17 +179,14 @@ def run_evaluate(config: Dict[str, Any]):
         dtype="bfloat16", 
         gpu_memory_utilization=0.95, 
         trust_remote_code=True,
-        # max_model_len=8192 # 如果遇到显存不够可以开启
     )
 
     # 采样参数配置
-    # 注意：这里 max_tokens 起到了“长度截断”的作用
-    # 如果模型生成超过这个长度，vLLM 会强制停止，且 finish_reason 为 length
     eval_params = SamplingParams(
         temperature=config.get('temperature', 1.0), 
         top_p=config.get('top_p', 1.0), 
         max_tokens=config.get('max_tokens', 1024),
-        stop=["</answer>"], # 遇到这个标签停止
+        stop=["</answer>"],
         include_stop_str_in_output=True,
         n=1 # 每次只生成一个，通过外层循环控制 Pass@K
     )

@@ -14,5 +14,3 @@ snapshot_download(
    local_dir_use_symlinks=False, # 禁用符号链接
    resume_download=True # 支持断点续传
 )
-
-# "bespokelabs/Bespoke-Stratos-17k"

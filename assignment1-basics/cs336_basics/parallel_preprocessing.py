@@ -98,7 +98,7 @@ def main():
 
         t0 = time.time()
 
-        # A. 切分任务 (利用 FastBPE 的工具)
+        # 切分任务 (利用 FastBPE 的工具)
         desired_chunks = NUM_WORKERS * CHUNK_MULTIPLIER
         boundaries = find_chunk_boundaries(
             input_path, 
@@ -115,7 +115,7 @@ def main():
 
         total_tokens = 0
         
-        # B. 并行执行 (无写入 IO)
+        # 并行执行 (无写入 IO)
         with mp.Pool(processes=NUM_WORKERS) as pool:
             # 使用 imap_unordered 稍微快一点点，因为我们不在乎顺序，只在乎总数
             for count in pool.imap_unordered(benchmark_worker, tasks):

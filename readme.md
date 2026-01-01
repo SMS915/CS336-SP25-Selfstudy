@@ -10,7 +10,7 @@
 
 **课程网站：** [https://stanford-cs336.github.io/spring2025/](https://stanford-cs336.github.io/spring2025/)
 
-
+*注：当前代码库为功能完整的实验性研究原型。计划在2026年2月美赛后进行生产级标准的重构与模块化优化。*
 
 ## 核心亮点与独创性工作
 

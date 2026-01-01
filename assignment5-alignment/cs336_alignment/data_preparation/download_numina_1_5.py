@@ -1,12 +1,11 @@
 from datasets import load_dataset
 import os
 
-
 def download_dataset(repo_id="AI-MO/NuminaMath-1.5", save_path="./data/NuminaMath-1.5/raw"):
     print(f"开始从 {repo_id} 下载数据集...")
 
-    # 建议使用 stream=False 下载全量数据以便本地多次处理
-    # NuminaMath-1.5 约 89.6 万条数据
+    # 使用 stream=False 下载全量数据以便本地多次处理
+    # 共约 89.6 万条数据
     dataset = load_dataset(repo_id, split="train")
 
     # 导出为本地格式，方便后续脚本直接读取

@@ -52,6 +52,8 @@ eval_interval: 500
 eval_steps: 50
 checkpoint_interval: 4000
 
+disable_amp: False
+
 # ==========================================
 # 5. 优化器与调度器 (Optimizer & Scheduler)
 # ==========================================

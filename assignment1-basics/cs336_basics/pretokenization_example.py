@@ -1,6 +1,7 @@
 import os
 from typing import BinaryIO
 
+# CS336官方提供的分块边界确定代码示例
 
 def find_chunk_boundaries(
     file: BinaryIO,
