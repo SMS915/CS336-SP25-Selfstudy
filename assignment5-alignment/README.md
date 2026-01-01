@@ -1,20 +1,3 @@
-> 思路/结构整理
->
-> 已有数据： 
->
-> 不同sft 数据策略在不同训练样本数后的表现表格
-> 
-> baseline, sft, rl三种模型的MATH-500Pass@1 response尾段截取，明显sft, rl规整
-> 
-> baseline,sft,所有v6 RL模型 step 450, 官方Instruct模型的 综合评测(Pass@1/Pass@64)表格
-> 
-> 对应上面表格Pass@64部分每个模型的曲线图
->
-> 三种RL在MATH-500上Pass@8和在AIME24上Pass@64的ckpt-step-(50, 400, 50)动态图，分为单个指标和整合版，其中grpo缺失150-350的ckpt/dynamics，grpo_no_std_norm缺失100-300。
-> 
-> 三种RL的训练时wandb监控图，包括训练时的平均熵，最佳reward动态，平均reward动态，format_rate动态，近似KL散度，平均响应长度，reward标准差，梯度范数，PPO风裁剪比例；训练中评测(一次仅有4个样本, ans reward参考性不高)reward动态, format_rate 动态, 响应长度动态
->
-
 # Project R1-Zero-Lite: 1.5B 模型单卡推理强化学习复现与算法适配研究
 
 
