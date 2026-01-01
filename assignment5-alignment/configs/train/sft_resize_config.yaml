@@ -8,7 +8,7 @@ model:
 data:
   train_path: "data/MATH/sft_v5_platinum.jsonl"
   valid_path: "data/MATH/validation.jsonl"
-  prompt_path: "cs336_alignment/prompts/r1_zero.prompt"
+  prompt_path: "prompts/r1_zero.prompt"
   max_seq_length: 4096
   max_samples: null
 

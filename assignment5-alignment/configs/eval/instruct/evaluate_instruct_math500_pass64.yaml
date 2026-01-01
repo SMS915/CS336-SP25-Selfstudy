@@ -1,3 +1,4 @@
+
 example_path: data/MATH/math500-test.jsonl
 
 output_path: results/instruct_math500_pass_64.jsonl
