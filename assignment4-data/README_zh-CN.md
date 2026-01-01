@@ -213,7 +213,7 @@
 | **5,000** (Mid)    | 3.68               | 3.83             | 4.29                     | **4.10**             | 79.7               | 60.7                 |
 | **8,000**          | 3.52               | 3.63             | 4.26                     | **4.00**             | 71.0               | 54.7                 |
 | **11,000** (Final) | 3.47               | 3.58             | 4.23                     | **3.94**             | 68.5               | 51.5                 |
-| **`Δ` (Final)**    | -                  | *+0.11 (Higher)* | -                        | ***-0.10 (Better)*** |                    | ***-17.0 (Better)*** |
+| **`Δ` (Final)**    | -                  | *+0.11 (Higher)* | -                        | ***-0.27 (Better)*** |                    | ***-17.0 (Better)*** |
 
 
 
@@ -340,23 +340,25 @@
 `sample_cc_paths.py` 脚本用于从Common Crawl的路径清单中抽样，由于抽样脚本的随机种子固定，脚本支持**增量下载**，以避免多次下载时下载大量重复的wet文件。
 
 1.  **首次抽样**:
+    
     ```bash
-    # 从 wet.paths.gz 清单中抽样20个WET文件链接，并生成下载脚本 download_cc_batch_1.sh
+    # 从 wet.paths.gz 清单中抽样20个WET文件链接，并生成下载脚本 download_cc_batch_from_0_to_100.sh
+    # 和url文件 download_cc_batch_from_0_to_100.txt
     # 默认只下载WET文件, 如要下载对应的warc.gz文件，在后面添上 "--download_warc"
-    python -m cs336_data.sample_cc_path data/cc_path/wet.paths.gz -n 100 --output-script scripts/download_cc_batch_1.sh # --download_warc
+    python -m cs336_data.sample_cc_path data/cc_path/wet.paths.gz -n 100 --output-script scripts/download_cc_batch_start_0_add_100.sh # --download_warc
     ```
 2.  **后续增量抽样**:
     如果需要更多不重复的样本，可以使用 `--skip` 参数。
     
     ```bash
     # 在已抽样20个的基础上，再抽样100个全新的文件链接
-    python -m cs336_data.sample_cc_paths data/cc_path/wet.paths.gz -n 100 --skip 20  --output-script scripts/download_cc_batch_2.sh
+    python -m cs336_data.sample_cc_paths data/cc_path/wet.paths.gz -n 100 --skip 20  --output-script scripts/download_cc_batch_start_100_add_20.sh
     ```
 3.  **执行下载**:
     对每个生成的脚本执行后台下载任务。
     ```bash
-    chmod +x scripts/download_cc_batch_1.sh
-    nohup scripts/download_cc_batch_1.sh > cc_download_1.log 2>&1 &
+    chmod +x scripts/download_cc_batch_start_0_add_100.sh
+    nohup scripts/download_cc_batch_start_0_add_100.sh > cc_download_1.log 2>&1 &
     ```
 
 ### **步骤二：构建与训练质量分类器**

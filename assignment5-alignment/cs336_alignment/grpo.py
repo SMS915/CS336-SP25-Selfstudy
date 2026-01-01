@@ -227,7 +227,7 @@ def grpo_microbatch_train_step(policy_log_probs: torch.Tensor,
     step_loss, metadata = compute_policy_gradient_loss(policy_log_probs, loss_type, raw_rewards, advantages, old_log_probs, cliprange)
     # 应用掩码并计算每个样本的平均损失，只计算 response 部分的 loss
     if not remove_length_norm:
-        # grpo做法，按照样本长度对每个advantage进行归一化
+        # grpo做法，按照样本长度对每个loss进行归一化
         perexample_loss = masked_mean(step_loss, response_mask, dim=-1)
     else:
         # drgrpo做法，按照统一分母归一化

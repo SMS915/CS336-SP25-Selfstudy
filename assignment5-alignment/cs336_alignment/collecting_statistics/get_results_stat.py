@@ -72,6 +72,7 @@ def main():
         ("grpo", "gsm8k_pass_1", 1),
         ("grpo_no_std_norm", "gsm8k_pass_1", 1),
         ("drgrpo", "gsm8k_pass_1", 1),
+        ("drgrpo_best", "gsm8k_pass_1", 1),
         ("instruct", "gsm8k_pass_1", 1),
 
         # --- MATH-500 ---
@@ -80,6 +81,7 @@ def main():
         ("grpo", "math500_pass_64", 64),
         ("grpo_no_std_norm", "math500_pass_64", 64),
         ("drgrpo", "math500_pass_64", 64),
+        ("drgrpo_best", "math500_pass_64", 64),
         ("instruct", "math500_pass_64", 64),
 
         # --- MathTest ---
@@ -88,10 +90,9 @@ def main():
         ("grpo", "MathTest_pass_8", 8),
         ("grpo_no_std_norm", "MathTest_pass_8", 8),
         ("drgrpo", "MathTest_pass_8", 8),
-        ("instruct", "MathTest_pass_8", 64),
+        ("drgrpo_best", "MathTest_pass_8", 8),
+        ("instruct", "MathTest_pass_8", 8),
 
-        # --- AMC ---
-        ("baseline", "math500_pass_64", 64),
 
         # --- AMC (American Mathematics Competitions) ---
         ("baseline", "amc_pass_64", 64),
@@ -99,6 +100,7 @@ def main():
         ("grpo", "amc_pass_64", 64),
         ("grpo_no_std_norm", "amc_pass_64", 64),
         ("drgrpo", "amc_pass_64", 64),
+        ("drgrpo_best", "amc_pass_64", 64),
         ("instruct", "amc_pass_64", 64),
 
         # --- AIME 2024 ---
@@ -107,6 +109,7 @@ def main():
         ("grpo", "aime24_pass_64", 64),
         ("grpo_no_std_norm", "aime24_pass_64", 64),
         ("drgrpo", "aime24_pass_64", 64),
+        ("drgrpo_best", "aime24_pass_64", 64),
         ("instruct", "aime24_pass_64", 64),
 
         # --- AIME 2025 ---
@@ -115,6 +118,7 @@ def main():
         ("grpo", "aime25_pass_64", 64),
         ("grpo_no_std_norm", "aime25_pass_64", 64),
         ("drgrpo", "aime25_pass_64", 64),
+        ("drgrpo_best", "aime25_pass_64", 64),
         ("instruct", "aime25_pass_64", 64),
     ]
 
