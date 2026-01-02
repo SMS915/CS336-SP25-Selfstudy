@@ -125,9 +125,9 @@ def plot_pass_k_curve(results_list, task_name: str, show_k_list=[1, 2, 4, 8], te
     save_dir = os.path.join(os.getcwd(), 'asset/')
     os.makedirs(save_dir, exist_ok=True)
     if text:
-        save_name = f'{task_name} Pass@{last_k}对比图.png'
+        save_name = f'{task_name}_Pass@{last_k}对比图.png'
     else:
-        save_name = f'{task_name} Pass@{last_k}对比图-无标注.png'
+        save_name = f'{task_name}_Pass@{last_k}对比图-无标注.png'
     save_path = os.path.join(save_dir, save_name)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()  # 释放内存
