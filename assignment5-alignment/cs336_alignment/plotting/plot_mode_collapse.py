@@ -27,10 +27,10 @@ def main():
         "grpo": "#81D4FA",   # 浅蓝(标准 RL)
         "grpo_no_std_norm": "#7db8ef",  # 深蓝
         "drgrpo": "#82a1e2" ,
-        "drgrpo_best": "#F57C00" # 橙色 (你的最终优化版本，最显眼)
+        # "drgrpo_best": "#F57C00" # 橙色 (你的最终优化版本，最显眼)
     }
 
-    hue_order = ['baseline', 'sft', 'grpo', 'grpo_no_std_norm', 'drgrpo', 'drgrpo_best', 'instruct']
+    hue_order = ['baseline', 'sft', 'grpo', 'grpo_no_std_norm', 'drgrpo', 'instruct'] # 'drgrpo_best'
 
     plt.figure(figsize=(12, 16))  # 增加高度
     ax = sns.barplot(

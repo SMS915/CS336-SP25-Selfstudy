@@ -2,9 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-# --- 1. 环境准备 ---
-# 创建 assets 文件夹
-output_dir = "assets"
+
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
