@@ -502,129 +502,8 @@ SFT阶段的成功，证明了即便是1.5B这样的小参数模型，也能通�
 
 <p align="center">表3 不同训练阶段/算法下模型各测试集表现汇总 (Pass@1 & Pass@64)</p>
 
-<table align="center">
-    <thead>
-        <tr align="center">
-            <th rowspan="2">Metric</th>
-            <th rowspan="2">Dataset</th>
-            <th rowspan="2">Base</th>
-            <th rowspan="2">SFT</th>
-            <th colspan="3">Reinforcement Learning (RL)</th>
-            <th rowspan="2">Instruct</th>
-            <th rowspan="2">▽ Gap</th>
-        </tr>
-        <tr align="center">
-            <th>GRPO</th>
-            <th>w/o std</th>
-            <th><b>Dr.GRPO</b></th>
-        </tr>
-    </thead>
-    <tbody align="center">
-        <tr>
-            <td rowspan="6"><b>Pass@1</b></td>
-            <td>GSM8K*</td>
-            <td>20.9%</td>
-            <td>55.2%<br><small style="color:#28a745">(+34.3%)</small></td>
-            <td>80.4%</td>
-            <td><b>80.6%</b><br><small style="color:#28a745">(+25.4%)</small></td>
-            <td>79.15%</td>
-            <td>85.14%</td>
-            <td style="color:red">-4.54%</td>
-        </tr>
-        <tr>
-            <td>MATH-500</td>
-            <td>14.4%</td>
-            <td>51.6%<br><small style="color:#28a745">(+37.2%)</small></td>
-            <td>59.0%</td>
-            <td><b>60.6%</b><br><small style="color:#28a745">(+9.0%)</small></td>
-            <td>55.4%</td>
-            <td>74.60%</td>
-            <td style="color:red">-14.0%</td>
-        </tr>
-        <tr>
-            <td>MATH-Test</td>
-            <td>12.3%</td>
-            <td>44.1%<br><small style="color:#28a745">(+31.8%)</small></td>
-            <td>59.8%</td>
-            <td><b>61.2%</b><br><small style="color:#28a745">(+17.1%)</small></td>
-            <td>58.46%</td>
-            <td>74.88%</td>
-            <td style="color:red">-13.68%</td>
-        </tr>
-        <tr>
-            <td>AMC12</td>
-            <td>2.4%</td>
-            <td>21.7%<br><small style="color:#28a745">(+19.3%)</small></td>
-            <td><b>36.1%</b><br><small style="color:#28a745">(+14.4%)</small></td>
-            <td>32.5%</td>
-            <td>30.1%</td>
-            <td>44.6%</td>
-            <td style="color:red">-12.1%</td>
-        </tr>
-        <tr>
-            <td>AIME 2024</td>
-            <td>0.00%</td>
-            <td>0.00%</td>
-            <td><b>13.33%</b><br><small style="color:#28a745">(+13.3%)</small></td>
-            <td>3.33%</td>
-            <td>10.00%</td>
-            <td>6.67%</td>
-            <td style="color:green">+6.67%</td>
-        </tr>
-        <tr>
-            <td>AIME 2025</td>
-            <td>3.33%</td>
-            <td>0.00%<br><small style="color:#F10C0C">(-3.33%)</small></td>
-            <td>3.33%</td>
-            <td>3.33%</td>
-            <td><b>6.67%</b><br><small style="color:#28a745">(+6.67%)</small></td>
-            <td>6.67%</td>
-            <td style="color:green">+0.0%</td>
-        </tr>
-        <tr style="background-color: #f6f8fa; height: 2px;"><td colspan="9"></td></tr>
-        <tr>
-            <td rowspan="4"><b>Pass@64</b></td>
-            <td>MATH-500</td>
-            <td>91.6%</td>
-            <td>90.6%<br><small style="color:#F10C0C">(-1.0%)</td>
-            <td>92.6%</td>
-            <td><b>93.6%</b><br><small style="color:#28a745">(+3.0%)</small></td>
-            <td>92.0%</td>
-            <td>93.8%</td>
-            <td style="color:red">-0.2%</td>
-        </tr>
-        <tr>
-            <td>AMC12</td>
-            <td>56.6%</td>
-            <td>73.5%<br><small style="color:#28a745">(+16.9%)</small></td>
-            <td><b>75.9%</b></td>
-            <td><b>75.9%</b><br><small style="color:#28a745">(+2.4%)</small></td>
-            <td>74.7%</td>
-            <td>84.3%</td>
-            <td style="color:red">-8.4%</td>
-        </tr>
-        <tr>
-            <td>AIME 2024</td>
-            <td>13.3%</td>
-            <td>26.7%<br><small style="color:#28a745">(+13.4%)</small></td>
-            <td>30.0%</td>
-            <td><b>40.0%</b></td>
-            <td><b>40.0%</b><br><small style="color:#28a745">(+13.3%)</small></td>
-            <td>46.67%</td>
-            <td style="color:red">-6.67%</td>
-        </tr>
-        <tr>
-            <td>AIME 2025</td>
-            <td>3.3%</td>
-            <td>23.3%<br><small style="color:#28a745">(+20.0%)</small></td>
-            <td>30.0%</td>
-            <td>30.0%</td>
-            <td><b>36.7%</b><br><small style="color:#28a745">(+13.4%)</small></td>
-            <td>40.00%</td>
-            <td style="color:red">-3.3%</td>
-        </tr>
-    </tbody>
-</table>
+![](asset/comparison_between_models_on_different_testset.jpg)
+
 
 
 
@@ -747,7 +626,7 @@ SFT阶段的成功，证明了即便是1.5B这样的小参数模型，也能通�
 
 - temperature: 0.7
 
-- top_p: 0.95
+- ###### top_p: 0.95
 
 
 
