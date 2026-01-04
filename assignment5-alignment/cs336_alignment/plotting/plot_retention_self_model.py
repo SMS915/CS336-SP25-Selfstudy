@@ -114,7 +114,7 @@ plt.title('Evolution of Retention Rate with Sampling Depth (k)')
 plt.legend()
 plt.grid(True, which='both', linestyle=':', alpha=0.5)
 
-plt.savefig('retention_vs_k_evolution.png', dpi=300)
+plt.savefig('asset/retention_vs_k_evolution.png', dpi=300)
 plt.close()
 
 # Analysis output
