@@ -36,6 +36,23 @@ def load_policy_into_vllm_instance(policy: torch.nn.Module, llm:LLM):
     llm_model.load_weights(state_dict.items())
 
 
+def make_zero_copy_sync(policy: torch.nn.Module, llm: LLM):
+    # 1. 获取训练端的参数字典 (注意保持引用)
+    policy_params = dict(policy.named_parameters())
+
+    # 2. 深入 vLLM 内部拿到对应的模型实例
+    # 注意：不同版本的 vLLM 路径可能略有不同
+    vllm_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
+
+    # 3. 强制覆盖 (The Hack)
+    with torch.no_grad():
+        for name, vllm_param in vllm_model.named_parameters():
+            if name in policy_params:
+                # 核心魔法：将 vllm 的数据指针直接指向 policy 的数据指针
+                # 这样两者共享同一块物理显存
+                vllm_param.data = policy_params[name].data
+
+
 # ==========================================
 # 2. 数据集 (只包含 Prompt)
 # ==========================================
