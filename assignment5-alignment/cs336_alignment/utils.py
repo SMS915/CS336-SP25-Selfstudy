@@ -6,10 +6,18 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
 def pertoken_entropy(logits: torch.Tensor) -> torch.Tensor:
-    log_probs = F.log_softmax(logits, dim = -1) # shape: batch_size, seq_len, vocab_size
+    lse = torch.logsumexp(logits, dim=-1, keepdim=True)
+    probs = torch.softmax(logits, dim=-1)
+    expected_logit = torch.sum(probs * logits, dim=-1, keepdim=True)
+    entropy = lse - expected_logit
+    return entropy.mean()
+
+def optim_pertoken_entropy(logits: torch.Tensor) -> torch.Tensor:
+    log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
     probs = torch.exp(log_probs)
-    entropy = -torch.sum(probs * log_probs, dim=-1)
-    return torch.nan_to_num(entropy, nan=0.0)# batch_size, seq_len
+    # entr(x) = -x * log(x)
+    entropy = torch.sum(torch.special.entr(probs), dim=-1)
+    return entropy 
 
 
 def robust_reward_fn(response: str, ground_truth: str, length_panelty: bool = False) -> dict[str, float]:

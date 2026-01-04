@@ -1,0 +1,17 @@
+example_path: "data/MATH/math500-test.jsonl"
+
+prompt_path: "prompts/r1_zero.prompt"
+
+output_path: "results/sft_tuned_eval_not_tuned_math500_prompt_pass_1.jsonl"
+
+model_path: "checkpoints/sft_v4_prompt_tuning/epoch0"
+
+max_tokens: 4096
+
+temperature: 0.7
+
+top_p: 0.95
+
+max_samples: 500
+
+pass_k: 1

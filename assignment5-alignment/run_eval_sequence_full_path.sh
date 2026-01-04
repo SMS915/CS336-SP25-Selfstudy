@@ -11,11 +11,12 @@ INSTRUCT_EVAL_SCRIPT="cs336_alignment/evaluate_instruct_passk.py"
 
 # 2. 配置文件列表
 configs=(
-    "configs/eval/sft/evaluate_sft_math500_pass64.yaml"
-    "configs/eval/grpo/evaluate_grpo_math500_pass64.yaml"
-    "configs/eval/grpo_no_std_norm/evaluate_grpo_no_std_norm_math500_pass64.yaml"
-    "configs/eval/instruct/evaluate_instruct_math500_pass64.yaml"
+    "configs/eval/sft_prompt_tuned/evaluate_sft_tuned_prompt_math500_pass1.yaml"
 )
+
+    # "configs/eval/baseline/evaluate_baseline_tuned_prompt_math500_pass1.yaml"
+    # "configs/eval/sft/evaluate_sft_math500_pass1.yaml"
+    # "configs/eval/sft/evaluate_sft_tuned_prompt_math500_pass1.yaml"
 
 echo "========== 开始评估任务: $(date) =========="
 

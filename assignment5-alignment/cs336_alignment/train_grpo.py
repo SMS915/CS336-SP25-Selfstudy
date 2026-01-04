@@ -172,9 +172,12 @@ def train(config_path: str):
         gpu_memory_utilization=gpu_util, 
         trust_remote_code=True,
         max_model_len=config["data"]["max_seq_length"], # 4096
+        load_format="dummy",
         enforce_eager=True, # 显存优化技巧
         enable_prefix_caching=False,
     )
+
+    make_zero_copy_sync(policy=policy, llm=llm)
     
     sampling_params = SamplingParams(
         temperature=config["training"]["sampling_temperature"],
@@ -243,7 +246,8 @@ def train(config_path: str):
         ground_truths = batch["ground_truth"]
 
         # 同步权重到vllm，以确保训练和推理模型的一致性
-        load_policy_into_vllm_instance(policy, llm)
+        # load_policy_into_vllm_instance(policy, llm)
+        make_zero_copy_sync(policy, llm)
         
         # 生成 (vLLM)
         generation_outputs = llm.generate(prompts, sampling_params, use_tqdm=False)

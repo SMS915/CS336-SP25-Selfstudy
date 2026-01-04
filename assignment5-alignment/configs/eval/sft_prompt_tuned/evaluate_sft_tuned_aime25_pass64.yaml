@@ -1,0 +1,21 @@
+# 数据集路径
+example_path: "data/AIME/aime2025_test.jsonl"
+
+# Prompt 模板路径
+prompt_path: "prompts/r1_zero_replace_space_with_lf.prompt"
+
+# 结果保存路径
+output_path: "results/sft_prompt_tuned_aime25_pass_64.jsonl"
+
+# 模型路径
+model_path: "checkpoints/sft_v4_prompt_tuning/epoch0"
+
+max_tokens: 4096
+
+temperature: 0.7
+
+top_p: 0.95
+
+max_samples: 30
+
+pass_k: 64

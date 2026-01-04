@@ -1,0 +1,18 @@
+example_path: "data/MATH/math500-test.jsonl"
+
+prompt_path: "prompts/r1_zero.prompt"
+
+output_path: "results/drgrpo_best/drgrpo_best_math500_pass_64.jsonl"
+
+model_path: "checkpoints/drgrpo_5e-6/checkpoint-step-350"
+
+max_tokens: 4096
+
+temperature: 0.7
+
+top_p: 0.95
+
+max_samples: 500
+
+pass_k: 64
+
