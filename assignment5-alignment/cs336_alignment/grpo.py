@@ -101,7 +101,7 @@ def compute_grpo_clip_loss(advantages: torch.Tensor,
     """
     # 计算重要性采样比率: pi_new / pi_old
     log_ratio = (policy_log_probs - old_log_probs.detach()).to(torch.float32)
-    ratio = torch.exp()
+    ratio = torch.exp(log_ratio)
     # 未裁剪的目标部分
     advantage_fp32 = advantages.to(torch.float32)
     part1 = ratio * advantage_fp32
