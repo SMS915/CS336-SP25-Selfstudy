@@ -300,35 +300,38 @@ def train(config_path: str):
         attention_mask = tokenized_batch["attention_mask"].to(device)
 
         inference_batch_size = config["training"].get("inference_batch_size", 2)
+        total_entropy = 0.0
+        total_tokens = 0
         old_log_probs_list = []
         token_entropy_list = []
         policy.eval()
         with torch.no_grad():
-            # 分批计算
-            for i in tqdm(range(0, len(input_ids), inference_batch_size), desc="Calculating Ref LogProbs"):
-                batch_input_ids = input_ids[i : i + inference_batch_size]
-                batch_labels = labels[i : i + inference_batch_size]
-                batch_mask = attention_mask[i: i + inference_batch_size]
+            with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+                # 分批计算
+                for i in tqdm(range(0, len(input_ids), inference_batch_size), desc="Calculating Ref LogProbs"):
+                    batch_input_ids = input_ids[i : i + inference_batch_size]
+                    batch_labels = labels[i : i + inference_batch_size]
+                    batch_mask = attention_mask[i: i + inference_batch_size]
+
+                    log_probs_dict = get_response_log_probs(policy,
+                                                            batch_input_ids,
+                                                            batch_mask,
+                                                            batch_labels,
+                                                            return_token_entropy=True)
+
+                    if "token_entropy" in log_probs_dict:
+                        entropy_sum = (log_probs_dict["token_entropy"] * batch_mask).sum().item()
+                        token_count = batch_mask.sum().item()
+                        total_entropy += entropy_sum
+                        total_tokens += token_count
+                    old_log_probs_list.append(log_probs_dict["log_probs"].detach().cpu())
                 
-                log_probs_dict = get_response_log_probs(policy, 
-                                                        batch_input_ids, 
-                                                        batch_mask, 
-                                                        batch_labels, 
-                                                        return_token_entropy=True)
-                
-                if "token_entropy" in log_probs_dict:
-                    token_entropy_list.append(log_probs_dict["token_entropy"].detach())
-                old_log_probs_list.append(log_probs_dict["log_probs"].detach())
-                
-        old_log_probs = torch.cat(old_log_probs_list, dim=0)
+        old_log_probs = torch.cat(old_log_probs_list, dim=0).cuda()
         policy.train() # 恢复 Train 模式
 
-        if token_entropy_list:
-            all_token_entropies = torch.cat(token_entropy_list, dim=0)
-            response_entropies = all_token_entropies[response_mask.bool()]
-            mean_token_entropy = response_entropies.mean().item()
-        else:
-            mean_token_entropy = 0.0
+        mean_rollout_entropy = total_entropy / (total_tokens + 1e-8)
+        wandb.log({"train/mean_token_entropy": mean_rollout_entropy}, commit=False)
+        del total_entropy
 
         # -----------------------------------------
         # 优化阶段
@@ -361,22 +364,23 @@ def train(config_path: str):
                 # mb_rewards = raw_rewards[mb_idx] # 如果是 no_baseline 需要这个
                 
                 # Forward
-                mb_log_probs_dict = get_response_log_probs(policy, mb_input_ids, mb_attention_mask, mb_labels)
-                mb_policy_log_probs = mb_log_probs_dict["log_probs"]
-                
-                # GRPO Backward
-                loss, step_metrics = grpo_microbatch_train_step(
-                    policy_log_probs=mb_policy_log_probs,
-                    response_mask=mb_mask,
-                    gradient_accumulation_steps=actual_accum_steps,
-                    loss_type=config["training"]["loss_type"],
-                    advantages=mb_adv,
-                    old_log_probs=mb_old_lp,
-                    cliprange=clip_range,
-                    remove_length_norm=remove_length_norm,
-                    fixed_norm_length = fixed_norm_length
-                    # raw_rewards=mb_rewards
-                )
+                with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+                    mb_log_probs_dict = get_response_log_probs(policy, mb_input_ids, mb_attention_mask, mb_labels)
+                    mb_policy_log_probs = mb_log_probs_dict["log_probs"]
+
+                    # GRPO Backward
+                    loss, step_metrics = grpo_microbatch_train_step(
+                        policy_log_probs=mb_policy_log_probs,
+                        response_mask=mb_mask,
+                        gradient_accumulation_steps=actual_accum_steps,
+                        loss_type=config["training"]["loss_type"],
+                        advantages=mb_adv,
+                        old_log_probs=mb_old_lp,
+                        cliprange=clip_range,
+                        remove_length_norm=remove_length_norm,
+                        fixed_norm_length = fixed_norm_length
+                        # raw_rewards=mb_rewards
+                    )
 
                 current_epoch_loss += loss.item()
                 current_epoch_clip += step_metrics["clip_ratio"].item() / actual_accum_steps
@@ -411,7 +415,6 @@ def train(config_path: str):
             # 行为特征
             "train/completion_len_mean": np.mean(lengths),
             "train/completion_len_max": np.max(lengths),
-            "train/mean_token_entropy": mean_token_entropy,
             
             # Step
             "train/global_step": global_step

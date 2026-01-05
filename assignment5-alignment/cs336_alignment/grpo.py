@@ -100,11 +100,13 @@ def compute_grpo_clip_loss(advantages: torch.Tensor,
             - metadata (Dict): 包含裁剪比例、近似 KL 散度等监控指标。
     """
     # 计算重要性采样比率: pi_new / pi_old
-    ratio = torch.exp(policy_log_probs - old_log_probs.detach())
+    log_ratio = (policy_log_probs - old_log_probs.detach()).to(torch.float32)
+    ratio = torch.exp()
     # 未裁剪的目标部分
-    part1 = ratio * advantages
+    advantage_fp32 = advantages.to(torch.float32)
+    part1 = ratio * advantage_fp32
     # 裁剪后的目标部分：将比率限制在 [1-clip, 1+clip] 范围内
-    part2 = torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange) * advantages
+    part2 = torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange) * advantage_fp32
     # 取两者中的较小值，确保更新保守
     clipped_object = torch.min(part1, part2)
      # 损失取负号，考虑到优化器是做最小化
@@ -181,14 +183,14 @@ def masked_mean(tensor: torch.Tensor, mask: torch.Tensor, dim: int | None = None
     Returns:
         torch.Tensor: 平均值张量。
     """
-    masked_tensor = tensor * mask
+    masked_tensor = tensor.to(torch.float32) * mask.to(torch.float32)
     if dim is None:
-        valid_count = mask.sum()
+        valid_count = mask.sum().to(torch.float32)
         valid_sum = masked_tensor.sum() # 注意平均的长度也要取mask后的有效长度
     else:
-        valid_count = mask.sum(dim=dim)
+        valid_count = mask.sum(dim=dim).to(torch.float32)
         valid_sum = masked_tensor.sum(dim=dim)
-    return valid_sum / valid_count
+    return valid_sum / (valid_count + 1e-8)
 
 def grpo_microbatch_train_step(policy_log_probs: torch.Tensor,
                                response_mask: torch.Tensor,

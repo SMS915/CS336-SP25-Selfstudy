@@ -28,8 +28,11 @@ def get_response_log_probs(model: PreTrainedModel, input_ids:torch.Tensor, atten
     outputs = model.forward(input_ids=input_ids, attention_mask=attention_masks)
     logits = outputs.logits # shape(batch_size, seq_len, vocab_size)
 
+    logits_fp32 = logits.to(torch.float32)
+
+
     # 计算全词表的 Log Softmax
-    all_log_probs = F.log_softmax(logits.to(torch.float32), dim=-1)
+    all_log_probs = F.log_softmax(logits_fp32, dim=-1)
     labels_expanded = labels.unsqueeze(-1)
 
     # 在 vocab 维度上取 labels 指定索引的值
@@ -39,7 +42,7 @@ def get_response_log_probs(model: PreTrainedModel, input_ids:torch.Tensor, atten
     else :
         # 计算整个分布的熵，用于监控模型的不确定性
         # 启用的话会产生较大的显存开销，可能需要降低micro_batch_size / inference_batch_size
-        token_entropy = optim_pertoken_entropy(logits.to(torch.float32))
+        token_entropy = optim_pertoken_entropy(logits_fp32)
         result = {"log_probs": selected_log_probs,
                   "token_entropy": token_entropy}
 
