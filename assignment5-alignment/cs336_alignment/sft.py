@@ -3,6 +3,7 @@ import random
 import torch.nn.functional as F
 import numpy as np
 from typing import List, Dict, Callable
+from vllm import LLM, SamplingParams
 from .utils import pertoken_entropy, optim_pertoken_entropy
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.modeling_utils import PreTrainedModel
@@ -271,5 +272,98 @@ def log_generations(
         # "eval/runaway_rate": run_away_count / n
     }
     
+    return stats
+
+
+def log_generations_vllm(
+        llm: LLM,  # 传入训练脚本中的 vLLM 实例
+        tokenizer,
+        prompts: List[str],
+        ground_truths: List[str],
+        reward_fn: Callable[[str, str], Dict[str, float]],
+        num_examples_to_log: int = 4,
+        max_new_tokens: int = 1024,
+) -> Dict[str, float]:
+    """
+    使用 vLLM 加速生成并记录评估指标。
+    """
+    # 1. 随机抽样
+    n = min(num_examples_to_log, len(prompts))
+    indices = random.sample(range(len(prompts)), n)
+    sampled_prompts = [prompts[i] for i in indices]
+    sampled_truths = [ground_truths[i] for i in indices]
+
+    # 2. 配置 vLLM 采样参数
+    # 开启 logprobs 以便计算熵
+    sampling_params = SamplingParams(
+        temperature=1.0,
+        top_p=1.0,
+        max_tokens=max_new_tokens,
+        stop=["</answer>"],
+        include_stop_str_in_output=True,
+        logprobs=5  # 每个 token 返回前 5 个候选的 logprob 用于估算熵
+    )
+
+    print(f"\n[Log Generation vLLM] Batch inferencing {n} examples...")
+
+    # 3. 批量生成
+    # 注意：在调用此函数前，外部应已执行 make_zero_copy_sync(policy, llm)
+    outputs = llm.generate(sampled_prompts, sampling_params, use_tqdm=False)
+
+    total_rewards = []
+    format_rewards = []
+    answer_rewards = []
+    lengths = []
+    entropies = []
+
+    # 4. 后处理与评估
+    for i, output in enumerate(outputs):
+        prompt = output.prompt
+        generated_text = output.outputs[0].text
+        truth = sampled_truths[i]
+
+        # 记录 Token 长度
+        token_ids = output.outputs[0].token_ids
+        lengths.append(len(token_ids))
+
+        # 5. 计算熵 (vLLM 风格)
+        # vLLM 的 logprobs 结构与 HF 不同，这里计算生成序列的平均 token 熵
+        step_entropies = []
+        if output.outputs[0].logprobs:
+            for logprob_dict in output.outputs[0].logprobs:
+                # logprob_dict 是 {token_id: LogprobObj}
+                # 熵 H = -sum(p * log(p))
+                probs = np.exp([lp.logprob for lp in logprob_dict.values()])
+                # 归一化（因为只取了 top-k）
+                probs = probs / np.sum(probs)
+                ent = -np.sum(probs * np.log(probs + 1e-10))
+                step_entropies.append(ent)
+
+        avg_ent = np.mean(step_entropies) if step_entropies else 0.0
+        entropies.append(avg_ent)
+
+        # 6. 计算奖励
+        metrics = reward_fn(generated_text, truth)
+        total_rewards.append(metrics.get("reward", 0.0))
+        format_rewards.append(metrics.get("format_reward", 0.0))
+        answer_rewards.append(metrics.get("answer_reward", 0.0))
+
+        # 打印部分示例
+        if i < 2:  # 仅打印前两个示例节省日志空间
+            print("-" * 40)
+            print(f" Prompt: {prompt[:50]}...")
+            print(f"Generated: {generated_text[-150:]} (Len: {len(token_ids)})")
+            print(f"Truth: {truth} | Reward: {metrics.get('reward'):.2f}")
+            print("-" * 40)
+
+    # 7. 汇总统计
+    stats = {
+        "eval/reward": np.mean(total_rewards),
+        "eval/format_reward": np.mean(format_rewards),
+        "eval/answer_reward": np.mean(answer_rewards),
+        "eval/length": np.mean(lengths),
+        "eval/entropy": np.mean(entropies) if entropies else 0.0,
+    }
+
     return stats
 

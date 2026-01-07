@@ -19,6 +19,7 @@ from vllm import LLM, SamplingParams
 # 引入组件
 from cs336_alignment.sft import (
     log_generations,
+    log_generations_vllm,
     get_response_log_probs,
 )
 from cs336_alignment.grpo import (
@@ -426,14 +427,24 @@ def train(config_path: str):
             policy.eval()
             
             eval_max_tokens = config["evaluation"].get("max_new_tokens", 4096)
-            eval_stats = log_generations(
-                model=policy,
+            # eval_stats = log_generations(
+            #     model=policy,
+            #     tokenizer=tokenizer,
+            #     prompts=val_prompts,
+            #     ground_truths=val_truths,
+            #     reward_fn=robust_reward_fn,
+            #     num_examples_to_log=config["evaluation"]["num_examples_to_log"],
+            #     max_new_tokens=eval_max_tokens
+            # )
+
+            eval_stats = log_generations_vllm(
+                llm=llm,  # 传入 vllm 实例
                 tokenizer=tokenizer,
                 prompts=val_prompts,
                 ground_truths=val_truths,
                 reward_fn=robust_reward_fn,
                 num_examples_to_log=config["evaluation"]["num_examples_to_log"],
-                max_new_tokens=eval_max_tokens
+                max_new_tokens=config["evaluation"].get("max_new_tokens", 1024)
             )
             
             # 合并日志
