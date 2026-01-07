@@ -199,7 +199,7 @@ def load_checkpoint(
 def load_amp_checkpoint(
     path: str | os.PathLike,
     model: torch.nn.Module,
-    optimizer: torch.optim.optimizer,
+    optimizer: torch.optim.Optimizer,
     scaler: torch.amp.GradScaler,
     model_compiled: bool
 ) -> int:
