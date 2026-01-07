@@ -280,9 +280,10 @@ def log_generations_vllm(
         tokenizer,
         prompts: List[str],
         ground_truths: List[str],
-        reward_fn: Callable[[str, str], Dict[str, float]],
+        reward_fn: Callable[[str, str, bool], Dict[str, float]],
         num_examples_to_log: int = 4,
         max_new_tokens: int = 1024,
+        verify: bool = False
 ) -> Dict[str, float]:
     """
     使用 vLLM 加速生成并记录评估指标。
@@ -343,7 +344,7 @@ def log_generations_vllm(
         entropies.append(avg_ent)
 
         # 6. 计算奖励
-        metrics = reward_fn(generated_text, truth)
+        metrics = reward_fn(generated_text, truth, verify)
         total_rewards.append(metrics.get("reward", 0.0))
         format_rewards.append(metrics.get("format_reward", 0.0))
         answer_rewards.append(metrics.get("answer_reward", 0.0))

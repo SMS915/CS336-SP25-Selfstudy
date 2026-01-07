@@ -35,7 +35,8 @@ def load_policy_into_vllm_instance(policy: torch.nn.Module, llm:LLM):
     state_dict = policy.state_dict()
     llm_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
     llm_model.load_weights(state_dict.items())
-
+    del state_dict
+    torch.cuda.empty_cache()
 
 def make_zero_copy_sync(policy: torch.nn.Module, llm: LLM):
     # 1. 获取训练端的参数字典 (注意保持引用)
@@ -61,35 +62,60 @@ class GRPODataset(Dataset):
     def __init__(self, data_path, prompt_template=None, start_sample=None, max_samples=None):
         self.prompts = []
         self.ground_truths = []
-        with open(data_path, "r") as f:
+        
+        with open(data_path, "r", encoding='utf-8') as f:
             lines = f.readlines()
             if max_samples:
-                lines = lines[start_sample:start_sample+max_samples]
+                start = start_sample if start_sample is not None else 0
+                lines = lines[start : start + max_samples]
                 
-            for line in lines:
-                item = json.loads(line)
-                raw_prompt = item["prompt"] # SFT数据里的 prompt 字段
-                if prompt_template:
-                    p = prompt_template.replace("{question}", raw_prompt)
-                    self.prompts.append(p)
-                else:
-                    self.prompts.append(raw_prompt)
-
-                raw_response = item["response"]
-                self.ground_truths.append(self._extract_answer(raw_response))
+            for i, line in enumerate(lines):
+                try:
+                    item = json.loads(line)
                     
-        print(f"为GRPO训练加载了{len(self.prompts)}条样本.")
+                    # 1. 提取问题 (Problem / Question / Prompt)
+                    raw_prompt = item.get("problem") or item.get("question") or item.get("prompt")
+                    
+                    # 2. 提取答案 (逻辑：优先取干净的 answer/solution，没有则从 response 提取)
+                    # 尝试获取直接答案
+                    direct_answer = item.get("answer") or item.get("solution")
+                    
+                    if direct_answer is not None:
+                        # 如果有直接答案，直接使用
+                        final_answer = str(direct_answer).strip()
+                    else:
+                        # 如果没有直接答案，尝试从推理文本 response 中提取
+                        raw_response = item.get("response")
+                        if raw_response:
+                            final_answer = self._extract_answer(str(raw_response))
+                        else:
+                            final_answer = None
+
+                    if not raw_prompt or not final_answer:
+                        print(f"第 {i} 行数据不完整，已跳过。")
+                        continue
+
+                    # 3. 构造 Prompt
+                    if prompt_template:
+                        p = prompt_template.replace("{question}", str(raw_prompt).strip())
+                        self.prompts.append(p)
+                    else:
+                        self.prompts.append(str(raw_prompt).strip())
+
+                    self.ground_truths.append(final_answer)
+                
+                except Exception as e:
+                    print(f"❌ 解析第 {i} 行出错: {e}")
+                    continue
+                    
+        print(f"📊 加载完成: {len(self.prompts)} 条样本用于 GRPO.")
 
     def _extract_answer(self, text: str) -> str:
-        """
-        从完整的 SFT response 中提取纯答案部分。
-        格式通常是: <think>...</think><answer>Content</answer>
-        """
+        """从 SFT/RL 风格的文本中提取 <answer> 标签内的内容"""
         match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
         if match:
             return match.group(1).strip()
-        else:
-            return text.strip()
+        return text.strip()
 
     def __len__(self):
         return len(self.prompts)
@@ -173,18 +199,15 @@ def train(config_path: str):
         gpu_memory_utilization=gpu_util, 
         trust_remote_code=True,
         max_model_len=config["data"]["max_seq_length"], # 4096
-        load_format="dummy",
         enforce_eager=True, # 显存优化技巧
         enable_prefix_caching=False,
     )
-
-    make_zero_copy_sync(policy=policy, llm=llm)
     
     sampling_params = SamplingParams(
         temperature=config["training"]["sampling_temperature"],
         min_tokens=config["training"]["sampling_min_tokens"],
         max_tokens=config["training"]["sampling_max_tokens"],
-        stop=["</answer>"],
+        stop=["</answer>", "<|endoftext|>"],
         include_stop_str_in_output=True,
         n=config["training"]["group_size"], # 一次生成 G 个
         repetition_penalty=config["training"]["repetition_penalty"],
@@ -200,7 +223,7 @@ def train(config_path: str):
     # Batch Size = rollout_batch_size / group_size
     questions_per_batch = config["training"]["rollout_batch_size"] // config["training"]["group_size"]
     
-    dataloader = DataLoader(dataset, batch_size=questions_per_batch, shuffle=True, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=questions_per_batch, shuffle=False, drop_last=True)
     
     # 训练循环
     n_grpo_steps = config["training"]["n_grpo_steps"]
@@ -248,7 +271,7 @@ def train(config_path: str):
 
         # 同步权重到vllm，以确保训练和推理模型的一致性
         # load_policy_into_vllm_instance(policy, llm)
-        make_zero_copy_sync(policy, llm)
+        load_policy_into_vllm_instance(policy, llm)
         
         # 生成 (vLLM)
         generation_outputs = llm.generate(prompts, sampling_params, use_tqdm=False)

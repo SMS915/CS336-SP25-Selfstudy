@@ -13,7 +13,7 @@ data:
   max_samples: null
 
 training:
-  output_dir: "checkpoints/sft_v4_original_mask"
+  output_dir: "checkpoints/sft_v4"
   learning_rate: 2.0e-5
   epochs: 6
   warmup_ratio: 0.05
@@ -31,5 +31,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "sft-qwen-1.5b-distilled_original_mask"
+  run_name: "sft-qwen-1.5b-distilled"
   entity: null 
