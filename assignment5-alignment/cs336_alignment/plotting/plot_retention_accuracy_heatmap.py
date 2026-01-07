@@ -1,72 +1,109 @@
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
+import argparse
+import os
 
-# 设置中文显示
+# --- 0. 环境设置 ---
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 
-# --- 1. 数据准备 ---
-models = [
-    'DS-Math-7B-RL', 'Claude 3 Opus', 'GPT-4o-2024-05', 'Numina-72B-CoT', 'Llama-3.1-70B-I',
-    'OpenAI o1-mini', 'Qwen2.5-7B-I', 'Qwen2.5-32B-I', 'Qwen2.5-72B-I', 'Qwen2.5-Math-7B-I',
-    'Qwen2.5-Math-72B-I', 'Mistral-Large-2411', 'Skywork-o1', 'QWQ-32B-Preview', 'Llama-3.3-70B-I',
-    'InternLM-3-8B-I', 'DS Distill 1.5B', 'DS Distill 32B', 'Qwen2.5-Max'
-]
 
-pass1_acc = [2.2, 21.1, 26.7, 2.2, 15.6, 60.3, 11.1, 11.1, 13.3, 11.1, 20.0, 13.3, 11.1, 44.4, 22.2, 11.1, 17.8, 62.2, 22.2]
-passk_acc = [16.3, 34.1, 43.3, 21.3, 41.2, 86.7, 26.3, 32.0, 33.7, 20.8, 35.2, 15.4, 22.1, 74.3, 37.1, 20.5, 68.7, 86.3, 44.4]
-greedy_r_list = [0.0, 29.7, 42.9, 0.0, 42.9, 77.4, 60.4, 180.2, 150.4, 180.2, 66.5, 100.0, 119.8, 60.1, 30.2, 119.8, 150.0, 75.1, 59.9]
-upper_r_list = [0.0, 38.2, 55.4, 98.6, 51.7, 71.5, 95.8, 104.1, 98.5, 176.9, 85.5, 127.9, 141.2, 81.4, 36.7, 147.8, 79.5, 84.1, 89.9]
+def plot_correlation_heatmap(corr_matrix: pd.DataFrame, title: str, filename: str):
+    """
+    通用热力图绘制函数
+    """
+    heatmap_args = {
+        'annot': True,
+        'cmap': 'RdBu_r',
+        'center': 0,
+        'fmt': ".2f",
+        'linewidths': 0.8,
+        'annot_kws': {"size": 14},
+        'vmin': -1, 'vmax': 1
+    }
 
-delta_rg = [abs(r - 100) for r in greedy_r_list]
-delta_ru = [abs(r - 100) for r in upper_r_list]
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(corr_matrix, **heatmap_args)
 
-df_all = pd.DataFrame({
-    'Model': models,
-    'Pass@1_准确率': pass1_acc,
-    'Pass@k_准确率': passk_acc,
-    'Greedy偏差_ΔRg': delta_rg,
-    'Upper偏差_ΔRu': delta_ru
-})
+    plt.title(title, fontsize=18, pad=20)
+    plt.xticks(rotation=45, ha='right', fontsize=12)
+    plt.yticks(rotation=0, fontsize=12)
+    plt.tight_layout()
 
-qwen_mask = df_all['Model'].str.contains('Qwen|QWQ', case=False)
-corrs = [df_all.drop(columns='Model').corr(),
-         df_all[qwen_mask].drop(columns='Model').corr(),
-         df_all[~qwen_mask].drop(columns='Model').corr()]
+    # 确保保存目录存在
+    save_path = os.path.join('asset', filename)
+    if not os.path.exists('asset'):
+        os.makedirs('asset')
 
-titles = ['全样本相关性对比', '仅 Qwen 系列相关性', '排除 Qwen 系列相关性']
+    plt.savefig(save_path, dpi=300)
+    print(f"图像已保存至: {save_path}")
+    plt.show()
 
-# --- 2. 绘图 ---
-fig = plt.figure(figsize=(22, 8)) # 稍微收窄画布宽度
-gs = gridspec.GridSpec(1, 4, width_ratios=[1, 1, 1, 0.04])
 
-axes = [plt.subplot(gs[0]), plt.subplot(gs[1]), plt.subplot(gs[2])]
-cbar_ax = plt.subplot(gs[3])
+def get_data():
+    """
+    初始化数据并返回 DataFrame
+    """
+    models = [
+        'DS-Math-7B-RL', 'Claude 3 Opus', 'GPT-4o-2024-05', 'Numina-72B-CoT', 'Llama-3.1-70B-I',
+        'OpenAI o1-mini', 'Qwen2.5-7B-I', 'Qwen2.5-32B-I', 'Qwen2.5-72B-I', 'Qwen2.5-Math-7B-I',
+        'Qwen2.5-Math-72B-I', 'Mistral-Large-2411', 'Skywork-o1', 'QWQ-32B-Preview', 'Llama-3.3-70B-I',
+        'InternLM-3-8B-I', 'DS Distill 1.5B', 'DS Distill 32B', 'Qwen2.5-Max'
+    ]
+    pass1_acc = [2.2, 21.1, 26.7, 2.2, 15.6, 60.3, 11.1, 11.1, 13.3, 11.1, 20.0, 13.3, 11.1, 44.4, 22.2, 11.1, 17.8,
+                 62.2, 22.2]
+    passk_acc = [16.3, 34.1, 43.3, 21.3, 41.2, 86.7, 26.3, 32.0, 33.7, 20.8, 35.2, 15.4, 22.1, 74.3, 37.1, 20.5, 68.7,
+                 86.3, 44.4]
+    greedy_r_list = [0.0, 29.7, 42.9, 0.0, 42.9, 77.4, 60.4, 180.2, 150.4, 180.2, 66.5, 100.0, 119.8, 60.1, 30.2, 119.8,
+                     150.0, 75.1, 59.9]
+    upper_r_list = [0.0, 38.2, 55.4, 98.6, 51.7, 71.5, 95.8, 104.1, 98.5, 176.9, 85.5, 127.9, 141.2, 81.4, 36.7, 147.8,
+                    79.5, 84.1, 89.9]
 
-heatmap_kwargs = {
-    'annot': True,
-    'cmap': 'RdBu_r',
-    'center': 0,
-    'fmt': ".2f",
-    'linewidths': 0.8,
-    'annot_kws': {"size": 11},
-    'vmin': -1, 'vmax': 1
-}
+    df = pd.DataFrame({
+        'Model': models,
+        'Pass@1_准确率': pass1_acc,
+        'Pass@k_准确率': passk_acc,
+        'Greedy留存率_Rg': greedy_r_list,
+        'Upper留存率_Ru': upper_r_list
+    })
+    return df
 
-for i in range(3):
-    sns.heatmap(corrs[i], ax=axes[i],
-                cbar=(i == 2), cbar_ax=(cbar_ax if i == 2 else None),
-                **heatmap_kwargs)
-    axes[i].set_title(titles[i], fontsize=16, pad=20)
-    plt.setp(axes[i].get_xticklabels(), rotation=45, ha='right')
-    plt.setp(axes[i].get_yticklabels(), rotation=0)
 
-plt.suptitle('模型推理能力与泛化稳定性偏差 (ΔR) 的相关性对比分析', fontsize=22, y=0.98)
+def main():
+    # 配置命令行参数
+    parser = argparse.ArgumentParser(description='绘制模型相关性热力图')
+    parser.add_argument('--type', type=str, choices=['all', 'qwen', 'non_qwen', 'run_all'],
+                        default='all', help='选择要分析的样本类型 (default: all)')
 
-# 调整间距：wspace 压缩至 0.35
-plt.subplots_adjust(top=0.82, bottom=0.25, wspace=0.37, right=0.94, left=0.06)
+    args = parser.parse_args()
+    df_all = get_data()
 
-plt.savefig('asset/compressed_qwen_heatmaps.png', bbox_inches='tight')
-plt.show()
+    # 定义 Qwen 系列的特征词
+    qwen_keywords = 'Qwen|QWQ|Distill'
+    qwen_mask = df_all['Model'].str.contains(qwen_keywords, case=False)
+
+    # 处理逻辑
+    tasks = []
+    if args.type == 'all':
+        tasks.append((df_all, '全样本相关性对比', 'full_sample_correlation_heatmap.png'))
+    elif args.type == 'qwen':
+        tasks.append((df_all[qwen_mask], 'Qwen系列相关性对比', 'qwen_sample_correlation_heatmap.png'))
+    elif args.type == 'non_qwen':
+        tasks.append((df_all[~qwen_mask], '非Qwen系列相关性对比', 'non_qwen_sample_correlation_heatmap.png'))
+    elif args.type == 'run_all':
+        tasks = [
+            (df_all, '全样本相关性对比', 'full_sample_correlation_heatmap.png'),
+            (df_all[qwen_mask], 'Qwen系列相关性对比', 'qwen_sample_correlation_heatmap.png'),
+            (df_all[~qwen_mask], '非Qwen系列相关性对比', 'non_qwen_sample_correlation_heatmap.png')
+        ]
+
+    # 执行绘图
+    for data, title, filename in tasks:
+        # 去除非数值列计算相关性
+        corr = data.drop(columns='Model').corr()
+        plot_correlation_heatmap(corr, title, filename)
+
+
+if __name__ == '__main__':
+    main()
