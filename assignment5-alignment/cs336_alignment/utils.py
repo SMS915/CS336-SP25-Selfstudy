@@ -31,6 +31,11 @@ def robust_reward_fn(response: str, ground_truth: str, length_panelty: bool = Fa
     # 修复可能存在的换行问题
     cleaned_response = cleaned_response.replace("</think>\n<answer>", "</think> <answer>")
 
+    if "</answer>" in cleaned_response:
+        print(f"valid response: {cleaned_response[:-50]}")
+    # else:
+    #     print(f"invalid response: {cleaned_response[:-50]}")
+
     # 调用官方评分函数
     if length_panelty:
         return r1_zero_reward_fn_with_length_panelty(cleaned_response, ground_truth)
