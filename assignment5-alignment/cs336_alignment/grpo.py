@@ -117,7 +117,6 @@ def compute_grpo_clip_loss(advantages: torch.Tensor,
         clipped_mask = (ratio > 1 + cliprange) | (ratio < 1 - cliprange)
         clipped_ratio = clipped_mask.float().mean()
         # 计算近似 KL 散度 http://joschu.net/blog/kl-approx.html
-        log_ratio = policy_log_probs - old_log_probs
         approx_kl = (log_ratio ** 2).mean() * 0.5
     metadata = {
         "clip_mask": clipped_mask,
