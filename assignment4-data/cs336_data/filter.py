@@ -6,8 +6,6 @@ LANG_MODEL_PATH = 'data/classifiers/lid.176.bin'
 NSFW_MODEL_PATH = 'data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin'
 TOXIC_MODEL_PATH = 'data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin'
 
-# 1. 移除全局的立即加载逻辑
-# 改为使用全局变量占位，初始为 None
 _MODELS = {
     'lang': None,
     'nsfw': None,
@@ -130,7 +128,7 @@ def gopher_quality_filter(text: str) -> bool:
 
 
 def judge_high_quality(text: str, lang_threshold: float = 0.9, nsfw_threshold: float = 0.02,
-                       toxic_threshold: float = 0.02) -> bool:
+                       toxic_threshold: float = 0.02, build_classifier_dataset:bool = False) -> bool:
     """
     结合gopher模型, 语言, nsfw, toxic评分信息, 对文本质量进行判断。
 
@@ -139,6 +137,16 @@ def judge_high_quality(text: str, lang_threshold: float = 0.9, nsfw_threshold: f
     Returns:
         bool: 返回布尔值，通过检测代表文本质量有基本保证.
     """
+
+    if build_classifier_dataset:
+        if len(text.split()) < 250: 
+            return False
+
+    text_lower = text.lower()
+    if "performance & security by cloudflare" in text_lower or \
+       "attention required!" in text_lower or \
+       "enable cookies" in text_lower or "403 error" in text_lower:
+        return False # 这是一个已知的坏样本，立即拒绝
 
     pass_gopher = gopher_quality_filter(text)
     if not pass_gopher:

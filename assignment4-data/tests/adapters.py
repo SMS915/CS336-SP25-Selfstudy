@@ -37,10 +37,10 @@ def run_classify_toxic_speech(text: str) -> tuple[Any, float]:
 
 
 def run_classify_quality(text: str) -> tuple[Any, float]:
-    file_path = 'data/my_classifiers/best_classifier.bin'
+    file_path = 'data/my_classifiers/quality_classifier.bin'
     mapping = {
-                '__label__low_quality': 'cc',
-                '__label__high_quality': 'wiki'
+                '__label__cc': 'cc',
+                '__label__wiki': 'wiki'
             }
     classifier = QualityClassifier(file_path, mapping)
     return classifier.predict(text)

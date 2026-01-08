@@ -1,17 +1,17 @@
-project_name: "CS336_Medium_Scale_5k"
+project_name: "CS336_Medium_Scale_2k"
 
 paths:
   input_dir: "data/crawls/wet"
-  base_output_dir: "data/medium_output_5k"
+  base_output_dir: "data/medium_output_2k"
 
 pipeline:
   resume: True # 断点续传
   
 models:
-  quality_classifier: "data/my_classifiers/best_classifier.bin"
-  toxic_classifier: "data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin"
-  nsfw_classifier: "data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin"
-  lang_classifier: "data/classifiers/lid.176.bin"
+  quality_classifier: "data/my_classifiers/quality_classifier.bin"
+  toxic_path: "data/classifiers/jigsaw_fasttext_bigrams_hatespeech_final.bin"
+  nsfw_path: "data/classifiers/jigsaw_fasttext_bigrams_nsfw_final.bin"
+  lang_path: "data/classifiers/lid.176.bin"
   label_mapping:
     __label__low_quality: 'cc'
     __label__high_quality: 'wiki'
@@ -20,7 +20,7 @@ processing:
   # 留有余地，不要占满32核
   max_workers: 30
   # 处理 5000 个文件
-  max_files_limit: 5000
+  max_files_limit: 2000
   # 强制子进程重启频率
   worker_ttl: 50 
 
