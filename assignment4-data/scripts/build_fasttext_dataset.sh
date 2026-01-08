@@ -11,7 +11,7 @@ set -e # 如果任何命令失败，脚本将立即退出
 # --- 1. 配置变量  ---
 
 # --- 输入数据源路径 ---
-WIKI_WARC_PATH="data/wiki/subsampled_positive_15000_pages.warc.gz"
+WIKI_WARC_PATH="data/wiki/wiki_cited_pages.warc.gz"
 CC_WARC_PATH="data/crawls/CC-MAIN-20250417135010-20250417165010-00065.warc.gz"
 
 # --- 输出配置 ---

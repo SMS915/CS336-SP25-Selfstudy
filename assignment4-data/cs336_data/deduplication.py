@@ -571,7 +571,7 @@ def remove_duplicate_ids(all_doc_ids: List[int], duplicate_clusters: List[Set[in
     keep_id_set = all_doc_id_set - remove_id_set
     return keep_id_set
 
-def minhash_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, num_hashes: int, num_bands: int, n: int, output_dir: os.PathLike, jaccard_threshold: float = 0.8):
+def minhash_deduplication(input_files: List[os.PathLike], num_hashes: int, num_bands: int, n: int, output_dir: os.PathLike, jaccard_threshold: float = 0.8):
     """
     对一组输入的文本文件执行端到端的近似去重流程，并输出唯一的文件。
 

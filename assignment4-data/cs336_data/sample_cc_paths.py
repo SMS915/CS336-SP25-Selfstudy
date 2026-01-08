@@ -68,7 +68,6 @@ def sample_and_generate_script(
 
     os.chmod(output_script_path, 0o755)
     print(f"\n成功！脚本现在仅包含命令，链接已存入 {url_list_path}。")
-    print(f"GitHub 语言统计中的 Shell 占比将显著下降。")
 
 
 if __name__ == "__main__":

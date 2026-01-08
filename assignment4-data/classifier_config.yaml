@@ -1,6 +1,6 @@
 data:
-  train_file: "data/classifiers_dataset/quality_classifier_remixed_2114.train_split" # 在这里修改路径指向 dataset_builder 筛选出的训练数据
-  test_file: "data/classifiers_dataset/quality_classifier_remixed_2114.valid_split"
+  train_file: "data/classifiers_dataset/test_dataset_1668samples.train" # 指向 dataset_builder 筛选出的训练数据
+  test_file: "data/classifiers_dataset/test_dataset_1668samples.test" 
   output_dir: "data/my_classifiers"
 
 
@@ -8,7 +8,7 @@ model:
   output_dir: "data/my_classifiers"
 
 training:
-  epoch: 125
+  epoch: 100
   lr: 0.1
   wordNgrams: 3
   dim: 100

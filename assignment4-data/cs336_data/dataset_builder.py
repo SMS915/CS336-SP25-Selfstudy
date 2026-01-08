@@ -35,7 +35,7 @@ def build_filtered_data(warc_file_path: str, quality_label: str, source_label: s
             text = extract_text(html_bytes)
             
             if text and not text.isspace():
-                if judge_high_quality(text):
+                if judge_high_quality(text, build_classifier_dataset=True):
                     clean_text = text.replace('\n', ' ').replace('\r', ' ').strip()
                     formatted_text = f'{fasttext_format_str} {clean_text}'
                     texts.append(formatted_text)

@@ -23,24 +23,41 @@ from .quality_classifier import QualityClassifier
 def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
+_MODELS_LOADED = False
+LANG_MODEL = None
+NSFW_MODEL = None
+TOXIC_MODEL = None
+QUALITY_CLASSIFIER = None
+
+def init_models_globally(config: Dict[str, Any]):
+    """在主进程中加载模型到全局变量"""
+    global LANG_MODEL, NSFW_MODEL, TOXIC_MODEL, QUALITY_CLASSIFIER, _MODELS_LOADED
     
-CONFIG_PATH = "configs/test_pipeline.yaml"
-CONFIG = load_config(CONFIG_PATH)
+    if _MODELS_LOADED:
+        return
+        
+    print(f"Parent process {os.getpid()} loading models for COW...")
+    m = config['models']
+    try:
+        LANG_MODEL = fasttext.load_model(m['lang_path'])
+        NSFW_MODEL = fasttext.load_model(m['nsfw_path'])
+        TOXIC_MODEL = fasttext.load_model(m['toxic_path'])
+        TOXIC_MODEL = fasttext.load_model(m['toxic_path']) # 补上刚才 Traceback 里报错的这个
+        QUALITY_CLASSIFIER = QualityClassifier(m['quality_classifier'], m['label_mapping'])
+        _MODELS_LOADED = True
+        print(f"Process {os.getpid()} models loaded successfully.")
+    except Exception as e:
+        print(f"Error loading models in process {os.getpid()}: {e}")
+        raise e
 
-model_setup = CONFIG['models']
-LANG_MODEL = fasttext.load_model(model_setup['lang_path'])
-NSFW_MODEL = fasttext.load_model(model_setup['nsfw_path'])
-TOXIC_MODEL = fasttext.load_model(model_setup['toxic_path'])
-QUALITY_CLASSIFIER = QualityClassifier(model_setup['quality_classifier'], model_setup['label_mapping'])
 
-_worker_context = {}
-
-def _worker_initializer():
+def _worker_initializer(config: Dict[str, Any]):
     """
     这个函数会在每个子进程启动时只执行一次。
     用于加载模型并存入全局变量。
     """
-    print(f"Worker {os.getpid()} initializing models...")
+    init_models_globally(config)
 
 def process_single_wet_file(wet_file_path: str | os.PathLike,
                             output_dir: str | os.PathLike,
@@ -119,7 +136,7 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
 
     return output_paths, stats, masked_dict
 
-def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[str, int]]:
+def filter_wet_files(config: Dict[str, Any], config_path: str) -> Tuple[List[os.PathLike], Dict[str, int]]:
     """
     使用多进程并行处理输入目录中的所有WET文件。
 
@@ -156,7 +173,8 @@ def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[st
     total_masked_stats = defaultdict(int)
 
     with multiprocessing.Pool(processes=max_workers, 
-                              initializer=_worker_initializer, # 进程启动时加载模型
+                              initializer=_worker_initializer,
+                              initargs=(config,), # 进程启动时加载模型
                               maxtasksperchild=worker_ttl) as pool: # 防内存泄漏
 
     # processpool写法
@@ -171,7 +189,6 @@ def filter_wet_files(config: Dict[str, Any]) -> Tuple[List[os.PathLike], Dict[st
         print(f"启动ProcessPoolExecutor，最大工作进程数: {max_workers}")
 
         process_func = partial(process_single_wet_file, output_dir=output_dir, config=config)
-
         results = tqdm(pool.imap_unordered(process_func, wet_files, chunksize=1),
                        total=len(wet_files),
                        desc="并行过滤 WET 文件")
@@ -261,8 +278,17 @@ def get_all_txt_files(path: str | os.PathLike) -> List[Path]:
 
 
 if __name__ == "__main__":
+    try:
+        multiprocessing.set_start_method('fork')
+    except RuntimeError:
+        pass
     parser = argparse.ArgumentParser(description="Run the data processing pipeline.")
-    parser.add_argument("--config", type=str, default="test_pipeline.yaml", help="Path to the YAML configuration file.")
+    parser.add_argument(
+        "--config", 
+        type=str, 
+        required=True, # 改为必填或提供更合理的默认值
+        help="Path to the YAML config"
+    )
     args = parser.parse_args()
 
     # 1. 加载配置
@@ -270,6 +296,8 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"Config file not found: {args.config}")
     
     config = load_config(args.config)
+
+    init_models_globally(config)
 
 
     print(f"成功加载配置: {args.config}")
@@ -353,10 +381,10 @@ if __name__ == "__main__":
 
         # ---------------------------------------------------------
         # 执行 Filter (如果需要)
-        # ---------------------------------------------------------
+        # ----------------------------------------------------filter_wet_files-----
         if not exact_input_files:
             print("\n=== 执行 Stage 1: WET 过滤 ===")
-            exact_input_files = filter_wet_files(config)
+            exact_input_files = filter_wet_files(config, args.config)
             exact_input_base = filtered_dir
             if not exact_input_files:
                 print("错误：过滤阶段未产生任何文件，程序终止。")
