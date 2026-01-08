@@ -61,14 +61,17 @@ def main():
 
     # 定义配置：(模型前缀, 数据集关键字, 筛选Pass@K)
     configs = [
-        ('aime2024', 50),
-        ('aime2024', 100),
-        ('aime2024', 150),
-        ('aime2024', 200),
-        ('aime2024', 250),
-        ('aime2024', 300),
-        ('aime2024', 350),
-        ('aime2024', 400),
+        ('aime2025', 50),
+        ('aime2025', 100),
+        ('aime2025', 150),
+        ('aime2025', 200),
+        ('aime2025', 250),
+        ('aime2025', 300),
+        ('aime2025', 350),
+        ('aime2025', 400),
+        ('aime2025', 450),
+        ('aime2025', 500),
+        ('aime2025', 550),
 
         ('math500', 50),
         ('math500', 100),
@@ -78,7 +81,9 @@ def main():
         ('math500', 300),
         ('math500', 350),
         ('math500', 400),
-
+        ('math500', 450),
+        ('math500', 500),
+        ('math500', 550),
     ]
 
     all_files = os.listdir(args.input_dir)
@@ -95,7 +100,7 @@ def main():
             # 检索符合条件的文件
             target_file = None
             for f in all_files:
-                if f.startswith(dataset_key) and str(ckpt_idx) in f and f.endswith(".jsonl"):
+                if f.startswith(dataset_key) and '_' + str(ckpt_idx) in f and f.endswith(".jsonl"):
                     target_file = f
                     break
 
@@ -109,7 +114,7 @@ def main():
 
             if stats:
                 report = (
-                        f"【项目】: grpo_no_std_norm step{ckpt_idx} | {dataset_key}\n"
+                        f"【项目】: drgrpo_curriculum step{ckpt_idx} | {dataset_key}\n"
                         f"  - 文件: {target_file}\n"
                         f"  - 样本数: {stats['count']}\n"
                         f"  - 正确率: {stats['acc']:.2%} | 格式错误率: {stats['format_err']:.2%}\n"

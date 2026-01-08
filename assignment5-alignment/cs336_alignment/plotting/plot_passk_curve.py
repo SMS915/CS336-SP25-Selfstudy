@@ -383,11 +383,38 @@ if __name__ == "__main__":
                                                     0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367,
                                                     0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367)}
 
+    drgrpo_curriculum_math500_pass64_results = {'drgrpo_curriculum': (0.612, 0.702, 0.748, 0.778, 0.786, 0.802, 0.818, 0.826,
+                                                                      0.834, 0.842, 0.846, 0.848, 0.858, 0.860, 0.860, 0.864,
+                                                                      0.866, 0.866, 0.874, 0.876, 0.880, 0.884, 0.888, 0.890,
+                                                                      0.892, 0.894, 0.894, 0.894, 0.894, 0.896, 0.896, 0.896,
+                                                                      0.896, 0.896, 0.898, 0.898, 0.900, 0.902, 0.902, 0.904,
+                                                                      0.906, 0.906, 0.906, 0.906, 0.906, 0.906, 0.906, 0.906,
+                                                                      0.906, 0.906, 0.906, 0.908, 0.908, 0.912, 0.912, 0.912,
+                                                                      0.914, 0.916, 0.916, 0.916, 0.918, 0.918, 0.918, 0.920)}
+
+    drgrpo_curriculum_amc12_pass64_results = {'drgrpo_curriculum': (0.253, 0.398, 0.458, 0.470, 0.482, 0.506, 0.554, 0.578,
+                                                                    0.590, 0.602, 0.602, 0.627, 0.639, 0.639, 0.675, 0.675,
+                                                                    0.687, 0.687, 0.687, 0.687, 0.699, 0.699, 0.723, 0.723,
+                                                                    0.723, 0.723, 0.723, 0.723, 0.723, 0.723, 0.723, 0.723,
+                                                                    0.723, 0.723, 0.723, 0.723, 0.723, 0.723, 0.723, 0.735,
+                                                                    0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735,
+                                                                    0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735,
+                                                                    0.735, 0.735, 0.747, 0.747, 0.759, 0.759, 0.759, 0.759)}
+
+    drgrpo_curriculum_aime24_pass64_results = {'drgrpo_curriculum': (0.067, 0.133, 0.167, 0.200, 0.200, 0.200, 0.233, 0.233,
+                                                                     0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233,
+                                                                     0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233, 0.233,
+                                                                     0.233, 0.233, 0.233, 0.267, 0.267, 0.267, 0.267, 0.267,
+                                                                     0.267, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267,
+                                                                     0.267, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267, 0.267,
+                                                                     0.267, 0.267, 0.267, 0.300, 0.300, 0.333, 0.333, 0.333,
+                                                                     0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333)}
+
     math_test_pass8_results  = [baseline_math_test_pass8_result, sft_math_test_pass8_result, grpo_without_std_norm_math_test_pass8_result, grpo_math_test_pass8_result, drgrpo_math_test_pass8_result, instruct_math_test_pass8_result]
-    math500_pass64_results   = [baseline_math500_pass64_result, sft_math500_pass64_result, grpo_math500_pass64_result, grpo_without_std_norm_math500_pass64_result, drgrpo_math500_pass64_result, instruct_math500_pass64_result]
-    amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, grpo_AMC12_pass64_result, grpo_without_std_norm_AMC12_pass64_result, drgrpo_amc_pass64_result, instruct_AMC_12_pass64_result]
+    math500_pass64_results   = [baseline_math500_pass64_result, sft_math500_pass64_result, grpo_math500_pass64_result, grpo_without_std_norm_math500_pass64_result, drgrpo_math500_pass64_result, drgrpo_curriculum_math500_pass64_results, instruct_math500_pass64_result]
+    amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, grpo_AMC12_pass64_result, grpo_without_std_norm_AMC12_pass64_result, drgrpo_amc_pass64_result,drgrpo_curriculum_amc12_pass64_results, instruct_AMC_12_pass64_result]
     aime_2025_pass64_results = [baseline_aime25_pass64_result, sft_aime25_pass64_result, grpo_aime25_pass64_result, grpo_without_std_norm_aime25_pass64_result, drgrpo_aime25_pass64_result, instruct_aime25_pass64_result]
-    aime_2024_pass64_results = [baseline_aime24_pass64_result, sft_aime24_pass64_result, grpo_aime24_pass64_result, grpo_without_std_norm_aime24_pass64_result, drgrpo_aime24_pass64_result, instruct_aime24_pass64_result]
+    aime_2024_pass64_results = [baseline_aime24_pass64_result, sft_aime24_pass64_result, grpo_aime24_pass64_result, grpo_without_std_norm_aime24_pass64_result, drgrpo_aime24_pass64_result,drgrpo_curriculum_aime24_pass64_results, instruct_aime24_pass64_result]
 
 
 

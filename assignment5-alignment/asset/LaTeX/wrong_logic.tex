@@ -1,0 +1,112 @@
+\documentclass[11pt, a4paper]{article} % 改用基础 article 类以提高兼容性
+
+% --- 中文支持关键包 ---
+\usepackage[UTF8, fontset=none]{ctex} % 禁用默认的 fandol 字体集，避免报错
+\setCJKmainfont[AutoFakeBold=true]{SimSun} % 如果系统有宋体则使用，没有则会自动回退
+
+% --- 基础宏包 ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=2cm}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+
+% --- tcolorbox 装饰宏包及其库 ---
+\usepackage[most]{tcolorbox}
+\usetikzlibrary{shadows}
+
+% --- 定义 Case Study 装饰框样式 ---
+\newtcolorbox{casebox}[2][]{
+    enhanced,
+    colback=white,
+    colframe=gray!20!black,
+    fonttitle=\bfseries,
+    colbacktitle=gray!10!white,
+    coltitle=black,
+    attach boxed title to top left={xshift=10pt, yshift=-10pt, yshifttext=-10pt},
+    boxed title style={colframe=gray!20!black, sharp corners},
+    title={#2},
+    drop shadow,
+    #1
+}
+
+\begin{document}
+
+% --- 案例分析展示 ---
+\begin{casebox}{案例研究: 伪推理对比与逻辑修正 (AIME 2024 II Problem 13)}
+	\textbf{【题目】} \\
+	已知实数 $x, y > 1$，满足 $\log_x(y^x) = \log_y(x^{4y}) = 10$。求 $xy$。
+	
+	\vspace{8pt}
+	\hrule
+	\vspace{8pt}
+	
+	\textbf{【Baseline模型原始输出】} \\
+	\textit{Since $x^{\log_x(y^x)} = y^x$ by definition of logarithm, \textcolor{red}{we get $y^{10} = y^x$}, which gives $x = 10$. Similarly, \textcolor{red}{we get $x^{4y} = x^{10}$}, so $4y = 10$, which gives $y = 2.5$. We have $xy = 25$.}
+	
+	\vspace{8pt}
+	\hrule
+	\vspace{8pt}
+	
+	\textbf{【RL后模型输出摘要】} \\
+	\textit{
+		\dots Using the power rule \dots we have $x \log_x y = 10$ and $4y \log_y x = 10$. \\
+		\dots Substituting \dots $x / \log_y x = 10 \implies \log_y x = x/10$. \\
+		\dots From the second equation \dots \textcolor{red}{$\log_y x = 4y/10$} (应为 $10/4y$). \\
+		\dots Setting equal \dots $x/10 = 4y/10 \implies x = 4y$. \\
+		\dots Substituting into the first equation \dots $4y = 20 \log_y 2 + 10$. \\
+		\dots \textcolor{red}{$8y \log_y 2 + 10 - 20 \log_y 2 = 10$} (通过符号翻转强行抵消变量). \\
+		\dots $8y - 20 = 0 \implies y = 2.5$. \\
+		\dots Verification: \textcolor{red}{$\log_{10}(2.5) = 1 - \log_{10} 2 + \log_{10} 2 = 1$} (虚假验算). \\
+		\dots Therefore, $xy = 25$. 
+	}
+	
+	\textbf{【正确推理路径】} \\
+	\textit{From $\log_x(y^x) = 10$, we apply the power rule: \textcolor{blue}{$x \log_x y = 10$}, hence $\log_x y = \frac{10}{x}$. Similarly, from $\log_y(x^{4y}) = 10$, we have \textcolor{blue}{$4y \log_y x = 10$}, so $\log_y x = \frac{10}{4y}$. Using the change of base identity $\log_x y \cdot \log_y x = 1$, we get \textcolor{blue}{$\frac{10}{x} \cdot \frac{10}{4y} = 1$}. This simplifies to $\frac{100}{4xy} = 1$, which leads to $4xy = 100$, thus \textcolor{blue}{$xy = 25$}.}
+\end{casebox}
+
+
+\begin{casebox}{案例研究 \#11: 逻辑短路与答案锚定 (AIME 2002)}
+	\textbf{【题目】} \\
+	Alice 和 Bob 玩取令牌游戏。一堆 $n$ 个令牌。每人每次取 1 或 4 个。最后取光者胜。求 $1 \le n \le 2024$ 中 Bob 必胜的 $n$ 的数量。
+	
+	\vspace{5pt}
+	\hrule
+	\vspace{5pt}
+	
+	\textbf{【Baseline模型原始输出】} \\
+	\textit{Alice can only win if $n$ is not a multiple of 5. ... if $n$ is a multiple of 5, Alice removes 4, \textcolor{red}{leaving a multiple of 5 tokens for Bob}. ... Bob can then remove 1, \textcolor{red}{leaving a multiple of 5 tokens for Alice}. ... Therefore, Bob wins if $n$ is not a multiple of 5. \textcolor{blue}{<answer> 809 </answer>}}
+	
+	\vspace{5pt}
+	\begin{tcolorbox}[colback=red!5!white, colframe=red!50!black, size=small]
+		\textbf{诊断报告：}
+		\begin{itemize}
+			\item \textbf{算术断层：} 模型声称 $5k - 4$ 仍是 5 的倍数（红色部分），这表明思维链完全失去了代数约束。
+			\item \textbf{锚定效应：} 最终输出的 \textbf{809}（蓝色部分）是完全正确的。这证明模型通过预训练记忆检索到了“正确答案数字”，但其逻辑路径与结论完全脱节。
+			\item \textbf{结论：} 1.5B 模型在 SFT 后展现出了典型的“格式正确、逻辑幻觉、结果蒙对”三重矛盾特征。
+		\end{itemize}
+	\end{tcolorbox}
+\end{casebox}
+
+\begin{casebox}{案例研究: 逻辑泛化与正向推导 (AIME 2025 I Problem 1)}
+	\textbf{【题目】} \\
+	求所有满足 $b > 9$ 且 $17_b \mid 97_b$ 的整数底数 $b$ 的总和。\\
+	\textbf{【三阶段推理摘要 (Evolution of Reasoning)】}
+	\begin{itemize}
+		\item \textbf{Baseline (暴力枚举):} $9b + 7 = k(b + 7) \implies b(9-k) = 7(k-1)$。测试 $k \in [2, 8]$，找到 $b=21, 49$。逻辑虽原始但严谨。
+		\item \textbf{SFT (数论转化):} 令 $n = b+7$，则 $9b+7 = 9(n-7)+7 = 9n - 56$。要求 $n \mid 56$。体现了竞赛风格的路径优化。
+		\item \textbf{DRGRPO (逻辑收敛):} \textcolor{blue}{$d = b+7 \implies d \mid 56$}。显式判定 \textcolor{blue}{$b > 9 \implies d > 16$}。直接锁定 $d \in \{28, 56\}$，得出 $b=21, 49$，Sum=70。
+	\end{itemize}
+\end{casebox}
+
+\begin{tcolorbox}[enhanced, colback=green!5!white, colframe=green!50!black, title=科研结论：RL 的效用边界]
+	\small
+	\begin{itemize}
+		\item \textbf{真推理的兑现：} 在 OOD 样本（AIME 25）上，由于模型无法检索到答案记忆，其推理路径必须依赖底座的数学本能。此时，\textbf{SFT 起到了路径引导作用，而 RL 起到了逻辑精简与约束强化的作用}。
+		\item \textbf{伪推理的固化：} 在污染样本（AIME 24）上，由于底座已锚定答案，RL 的奖励机制（Outcome Reward）无法分辨“算对”和“蒙对”。这导致模型在压力下选择**牺牲逻辑严谨性来适配记忆中的答案**。
+		\item \textbf{核心洞察：} \textbf{RL 不能在错误的记忆之上凭空建立逻辑，它只能锐化模型已有的最强概率路径}。
+	\end{itemize}
+\end{tcolorbox}
+\end{document}
