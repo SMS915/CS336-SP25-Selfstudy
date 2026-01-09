@@ -975,17 +975,21 @@ Ru (Pass@k的留存率)则衡量的是模型**潜在的、完整的知识储备*
 
 
 
-上图AIME
+上图中的例题分别来自AIME24第一部分的Problem 2和AIME25第一部分的Problem1,在数据集中序号分别为8 和 1。
+
+可以看到，对于发生了数据泄露的AIME24题目，Baseline模型会直接编造一个完全不符合事实与逻辑的“推理”过程。就算经过了后训练，在分布内的高难样本上，模型仍然**不能**真正学会如何正确的求解该题，反而RLVR的范式锐化了其蒙出记忆中正确答案的分布，增大了其蒙出一个似是而非的推理过程的概率。但是这个过程仍然是经不起推敲的，而是充满着错误和漏洞。
+
+而对于下图中完全分布外的AIME25样本，SFT和RL则展现出了惊人的效果。SFT后，模型学会了用数论方法取代原本的暴力枚举。而RL后的模型更是可以以极高的效率锁定关键逻辑，一步到位。
 
 
 
-## Chapter 6 算法收敛逻辑的解构：无偏估计与归纳摩擦的权衡
+## Chapter 8 算法收敛逻辑的解构：无偏估计与归纳摩擦的权衡
 
 
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-## Chapter 7 多阶段模型Pass@k能力测试
+## Chapter 9 多阶段模型Pass@k能力测试
 
 <a id="section-7"></a>
 
@@ -1001,7 +1005,7 @@ Ru (Pass@k的留存率)则衡量的是模型**潜在的、完整的知识储备*
 
 
 
-### 7.1 性能实测：从基础算术到竞赛难题
+### 9.1 性能实测：从基础算术到竞赛难题
 
 <p align="center">表3 模型在不同训练阶段的准确率汇总 (Pass@1 & Pass@64)</p>
 
@@ -1150,7 +1154,7 @@ Ru (Pass@k的留存率)则衡量的是模型**潜在的、完整的知识储备*
 
 
 
-### 5.2 Pass@K曲线动态分析
+### 9.2 Pass@K曲线动态分析
 
 ![MATH-500](asset/MATH-500_Pass@64对比图-无标注.png) 
 
@@ -1203,7 +1207,7 @@ Ru (Pass@k的留存率)则衡量的是模型**潜在的、完整的知识储备*
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-## Chapter 6 行为特征观察：推理长度、格式规范与解题“性价比”
+## Chapter 10 行为特征观察：推理长度、格式规范与解题“性价比”
 
 <a id="section-6"></a>
 
@@ -1299,7 +1303,7 @@ Ru (Pass@k的留存率)则衡量的是模型**潜在的、完整的知识储备*
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-## Chapter 7 模式坍塌现象分析
+## Chapter 11 模式坍塌现象分析
 
 <a id="section-7"></a>
 
@@ -1369,7 +1373,7 @@ Ru (Pass@k的留存率)则衡量的是模型**潜在的、完整的知识储备*
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-## 8. 未来展望
+## 12. 未来展望
 
 <a id="section-8"></a>
 
@@ -1381,7 +1385,7 @@ Ru (Pass@k的留存率)则衡量的是模型**潜在的、完整的知识储备*
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-## 9. 项目结构
+## 13. 项目结构
 
 <a id="section-9"></a>
 
@@ -1402,7 +1406,7 @@ configs/
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-## 10. 使用工作流
+## 14. 使用工作流
 
 <a id="section-10"></a>
 
@@ -1431,7 +1435,7 @@ uv run python cs336_alignment/train_grpo.py --config configs/grpo_config.yaml
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-## 11. 环境设置与安装
+## 15. 环境设置与安装
 
 <a id="section-11"></a>
 
