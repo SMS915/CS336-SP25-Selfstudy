@@ -73,6 +73,7 @@ def run_minhash_deduplication(
         input_base_dir = os.path.dirname(input_files[0])
 
     minhash_deduplication(input_files=input_files,
+                          input_base_dir=input_base_dir
                           num_hashes=num_hashes,
                           num_bands=num_bands,
                           n=ngrams,

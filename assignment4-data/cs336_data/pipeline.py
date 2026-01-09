@@ -136,7 +136,7 @@ def process_single_wet_file(wet_file_path: str | os.PathLike,
 
     return output_paths, stats, masked_dict
 
-def filter_wet_files(config: Dict[str, Any], config_path: str) -> Tuple[List[os.PathLike], Dict[str, int]]:
+def filter_wet_files(config: Dict[str, Any], config_path: str, max_cpu_workers: int = 30, worker_ttl: int = 50) -> Tuple[List[os.PathLike], Dict[str, int]]:
     """
     使用多进程并行处理输入目录中的所有WET文件。
 
@@ -150,12 +150,10 @@ def filter_wet_files(config: Dict[str, Any], config_path: str) -> Tuple[List[os.
     input_dir = config['paths']['input_dir']
     # 动态生成子目录，防止不同配置覆盖
     output_dir = os.path.join(config['paths']['base_output_dir'], 'filtered')
-    
-    max_workers = config['processing']['max_workers']
-    worker_ttl = config['processing'].get('worker_ttl', 50) # 默认处理50个文件后重启
+
     max_files = config['processing']['max_files_limit']
 
-    print(f"启动 multiprocessing.Pool (Workers={max_workers}, TTL={worker_ttl})...")
+    print(f"启动 multiprocessing.Pool (Workers={max_cpu_workers}, TTL={worker_ttl})...")
 
     wet_files = sorted(glob.glob(f"{input_dir}/*.warc.wet.gz"))
     if not wet_files:
@@ -172,7 +170,7 @@ def filter_wet_files(config: Dict[str, Any], config_path: str) -> Tuple[List[os.
     total_stats = defaultdict(int)
     total_masked_stats = defaultdict(int)
 
-    with multiprocessing.Pool(processes=max_workers, 
+    with multiprocessing.Pool(processes=max_cpu_workers, 
                               initializer=_worker_initializer,
                               initargs=(config,), # 进程启动时加载模型
                               maxtasksperchild=worker_ttl) as pool: # 防内存泄漏
@@ -186,7 +184,7 @@ def filter_wet_files(config: Dict[str, Any], config_path: str) -> Tuple[List[os.
     #                total=len(wet_files),
     #                desc="并行处理wet文件")
 
-        print(f"启动ProcessPoolExecutor，最大工作进程数: {max_workers}")
+        print(f"启动ProcessPoolExecutor，最大工作进程数: {max_cpu_workers}")
 
         process_func = partial(process_single_wet_file, output_dir=output_dir, config=config)
         results = tqdm(pool.imap_unordered(process_func, wet_files, chunksize=1),
@@ -210,15 +208,16 @@ def filter_wet_files(config: Dict[str, Any], config_path: str) -> Tuple[List[os.
     
     return all_output_paths
 
-def exact_deduplicate(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, config: Dict[str, Any]):
+def exact_deduplicate(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, config: Dict[str, Any], max_workers: int = 20):
     output_dir = os.path.join(config['paths']['base_output_dir'], 'exact_dedup')
     output_paths, total_lines_before, total_lines_after = exact_line_deduplication(input_files=input_files,
                                                                                    input_base_dir=input_base_dir,
-                                                                                   output_directory=output_dir)
+                                                                                   output_directory=output_dir,
+                                                                                   num_workers = max_workers)
     return output_paths, output_dir
 
 
-def fuzzy_deduplicate(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, config: Dict[str, int]):
+def fuzzy_deduplicate(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, config: Dict[str, int], max_workers: int = 20):
     output_dir = os.path.join(config['paths']['base_output_dir'], 'fuzzy_dedup') # type: ignore
     dedup_conf = config['deduplication']['fuzzy'] # type: ignore
     output_paths, before_count, after_count = minhash_deduplication(
@@ -228,7 +227,8 @@ def fuzzy_deduplicate(input_files: List[os.PathLike], input_base_dir: str | os.P
         num_bands=dedup_conf['bands'],
         n=dedup_conf['n_gram'],
         output_dir=output_dir,
-        jaccard_threshold=dedup_conf['threshold']
+        jaccard_threshold=dedup_conf['threshold'],
+        max_workers = max_workers
     )
     return output_paths, before_count, after_count
     
@@ -246,9 +246,11 @@ def write_shard(file_paths: List[Path], output_file: Path, separator: str):
                     fout.write(content)
                     fout.write(separator) # 拼接分隔符
 
-def build_dataset_parallel(kept_files: List[Path], output_dir: Path, num_shards: int = 16):
+def build_dataset_parallel(kept_files: List[Path], output_dir: Path, num_workers: int = 20):
     os.makedirs(output_dir, exist_ok=True)
     
+    num_shards = num_workers
+
     # 将文件列表切分为 num_shards 份
     chunk_size = len(kept_files) // num_shards + 1
     chunks = [kept_files[i:i + chunk_size] for i in range(0, len(kept_files), chunk_size)]
@@ -259,7 +261,7 @@ def build_dataset_parallel(kept_files: List[Path], output_dir: Path, num_shards:
         tasks.append((chunk, shard_path, "<|endoftext|>\n"))
     
     # 并行写入
-    with multiprocessing.Pool(processes=15) as pool:
+    with multiprocessing.Pool(processes=num_workers) as pool:
         pool.starmap(write_shard, tasks)
 
 
@@ -308,12 +310,18 @@ if __name__ == "__main__":
     os.makedirs(base_output, exist_ok=True)
 
     input_dir = config['paths']['input_dir']
-    max_files_config = config['processing'].get('max_files_limit')
+    max_files_limit = config['processing'].get('max_files_limit')
+
+    max_cpu_workers = config['processing'].get('max_cpu_workers', 30)
+    max_io_workers  = config['processing'].get('max_io_workers', 20)
+    worker_ttl = config['processing'].get('worker_ttl', 50)
+
+    process_chunk_size = config['processing'].get('chunk_size', 10)
 
     # 断点续传检查, 首先获取当前运行预期的中间产出文件夹数量
     expected_limit = 0
-    if max_files_config is not None:
-        expected_limit = max_files_config
+    if max_files_limit is not None:
+        expected_limit = max_files_limit
         print(f"[Plan] 配置限制最大处理文件数: {expected_limit}")
     else:
         # 如果是 None，则扫描源目录下的 .warc.wet.gz 总数
@@ -381,17 +389,17 @@ if __name__ == "__main__":
 
         # ---------------------------------------------------------
         # 执行 Filter (如果需要)
-        # ----------------------------------------------------filter_wet_files-----
+        # ---------------------------------------------------------
         if not exact_input_files:
             print("\n=== 执行 Stage 1: WET 过滤 ===")
-            exact_input_files = filter_wet_files(config, args.config)
+            exact_input_files = filter_wet_files(config, args.config, max_cpu_workers,)
             exact_input_base = filtered_dir
             if not exact_input_files:
                 print("错误：过滤阶段未产生任何文件，程序终止。")
                 exit(1)
 
         print("\n=== 执行 Stage 2: 精确去重 ===")
-        # 注意：exact_deduplicate 会根据 relative_to 保持子目录结构，这符合我们后续检查子目录数量的逻辑
+        # 注意：exact_deduplicate 会根据 relative_to 保持子目录结构，这符合后续检查子目录数量的逻辑
         fuzzy_input_files, fuzzy_input_base = exact_deduplicate(exact_input_files, exact_input_base, config)
 
 
@@ -407,9 +415,10 @@ if __name__ == "__main__":
              exit(0)
 
         fuzzy_output_paths, doc_count_before, doc_count_after = fuzzy_deduplicate(
-            valid_fuzzy_inputs, 
-            fuzzy_input_base, 
-            config
+            input_files = valid_fuzzy_inputs, 
+            input_base_dir = fuzzy_input_base, 
+            config = config,
+            max_workers = max_io_workers
         )
 
         print("\n=== 构建分片数据集 ===")

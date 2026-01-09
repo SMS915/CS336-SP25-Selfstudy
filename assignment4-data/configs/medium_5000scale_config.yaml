@@ -18,11 +18,22 @@ models:
 
 processing:
   # 留有余地，不要占满32核
-  max_workers: 30
-  # 处理 5000 个文件
+  # cpu密集型任务开高点
+  max_cpu_workers: 30
+
+  # I/O 密集型或高内存消耗任务（去重验证、精确去重统计）
+  max_io_workers: 20
+
+  # 任务分配批次（减少 IPC 通信开销）
+  chunk_size: 10
+
+  num_shards: 30
+
   max_files_limit: 2000
+  
   # 强制子进程重启频率
-  worker_ttl: 50 
+  worker_ttl: 50
+
 
 filter:
   min_doc_length: 200        # 保持高质量过滤
@@ -39,3 +50,5 @@ deduplication:
     num_hashes: 128
     bands: 20
     threshold: 0.8
+
+  
