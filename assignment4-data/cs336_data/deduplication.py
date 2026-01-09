@@ -5,6 +5,7 @@ import xxhash
 import unicodedata
 import numpy as np
 import regex
+import shutil
 from nltk import ngrams
 from tqdm import tqdm
 from pathlib import Path
