@@ -9,7 +9,7 @@ from transformers import AutoTokenizer
 
 def calculate_lcp_ratio(text, min_pattern_len=10):
     """
-    计算最大重复模式占比 (保持基于文本的匹配，速度快且有效)
+    计算最大重复模式占比 (基于字符匹配)
     """
     if not text or len(text) < min_pattern_len:
         return 0.0
@@ -17,7 +17,7 @@ def calculate_lcp_ratio(text, min_pattern_len=10):
     seen_patterns = set()
     repeated_chars = 0
 
-    # 步长为1，统计字符级别的重复覆盖率
+    # 统计字符级别的重复覆盖率
     for i in range(len(text) - min_pattern_len):
         pattern = text[i: i + min_pattern_len]
         if pattern in seen_patterns:
@@ -30,7 +30,7 @@ def calculate_lcp_ratio(text, min_pattern_len=10):
 
 def is_format_error(data_row, text):
     """
-    判定是否为格式错误 (优先 metrics > 文本 heuristic)
+    判定是否为格式错误
     """
     # 1. 优先检查 metrics
     if "metrics" in data_row and isinstance(data_row["metrics"], dict):
@@ -63,51 +63,55 @@ def parse_filename(filename):
     return filename.replace(".jsonl", ""), "unknown"
 
 
-def run_analysis(input_root, model_path, output_csv, collapse_threshold=2000):
+def run_analysis(input_root, target_models, model_path, output_csv, collapse_threshold=2048):
+    """
+    核心分析函数
+    :param target_models: 用户指定的子文件夹名称列表
+    """
     # 1. 加载 Tokenizer
     print(f"正在加载 Tokenizer: {model_path} ...")
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     except Exception as e:
         print(f"加载 Tokenizer 失败: {e}")
-        print("请检查 --model_path 是否正确")
         return
 
     results_data = []
 
-    # 遍历目录
-    subdirs = [d for d in os.listdir(input_root) if os.path.isdir(os.path.join(input_root, d))]
-
-    for model_name in sorted(subdirs):
+    # 2. 遍历指定的文件夹
+    for model_name in target_models:
         current_dir = os.path.join(input_root, model_name)
+
+        if not os.path.exists(current_dir):
+            print(f"跳过: 目录不存在 -> {current_dir}")
+            continue
+
         files = [f for f in os.listdir(current_dir) if f.endswith(".jsonl")]
+        if not files:
+            print(f"警告: 在 {current_dir} 中未找到 .jsonl 文件")
+            continue
 
         for filename in files:
             file_path = os.path.join(current_dir, filename)
             base_info, pass_k = parse_filename(filename)
             dataset = base_info.replace(f"{model_name}_", "") if base_info else "unknown"
 
-            print(f"正在分析 [{model_name}] - {dataset} (Pass@{pass_k})...")
+            print(f"分析中: [{model_name}] - {dataset} (Pass@{pass_k})")
 
             stats = {
                 "total": 0,
                 "format_error_total": 0,
                 "collapse_total": 0,
-
-                # 细分：格式错误中的坍塌
                 "fmt_err_collapse_count": 0,
-                "fmt_err_collapse_token_sum": 0,  # 改为 Token Sum
-
-                # 细分：格式错误中的正常
+                "fmt_err_collapse_token_sum": 0,
                 "fmt_err_normal_count": 0,
-                "fmt_err_normal_token_sum": 0  # 改为 Token Sum
+                "fmt_err_normal_token_sum": 0
             }
 
             with open(file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
 
-            # 使用 tqdm 显示进度
-            for line in tqdm(lines, desc=f"Processing {filename}", leave=False):
+            for line in tqdm(lines, desc=f"  Processing {filename[:20]}...", leave=False):
                 try:
                     data = json.loads(line)
                     text = data.get("generated_text") or data.get("response") or ""
@@ -115,26 +119,22 @@ def run_analysis(input_root, model_path, output_csv, collapse_threshold=2000):
 
                     stats["total"] += 1
 
-                    # --- Token 计算 ---
+                    # --- Token 统计 ---
                     tokens = tokenizer.encode(text, add_special_tokens=False)
                     token_len = len(tokens)
 
-                    # --- 核心判定逻辑 ---
-
-                    # 1. 判定模式坍塌 (Token 长度阈值 + 重复率)
-                    # 阈值建议：2000 (远超正常解题长度)
+                    # --- 坍塌判定 (基于 Token 长度阈值) ---
                     ratio = calculate_lcp_ratio(text)
                     is_collapsed = (ratio > 0.2 and token_len > collapse_threshold)
 
                     if is_collapsed:
                         stats["collapse_total"] += 1
 
-                    # 2. 判定格式错误
+                    # --- 格式错误判定 ---
                     is_fmt_err = is_format_error(data, text)
 
                     if is_fmt_err:
                         stats["format_error_total"] += 1
-
                         if is_collapsed:
                             stats["fmt_err_collapse_count"] += 1
                             stats["fmt_err_collapse_token_sum"] += token_len
@@ -142,21 +142,19 @@ def run_analysis(input_root, model_path, output_csv, collapse_threshold=2000):
                             stats["fmt_err_normal_count"] += 1
                             stats["fmt_err_normal_token_sum"] += token_len
 
-                except Exception as e:
+                except Exception:
                     continue
 
-            # --- 计算统计指标 ---
-            # 格式错误中的坍塌占比
+            # --- 计算指标 ---
+            if stats["total"] == 0: continue
+
             collapse_share = (stats["fmt_err_collapse_count"] / stats["format_error_total"]) if stats[
                                                                                                     "format_error_total"] > 0 else 0
-
-            # 平均 Token 长度
             avg_tok_collapse = (stats["fmt_err_collapse_token_sum"] / stats["fmt_err_collapse_count"]) if stats[
                                                                                                               "fmt_err_collapse_count"] > 0 else 0
             avg_tok_normal = (stats["fmt_err_normal_token_sum"] / stats["fmt_err_normal_count"]) if stats[
                                                                                                         "fmt_err_normal_count"] > 0 else 0
-
-            len_gap = avg_tok_collapse - avg_tok_normal
+            token_gap = avg_tok_collapse - avg_tok_normal
 
             row = {
                 "Model": model_name,
@@ -164,45 +162,57 @@ def run_analysis(input_root, model_path, output_csv, collapse_threshold=2000):
                 "Pass_K": pass_k,
                 "Total_Samples": stats["total"],
                 "Total_Format_Errors": stats["format_error_total"],
-                "Format_Error_Rate": f"{stats['format_error_total'] / stats['total']:.2%}" if stats[
-                                                                                                  'total'] > 0 else "0%",
-
+                "Format_Error_Rate": f"{stats['format_error_total'] / stats['total']:.2%}",
                 "Collapse_In_Errors_Count": stats["fmt_err_collapse_count"],
-                "Collapse_In_Errors_Share": f"{collapse_share:.2%}",  # 核心诊断
-
+                "Collapse_In_Errors_Share": f"{collapse_share:.2%}",
                 "Avg_Token_Collapse_Err": int(avg_tok_collapse),
                 "Avg_Token_Normal_Err": int(avg_tok_normal),
-                "Token_Gap": int(len_gap)
+                "Token_Gap": int(token_gap)
             }
             results_data.append(row)
 
-    # 写入 CSV
-    keys = [
-        "Model", "Dataset", "Pass_K", "Total_Samples",
-        "Total_Format_Errors", "Format_Error_Rate",
-        "Collapse_In_Errors_Count", "Collapse_In_Errors_Share",
-        "Avg_Token_Collapse_Err", "Avg_Token_Normal_Err", "Token_Gap"
-    ]
+    # 3. 写入 CSV
+    keys = ["Model", "Dataset", "Pass_K", "Total_Samples", "Total_Format_Errors", "Format_Error_Rate",
+            "Collapse_In_Errors_Count", "Collapse_In_Errors_Share", "Avg_Token_Collapse_Err",
+            "Avg_Token_Normal_Err", "Token_Gap"]
 
     with open(output_csv, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
         writer.writerows(results_data)
 
-    print(f"\n分析完成！")
-    print(f"统计 CSV 已保存至: {output_csv}")
+    print(f"\n✅ 分析完成！结果已保存至: {output_csv}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Mode Collapse Analysis (Token-based)")
-    parser.add_argument("--results_dir", type=str, default="./results", help="包含 jsonl 文件的结果目录")
-    parser.add_argument("--model_path", type=str, default="./models/Qwen2.5-Math-1.5B", help="HuggingFace 模型路径 (用于加载 Tokenizer)")
+    parser = argparse.ArgumentParser(description="Mode Collapse Analysis (Token-based & List-filtered)")
+    parser.add_argument("--results_dir", type=str, default="./results", help="包含 jsonl 文件的结果根目录")
+    parser.add_argument("--model_path", type=str, default="./models/Qwen2.5-Math-1.5B",
+                        help="用于加载 Tokenizer 的路径")
     parser.add_argument("--output_csv", type=str, default="./results/collapse_token_stats.csv", help="输出 CSV 路径")
-    parser.add_argument("--threshold", type=int, default=2000, help="判定坍塌的 Token 长度阈值 (建议 2000+)")
+    parser.add_argument("--threshold", type=int, default=2048, help="判定坍塌的 Token 长度阈值")
 
     args = parser.parse_args()
 
+    # --- 1. 在这里指定你要分析的子文件夹列表 ---
+    TARGET_MODELS = [
+        "baseline",
+        "sft",
+        "grpo",
+        "grpo_without_std_norm",
+        "drgrpo",
+        "drgrpo_curriculum",
+        "instruct"
+    ]
+
+    # --- 2. 运行分析 ---
     if os.path.exists(args.results_dir):
-        run_analysis(args.results_dir, args.model_path, args.output_csv, args.threshold)
+        run_analysis(
+            input_root=args.results_dir,
+            target_models=TARGET_MODELS,
+            model_path=args.model_path,
+            output_csv=args.output_csv,
+            collapse_threshold=args.threshold
+        )
     else:
         print(f"错误: 未找到目录 {args.results_dir}")

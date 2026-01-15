@@ -10,14 +10,14 @@ preferred_font = "SimHei"
 
 plt.rcParams.update({
     "font.family": "sans-serif",
-    "font.sans-serif": [preferred_font],
+    "font.sans-serif": ["SimHei"],
     "axes.unicode_minus": False,
-    "font.size": 11,
-    "axes.titlesize": 13,
+    "font.size": 12,
+    "axes.titlesize": 14,
     "axes.labelsize": 12,
-    "legend.fontsize": 10,
-    "xtick.labelsize": 11,
-    "ytick.labelsize": 11,
+    "legend.fontsize": 12,
+    "xtick.labelsize": 12,
+    "ytick.labelsize": 12,
     "figure.dpi": 200
 })
 

@@ -5,7 +5,7 @@ import matplotlib.ticker as mtick
 
 def main():
     # 1. 模拟数据加载 (请确保你的文件名正确)
-    df = pd.read_csv('results/collapse_analysis.csv')
+    df = pd.read_csv('results/collapse_metrics_stats.csv')
     if df['Collapse_Ratio'].dtype == 'object':
         df['Collapse_Ratio'] = df['Collapse_Ratio'].str.rstrip('%').astype('float')
     # 2. 设置绘图风格
@@ -27,7 +27,7 @@ def main():
         "grpo": "#81D4FA",   # 浅蓝(标准 RL)
         "grpo_no_std_norm": "#7db8ef",  # 深蓝
         "drgrpo": "#82a1e2" ,
-        # "drgrpo_best": "#F57C00" # 橙色 (你的最终优化版本，最显眼)
+        "drgrpo_curriculum": "#F57C00" # 橙色 (你的最终优化版本，最显眼)
     }
 
     hue_order = ['baseline', 'sft', 'grpo', 'grpo_no_std_norm', 'drgrpo', 'instruct'] # 'drgrpo_best'
@@ -55,7 +55,7 @@ def main():
     plt.tick_params(labelsize=14)
 
     plt.tight_layout()
-    plt.savefig('asset/collapse_analysis.png', dpi=300)
+    plt.savefig('asset/collapse_analysis_new.png', dpi=300)
     plt.close()
 
 if __name__ == '__main__':
