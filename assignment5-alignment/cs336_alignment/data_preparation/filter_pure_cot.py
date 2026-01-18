@@ -3,9 +3,9 @@ import re
 from tqdm import tqdm
 
 # --- 配置 ---
-INPUT_FILE = "data/MATH/sft_v4.jsonl"  # 基于你之前合并了solution的版本
-OUTPUT_FILE = "data/MATH/sft_v5_platinum.jsonl"  # 白金版数据
-BAD_FILE = "data/MATH/sft_v5_rejected.jsonl"  # 被剔除的数据（用于分析）
+INPUT_FILE = "data/CoT/sft_v4.jsonl"  # 基于你之前合并了solution的版本
+OUTPUT_FILE = "data/CoT/sft_v5_platinum.jsonl"  # 白金版数据
+BAD_FILE = "data/CoT/sft_v5_rejected.jsonl"  # 被剔除的数据（用于分析）
 
 # 阈值设置
 MAX_ANSWER_LEN = 100  # <answer> 标签内的内容不应超过这个长度

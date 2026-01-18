@@ -15,7 +15,7 @@ TASKS = {
 
 def prepare_benchmarks():
     for name, (path, config, split) in TASKS.items():
-        print(f"⬇️  正在下载处理 {name} ...")
+        print(f"正在下载处理 {name} ...")
         try:
             ds = load_dataset(path, config, split=split)
             output_file = os.path.join(DATA_DIR, f"{name}.jsonl")

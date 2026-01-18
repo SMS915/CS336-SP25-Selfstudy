@@ -163,13 +163,6 @@ def log_generations(
     Returns:
         Dict[str, float]: 包含平均奖励、长度、熵等统计指标的字典。
     """
-    # try:
-    #     ans_end_id = tokenizer.convert_tokens_to_ids("</answer>")
-    #     print(f"Eval Tokenizer </answer> ID: {ans_end_id}")
-    #     if ans_end_id == tokenizer.unk_token_id:
-    #         print("FATAL: 评估脚本用的 Tokenizer 不认识 </answer>")
-    # except:
-    #     print("FATAL: Tokenizer 出错")
 
     # 随机抽样
     n = min(num_examples_to_log, len(prompts))
@@ -240,16 +233,6 @@ def log_generations(
         format_rewards.append(metrics.get("format_reward", 0.0))
         answer_rewards.append(metrics.get("answer_reward", 0.0))
 
-
-        # print(f"Tail IDs: {outputs.sequences[0][-20:].tolist()}")
-        # print(f"Tail Decode: {tokenizer.decode(outputs.sequences[0][-20:], skip_special_tokens=False)}")
-        # ans_end_id = tokenizer.convert_tokens_to_ids("</answer>")
-        # if ans_end_id in generated_ids:
-        #     print(f"模型确实生成了 ID {ans_end_id}, 是解码或Reward函数的问题。")
-        # else:
-        #     print(f"模型根本没生成 ID {ans_end_id}, 是训练的问题。")
-
-
         print("-" * 40)
         print(f" Prompt: {prompt[:50]}...")
         print(f"Generated: {generated_text[-100:]}... (Len: {len(generated_ids)})")
@@ -268,8 +251,6 @@ def log_generations(
         "eval/answer_reward": np.mean(answer_rewards),
         "eval/length": np.mean(lengths),
         "eval/entropy": np.mean(entropies) if entropies else 0.0,
-        # "eval/tag_rate": tag_count / n,
-        # "eval/runaway_rate": run_away_count / n
     }
     
     return stats

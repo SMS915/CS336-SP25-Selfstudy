@@ -25,8 +25,6 @@ def filter_pure_numbers(input_file, output_file):
         with open(input_file, 'r', encoding='utf-8') as fin, \
                 open(output_file, 'w', encoding='utf-8') as fout:
 
-            # 如果安装了 tqdm，这行会显示进度条；如果报错，请去掉 tqdm() 包裹
-            # for line in tqdm(fin):
             for line in fin:
                 count_total += 1
                 line = line.strip()

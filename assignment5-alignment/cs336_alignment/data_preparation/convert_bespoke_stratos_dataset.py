@@ -15,7 +15,7 @@ def prepare_bespoke_data_local():
 
     df = pd.concat([pd.read_parquet(f) for f in parquet_files], ignore_index=True)
     
-    output_path = "data/MATH/sft-17k.jsonl"
+    output_path = "data/CoT/Bespoke-Stratos-17k-formatted.jsonl"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     count = 0

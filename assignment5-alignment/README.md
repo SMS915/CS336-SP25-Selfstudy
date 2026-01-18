@@ -1620,7 +1620,7 @@ $\Delta R = |R_u - R_g|$ 衡量模型在“直觉”与“深思”两种推理�
 
 #### 1. 模态天花板与空间直觉的“符号化”损耗
 
-大模型在几何等领域的逻辑溃散，本质上是**单模态语言模型试图用“一维序列逻辑”翻译“高维空间直觉”时的维数坍塌**。
+大模型在几何等领域的逻辑溃散，本质上是**单模态语言模型试图用一维序列逻辑翻译“高维空间直觉”时的维数坍塌**。
 
 - **直觉残差**：几何推理中的非线性步骤（如辅助线构造、图形拓扑关系）无法被纯文本 Token 完全捕捉。
 - **逻辑异化**：模型表现出的“凑数”行为，是其在缺乏空间推演能力时，利用符号组合能力对几何问题进行的“文本伪装”。
@@ -1653,10 +1653,6 @@ $\Delta R = |R_u - R_g|$ 衡量模型在“直觉”与“深思”两种推理�
 
 <div align="right"><a href="#toc-anchor">返回目录</a></div>
 
-<div align="right"><a href="#toc-anchor">返回目录</a></div>
-
-<div align="right"><a href="#toc-anchor">返回目录</a></div>
-
 ## 11. 未来展望
 
 <a id="section-11"></a>
@@ -1675,48 +1671,46 @@ $\Delta R = |R_u - R_g|$ 衡量模型在“直觉”与“深思”两种推理�
 ```text
 ·
 ├── cs336_alignment/
-│   ├── sft.py              # SFT 核心组件 (Tokenizer, Entropy, NLL Loss)
-│   ├── grpo.py             # RL 核心组件 (Advantage, Clip Loss, GRPO Step)
-│   ├── train_sft.py        # SFT 训练主循环 (集成 WandB, Eval)
-│   ├── train_grpo.py       # GRPO 训练主循环 (集成 vLLM, Weight Sync)
-│   ├── drgrpo_grader.py    # 评分函数逻辑
-│   ├── evaluate.py
-│   ├── evaluate_passk.py
-│   ├── evaluate_instruct_passk.py
-│   ├── utils.py
-│   ├── plotting/
-│   ├── analyzing/
-│   ├── collecting_statistics/
-│   ├── data_preparation/
-│   └── prompts/            # prompt 模板所在文件夹
+│   ├── sft.py                                               # SFT 核心组件 (NLL Loss, log_prob)
+│   ├── grpo.py                                              # RL 核心组件 (Advantage, Clip Loss, GRPO Step)
+│   ├── train_sft.py                                         # SFT 训练主循环
+│   ├── train_grpo.py                                        # GRPO 训练主循环 (集成 vLLM, Weight Sync)
+│   ├── drgrpo_grader.py                                     # 评分函数逻辑
+│   ├── evaluate.py                                          # 评测模块
+│   ├── evaluate_passk.py                                    # Pass@k 评估实现
+│   ├── evaluate_instruct_passk.py                           # Instruct模型 Pass@k 评估实现
+│   ├── utils.py                                             # 功能性组件 (Entropy, tokenize)
+│   ├── plotting/                                            # 绘图函数
+│   ├── analyzing/          
+│   ├── collecting_statistics/                               # 功能函数，主要对评测的结果进行统计
+│   └── data_preparation/                                    # 数据准备函数，包括下载数据集和一些清洗/过滤操作
 │   
 ├── configs/
-│   ├── eval/     # 评估实验参数
+│   ├── eval/                                                # 评估参数配置
 │   │   └── {model_name}/
-│   │       └── evaluate_{model_name}_{experiment_name}.yaml
+│   │       └── evaluate_{model_name}_{dataset_name}.yaml
 │   │
-│   └── train/    # 训练参数
+│   └── train/                                               # 训练参数配置
 │       └── {config}.yaml
-│   
-├── scripts/
+│
+├── prompts/
+│   └── *.prompt                                             # 官方预置的不同场景/功能的prompt
+│
+├── scripts/                                                 # 脚本文件夹
 │   ├── alpaca_eval_vllm_llama3_3_70b_fn/
 │   │   ├── alpaca_eval_fn.txt
 │   │   └── configs.yaml
-│   ├── run_eval_sequence.sh
+│   ├── run_eval_sequence.sh          
 │   ├── run_eval_sequence_full_path.sh
 │   ├── scan_model_ckpts.sh
 │   └── evaluate_safety.py
 │
-├── asset/
+├── asset/                                                   # 绘制出的图表等资产性文件
 │   └── *.jpg/*.png
 │
-├── prompts/
-│   └── *.prompt
-│ 
 ├── README.md
-├── README_zh-CN.md
-├── cs336_spring2025_assignment5_alignment.pdf
-├── cs336_spring2025_assignment5_supplement_safety_rlhf.pdf
+├── cs336_spring2025_assignment5_alignment.pdf               # 官方给出的handout
+├── cs336_spring2025_assignment5_supplement_safety_rlhf.pdf  # safety对齐 handout
 ├── [翻译]cs336_spring2025_assignment5_alignment.pdf
 ├── pyproject.toml
 └── uv.lock
@@ -1730,12 +1724,12 @@ $\Delta R = |R_u - R_g|$ 衡量模型在“直觉”与“深思”两种推理�
 
 <a id="section-13"></a>
 
-### 步骤一：准备模型与数据 (Data Preparation)
+### 步骤一：准备模型与数据
 下载 Bespoke-Stratos 数据集并清洗为 `sft.jsonl`，处理嵌套列表及标签映射。
 ```bash
-python cs336_alignment/setup_model.py
-
-python convert_bespoke_data.py
+python cs336_alignment/data_preparation/setup_model.py
+python cs336_alignment/data_preparation/download_bespoke_stratos_dataset.py
+python cs336_alignment/data_preparation/convert_bespoke_stratos_dataset.py
 ```
 
 ### 步骤二：运行监督微调 (SFT)

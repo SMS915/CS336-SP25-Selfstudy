@@ -58,7 +58,7 @@ class Linear(nn.Module):
         Returns:
             torch.Tensor: 输出张量，形状为 (..., out_features)。
         """
-        output = x @ self.weight.T # (confused: 这里x @ W.T，在线性代数中是X 左乘 W.T，还是 X 右乘 W.T,是前者的话，实际上就是X 往 W.T 空间的线性映射吗，也就是将X投影到W.T的线性空间)
+        output = x @ self.weight.T # (X @ W.T) = (W @ X.T)T, 即等价于 X 线性映射到 W 空间然后转置，由于tensor按行组织，故不同于线性代数中以列向量表示的 W @ X
         if self.bias is not None:
             output = output + self.bias
         return output
@@ -152,7 +152,7 @@ class RMSNorm(nn.Module):
             torch.Tensor: 归一化后的张量，形状与输入张量相同。
         """
         input_type = x.dtype
-        x = x.to(torch.float32)
+        x = x.to(torch.float32) # 为提高数值稳定性，需要转精度到Float32
 
         rms = torch.sqrt(x.pow(2).mean(dim = -1, keepdim=True) + self.eps)
         x_norm = x / rms
@@ -181,17 +181,17 @@ class SwiGLU(nn.Module):
 
 def get_activation_fn(name: str):
     """
-       根据名称获取对应的 PyTorch 激活函数。
-       Args:
-           name (str): 激活函数的名称 (不区分大小写)。
-               支持: 'relu', 'gelu', 'silu', 'identity'。
+    根据名称获取对应的 PyTorch 激活函数。
+    Args:
+       name (str): 激活函数的名称 (不区分大小写)。
+           支持: 'relu', 'gelu', 'silu', 'identity'。
 
-       Returns:
-           Callable: 对应的 PyTorch 函数接口 (如 F.relu)。
+    Returns:
+       Callable: 对应的 PyTorch 函数接口 (如 F.relu)。
 
-       Raises:
-           NotImplementedError: 如果传入了不支持的激活函数名称。
-       """
+    Raises:
+       NotImplementedError: 如果传入了不支持的激活函数名称。
+    """
     name = name.lower()
     if name == 'relu': return F.relu
     elif name == 'gelu': return F.gelu
@@ -200,7 +200,7 @@ def get_activation_fn(name: str):
     else: raise NotImplementedError(f"未知的激活函数: {name}")
 
 class StandardFeedForward(nn.Module):
-    """
+   """
    标准的前馈神经网络 (FFN) 模块。
    这是最经典的 Transformer MLP 结构，由两个线性层及中间的激活函数组成。
    公式: FFN(x) = Act(x @ W1) @ W2
@@ -212,26 +212,26 @@ class StandardFeedForward(nn.Module):
        W2 (Linear): 下投影层 (d_ff -> d_model)。
        act_fn (Callable): 激活函数。
    """
-    def __init__(self, d_model: int, d_ff: int = None, activation: str = 'silu', bias: bool = False):
-        """
-        初始化 StandardFeedForward 模块。
+   def __init__(self, d_model: int, d_ff: int = None, activation: str = 'silu', bias: bool = False):
+       """
+       初始化 StandardFeedForward 模块。
 
-        Args:
-            d_model (int): 模型的维度。
-            d_ff (int, optional): 前馈网络的隐藏维度。
+       Args:
+           d_model (int): 模型的维度。
+           d_ff (int, optional): 前馈网络的隐藏维度。
                 如果为 None，默认设置为 4 * d_model。
-            activation (str, optional): 激活函数名称。默认为 'silu'。
-            bias (bool, optional): 线性层是否使用偏置项。默认为 False。
-        """
-        super().__init__()
-        self.d_model = d_model
-        self.d_ff = 4 * d_model if d_ff is None else d_ff
-        self.W1 = Linear(self.d_model, self.d_ff, bias=bias)
-        self.W2 = Linear(self.d_ff, self.d_model, bias=bias)
-        self.act_fn = get_activation_fn(activation)
+           activation (str, optional): 激活函数名称。默认为 'silu'。
+           bias (bool, optional): 线性层是否使用偏置项。默认为 False。
+       """
+       super().__init__()
+       self.d_model = d_model
+       self.d_ff = 4 * d_model if d_ff is None else d_ff
+       self.W1 = Linear(self.d_model, self.d_ff, bias=bias)
+       self.W2 = Linear(self.d_ff, self.d_model, bias=bias)
+       self.act_fn = get_activation_fn(activation)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.W2(self.act_fn(self.W1(x)))
+   def forward(self, x: torch.Tensor) -> torch.Tensor:
+       return self.W2(self.act_fn(self.W1(x)))
 
 class GatedFeedForward(nn.Module):
     """

@@ -105,8 +105,7 @@ def main():
         # chunksize 稍微设大一点可以减少进程间通信开销
         with multiprocessing.Pool(processes=NUM_PROCESSES, initializer=init_worker, initargs=(MODEL_PATH,)) as pool:
             
-            # 使用 imap 进行流式处理，保持顺序（如果顺序不重要可以用 imap_unordered 更快一点点）
-            # chunksize=100 意味着一次给子进程发100行
+            # 使用 imap 进行流式处理，保持顺序
             iterator = pool.imap(check_quality_worker, fin, chunksize=100)
             
             for is_valid, reason, result_str in tqdm(iterator, total=total_lines):
