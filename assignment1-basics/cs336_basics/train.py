@@ -10,7 +10,6 @@ from cs336_basics.utils import *
 from cs336_basics.optimizer import AdamW
 from cs336_basics.checkpointing import *
 from cs336_basics.model import *
-# from cs336_basics.data import DataLoader
 from cs336_basics.fast_data import create_dataloader
 
 def main():
@@ -65,7 +64,7 @@ def main():
         config=config
     )
 
-    compiled = False
+    compiled = True
     # 初始化模型
     model = TransformerLM(
         vocab_size=config['vocab_size'],
@@ -212,12 +211,12 @@ def main():
             val_iter = iter(val_loader)
             
             with torch.no_grad():
-                for _ in range(config['eval_steps']):
+                for i in range(config['eval_steps']):
                     try:
                         val_inputs_cpu, val_targets_cpu = next(val_iter)
                     except StopIteration:
-                        val_iter = iter(val_loader)
-                        val_inputs_cpu, val_targets_cpu = next(val_iter)
+                        print(f"Warning: Validation set exhausted at step {i + 1}. Consider reducing eval_steps.")
+                        break
                     
                     # 对验证数据应用相同的传输优化
                     val_inputs = val_inputs_cpu.to(device, dtype=torch.long, non_blocking=True)
