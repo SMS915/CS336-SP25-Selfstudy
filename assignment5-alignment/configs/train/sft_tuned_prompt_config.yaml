@@ -13,7 +13,7 @@ data:
   max_samples: null
 
 training:
-  output_dir: "checkpoints/sft_v4_prompt_tuning"
+  output_dir: "checkpoints/sft_prompt_tuning"
   learning_rate: 2.0e-5
   epochs: 6
   warmup_ratio: 0.05

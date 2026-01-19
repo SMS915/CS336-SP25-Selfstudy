@@ -2,7 +2,6 @@
 model:
   model_path: "models/Qwen2.5-Math-1.5B"
   dtype: "bfloat16"
-  # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
 
 data:
@@ -13,7 +12,7 @@ data:
   max_samples: null
 
 training:
-  output_dir: "checkpoints/sft_v4"
+  output_dir: "checkpoints/sft"
   learning_rate: 2.0e-5
   epochs: 6
   warmup_ratio: 0.05
@@ -22,7 +21,7 @@ training:
   gradient_accumulation_steps: 16
   
   max_grad_norm: 1.0
-  save_steps: 1000  # 或者设大一点只存最后
+  save_steps: 1000
 
 evaluation:
   eval_every_steps: 10
@@ -31,5 +30,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "sft-qwen-1.5b-distilled"
+  run_name: "sft"
   entity: null 
