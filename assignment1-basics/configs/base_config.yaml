@@ -8,6 +8,7 @@ device: "cuda"                            # 训练设备
 load_ckpt: False                          # 是否加载旧权重（Resume Training）
 save_ckpt: True                           # 是否保存权重
 checkpoint_path: "checkpoints/"           # 权重保存路径
+run_name: 'base'
 
 # ==========================================
 # 2. 数据设置 (Data Configuration)

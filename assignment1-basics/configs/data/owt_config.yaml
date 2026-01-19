@@ -7,6 +7,7 @@ device: "cuda"
 load_ckpt: False
 save_ckpt: False
 checkpoint_path: "checkpoints/"
+run_name: 'owt'
 
 # ==========================================
 # 2. 数据设置 (Data Configuration)

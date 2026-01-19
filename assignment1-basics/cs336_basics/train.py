@@ -57,10 +57,14 @@ def main():
     device = torch.device(config.get('device', 'cpu'))
     torch.manual_seed(config.get('seed', 42))
 
+    run_name = config.get('run_name', None)
+
     wandb.init(
-        project=config.get('wandb_project'),
+        project=config.get('project_name'),
+        name=run_name,
         config=config
     )
+
     compiled = False
     # 初始化模型
     model = TransformerLM(
@@ -83,10 +87,10 @@ def main():
         gated_attn=config.get('gated_attn', False)
     ).to(device)
     model.count_params()
-    # print(f"模型总参数量: {model.count_params()}")
 
-    print("尝试编译模型")
-    model = torch.compile(model, mode='default') # 需要跟踪 compile 情况
+    if compiled:
+        print("尝试编译模型")
+        model = torch.compile(model, mode='default') # 需要跟踪 compile 情况
 
 
     betas = (config.get('beta1', 0.9), config.get('beta2', 0.95))
@@ -116,21 +120,18 @@ def main():
     else:
         use_scaler = False
 
-    print(f"AMP enabled: {amp_enabled}, Dtype: Using half precision with dtype: {amp_dtype}, Enable amp traing: {amp_enabled}")
+    print(f"AMP enabled: {amp_enabled}, Dtype: Using half precision with dtype: {amp_dtype}, Enable amp training: {amp_enabled}")
 
     scaler = torch.amp.GradScaler(enabled=use_scaler)
 
     # 配置从检查点开始训练
     resume_training = config.get('load_ckpt', False)
     if resume_training:
-        ckpt_list = os.listdir(ckpt_dir) if os.path.exists(ckpt_dir) else []
-        if ckpt_list:
-            ckpt_path = get_latest_checkpoint(ckpt_dir)
-            checkpoint = torch.load(ckpt_path)
-            if 'scaler_state_dict' in checkpoint:
-                start_step = load_checkpoint(ckpt_path, model, optimizer, scaler)
-            else :
-                start_step = load_checkpoint(ckpt_path, model, optimizer)
+        run_name_to_load = run_name
+        success, ckpt_path = get_latest_checkpoint(ckpt_dir, run_name_to_load)
+        if success:
+            scaler_to_load = scaler if use_scaler else None
+            start_step = load_checkpoint(ckpt_path, model, compiled, optimizer, scaler_to_load)
             print(f"从检查点 {ckpt_path} 恢复，起始迭代次数: {start_step}")
         else:
             start_step = 0
@@ -183,25 +184,15 @@ def main():
                 loss = loss / grad_accum_steps
 
             # 反向传播 (梯度会累加到 .grad 属性中)
-            if scaler is not None:
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
+            scaler.scale(loss).backward()
             
             # 记录还原后的 Loss 用于日志
             accum_loss += loss.item() * grad_accum_steps 
 
-        # 权重更新
-        if scaler is not None:
             scaler.unscale_(optimizer)
-            # 梯度裁剪
             curr_grad_norm = clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
             scaler.step(optimizer)
             scaler.update()
-        else:
-            # 梯度裁剪
-            curr_grad_norm =  clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
-            optimizer.step()
 
         # 计算平均 Loss
         avg_loss = accum_loss / grad_accum_steps
@@ -246,14 +237,13 @@ def main():
                 if (step + 1) % config['checkpoint_interval'] == 0:
                     if not os.path.exists(ckpt_dir):
                         os.makedirs(ckpt_dir)
-    
-                    ckpt_filename = f"ckpt_step_{step+1:07d}_loss_{avg_val_loss:.4f}.pt"
+
+                    loss_str = f"{avg_val_loss:.4f}".replace('.', '_')
+
+                    ckpt_filename = f"ckpt_{run_name}_{step+1:07d}_loss_{loss_str}.pt"
                     ckpt_path = os.path.join(ckpt_dir, ckpt_filename)
-                    
-                    if scaler is not None:
-                        save_amp_checkpoint(model=model, optimizer=optimizer, scaler=scaler, iteration=step + 1, out=ckpt_path)
-                    else:
-                        save_checkpoint(model=model, optimizer=optimizer, iteration=step + 1, out=ckpt_path)
+
+                    save_checkpoint(model=model, optimizer=optimizer, iteration=step + 1, out=ckpt_path, scaler = scaler if use_scaler else None)
                     print(f"保存检查点: {ckpt_path}\n")
 
     print("训练完成。")

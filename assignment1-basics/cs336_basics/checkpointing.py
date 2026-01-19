@@ -14,7 +14,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     iteration: int,
     out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
-    load_scaler: bool
+    scaler: Optional[torch.cuda.amp.GradScaler] = None
 ) -> bool:
     """
     保存训练检查点（Model, Optimizer, Iteration），
@@ -31,6 +31,8 @@ def save_checkpoint(
         iteration (int): 当前训练步数，用于恢复 LR Schedule 等状态
         out (str | os.PathLike | typing.BinaryIO | typing.IO[Bytes]): 输出路径或流对象。
             若传入二进制流，无法保证写入原子性。
+        scaler (torch.cuda.amp.GradScaler): 梯度缩放器实例，
+            如果提供且检查点中存在，将加载其状态。
 
     Returns:
         bool: 标记保存是否成功，二进制流默认返回成功
@@ -39,6 +41,9 @@ def save_checkpoint(
     checkpoint_dict = {'model_state_dict': model.state_dict(),
                        'optimizer_state_dict': optimizer.state_dict(),
                        'iteration': iteration}
+
+    if scaler is not None:
+        checkpoint_dict['scaler_state_dict'] = scaler.state_dict()
 
     if isinstance(out, (str, os.PathLike)):
 
@@ -53,57 +58,6 @@ def save_checkpoint(
 
         return not os.path.exists(temp_path)
 
-    else:
-        # 写入二进制流，不保证结果的原子性
-        torch.save(checkpoint_dict, out)
-        return True
-
-    
-def save_amp_checkpoint(
-    model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scaler: torch.cuda.amp.GradScaler,
-    iteration: int,
-    out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]
-):
-    """
-    保存混合精度(FP16)训练检查点（Model, Optimizer, Scaler, Iteration）
-
-    相比标准检查点，额外保存了 GradScaler 状态，这对恢复 FP16 训练的数值稳定性至关重要。
-    采用原子写入策略。
-
-    预期磁盘存储占用(Per Parameter):
-    FP16: ~ 10 Bytes (2 Bytes 模型权重 + 8 Bytes 优化器状态)
-
-    Args:
-        model (torch.nn.Module): 需要保存的模型实例，仅保存 state_dict 以解耦代码结构。
-            在 FP16 混合精度下，模型权重通常存储为 Half (2 Bytes)。
-        optimizer (torch.optim.Optimizer): 需要保存的优化器状态
-        scaler (torch.cuda.amp.GradScaler): 梯度缩放器实例，保存了当前的缩放因子，增长/退避因子，计数器(均为单个数字) 等重要状态。
-        iteration (int): 当前训练步数，用于恢复 LR Schedule 等状态
-        out (str | os.PathLike | typing.BinaryIO | typing.IO[Bytes]): 输出路径或流对象。
-            若传入二进制流，无法保证写入原子性。
-
-    Returns:
-        bool: 标记保存是否成功，二进制流默认返回成功
-
-    """
-    checkpoint_dict = {'model_state_dict': model.state_dict(),
-                       'optimizer_state_dict': optimizer.state_dict(),
-                       'scaler_state_dict': scaler.state_dict(),  # 多保存一个梯度缩放器状态
-                       'iteration': iteration}
-
-    if isinstance(out, (str, os.PathLike)):
-
-        output_dir = os.path.dirname(out)
-        os.makedirs(output_dir, exist_ok=True)
-
-        # 同样原子化写入策略
-        temp_path = str(out) + '.tmp'
-        torch.save(checkpoint_dict, temp_path)
-        os.rename(temp_path, out)
-
-        return not os.path.exists(temp_path)
     else:
         # 写入二进制流，不保证结果的原子性
         torch.save(checkpoint_dict, out)
@@ -196,58 +150,6 @@ def load_checkpoint(
 
     return checkpoint.get('iteration', 0)
 
-def load_amp_checkpoint(
-    path: str | os.PathLike,
-    model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scaler: torch.amp.GradScaler,
-    model_compiled: bool
-) -> int:
-    """
-    加载混合精度检查点，将模型 state_dict 和优化器状态加载回实例中，并健壮地处理compiled相关的逻辑
-    Args:
-        path (str | os.PathLike): 模型和优化器状态的保存地址
-        model (torch.nn.Module): 一个已经初始化并移动到目标设备的模型实例
-        optimizer (torch.optim.Optimizer): 一个已经初始化并移动到目标设备的优化器实例
-        scaler:
-        model_compiled (bool): 指示当前传入的model实例是否经过torch.compile()编译。
-            函数将根据加载的权重的键名和目标模型的compiled情况，自动处理'_orig_mod'前缀，以处理相异compiled状态保存的检查点
-
-    Returns:
-        iteration (int): 继续训练的步数节点。
-    """
-    checkpoint = torch.load(path, map_location='cpu')
-    
-    state_dict = checkpoint['model_state_dict']
-    
-    # 前缀清洗
-    is_model_compiled = hasattr(model, "_orig_mod") or "OptimizedModule" in type(model).__name__
-
-    new_state_dict = {}
-    
-    for k, v in state_dict.items():
-        if k.startswith("_orig_mod.") and not is_model_compiled:
-            new_key = k[10:]
-
-        elif not k.startswith("_orig_mod.") and is_model_compiled:
-            new_key = "_orig_mod." + k
-
-        else:
-            new_key = k
-            
-        new_state_dict[new_key] = v
-
-    model.load_state_dict(new_state_dict, strict=True)
-    
-    if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    
-    if scaler is not None and 'scaler_state_dict' in checkpoint:
-        scaler.load_state_dict(checkpoint['scaler_state_dict'])
-        
-    return checkpoint['iteration']
-
-
 CKPT_PATTERN = re.compile(
     r"ckpt_(?P<name>[\w-]+)_step_(?P<step>\d+)_loss_(?P<loss>\d+_\d+)\.pt"
 )
@@ -329,6 +231,7 @@ def get_best_checkpoint(ckpt_dir: str | os.PathLike, run_name: Optional[str] = N
         run_name (Optional[str]): 可选的运行名称参数，用于指定感兴趣的运行检查点
 
     Returns:
+        bool: 指示变量，指示是否获取到一个合理路径
         str | os.PathLike: 最佳检查点的路径
     """
     return _get_extreme_checkpoint(ckpt_dir, run_name, sort_key_index=1, reverse=False)

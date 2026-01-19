@@ -59,10 +59,11 @@ def _worker_initializer(config: Dict[str, Any]):
     """
     init_models_globally(config)
 
-def process_single_wet_file(wet_file_path: str | os.PathLike,
-                            output_dir: str | os.PathLike,
-                            config: Dict[str, Any]
-                            ) -> Tuple[List[str | os.PathLike], Dict[str, int]]:
+def process_single_wet_file(
+    wet_file_path: str | os.PathLike,
+    output_dir: str | os.PathLike,
+    config: Dict[str, Any]
+    ) -> Tuple[List[str | os.PathLike], Dict[str, int]]:
     
     stats = defaultdict(int)
     masked_dict = defaultdict(int)
