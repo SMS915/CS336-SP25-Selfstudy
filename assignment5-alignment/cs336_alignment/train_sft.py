@@ -58,49 +58,6 @@ def get_collate_fn(tokenizer, max_length = 1024, prompt_template = None):
             max_length=max_length,
             sft_train=True
         )
-        # if not hasattr(collate_fn, "has_printed"):
-        #     input_ids = tokenized_batch["input_ids"][0] # 取第一个样本
-        #     labels = tokenized_batch["labels"][0]
-            
-        #     print("\n" + "!"*30 + " CRITICAL DEBUG " + "!"*30)
-            
-        #     # 1. 检查 Special Token ID 是否存在于 Input
-        #     ans_end_id = tokenizer.convert_tokens_to_ids("</answer>")
-        #     print(f"Target Special ID: {ans_end_id}")
-            
-        #     if ans_end_id in input_ids:
-        #         print(f"✅ Input_ids contains {ans_end_id}")
-        #     else:
-        #         print(f"❌ Input_ids DOES NOT contain {ans_end_id} !!!")
-        #         print("Top 10 tokens:", input_ids[:10])
-        #         print("Last 10 tokens:", input_ids[-10:])
-            
-        #     # 2. 检查 Label 是否 Mask 了它
-        #     # 找到 </answer> 在 input_ids 的位置
-        #     try:
-        #         # 找最后一次出现的位置
-        #         loc = (input_ids == ans_end_id).nonzero(as_tuple=True)[0][-1].item()
-        #         # label 是 shift 过的，所以对应位置的 label 应该就是 ans_end_id
-        #         # 注意：labels[i] 对应 input_ids[i+1] (因为 shift)
-        #         # 你的 tokenize 函数返回的 labels 已经是 shift 过的了
-                
-        #         # 检查 labels 对应位置是否是 -100
-        #         # 你的代码: labels = batch_input_ids[:, 1:]
-        #         # 你的代码: input_ids = batch_input_ids[:, :-1]
-        #         # 这意味着 labels[i] 实际上是 input_ids[i] 的下一个词
-                
-        #         print(f"Label at pos {loc} (should be EOS or next): {labels[loc]}")
-        #         print(f"Label at pos {loc-1} (should be </answer>): {labels[loc-1]}")
-                
-        #     except IndexError:
-        #         pass
-            
-        #     collate_fn.has_printed = True
-        #     print("!"*80 + "\n")
-        #     # 如果发现没有 ID，直接报错停止，别练了
-        #     if ans_end_id not in input_ids:
-        #         raise RuntimeError("FATAL: Tokenizer failed to encode </answer> as a single ID!")
-        
         return tokenized_batch
         
     return collate_fn
@@ -134,67 +91,18 @@ def train(config_path: str, args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model_load_path = args.resume_from if args.resume_from else config["model"]["model_path"]
 
-    # 加载模型与 Tokenizer
-    special_thinking_tag = {'additional_special_tokens': ['<think>', '</think>', '<answer>', '</answer>']}
-
     print("Loading model and tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_load_path)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # num_add_tokens = tokenizer.add_special_tokens(special_thinking_tag)
-    # print(f"添加了{num_add_tokens}个特殊token")
         
     model = AutoModelForCausalLM.from_pretrained(
         model_load_path,
-        torch_dtype=getattr(torch, config["model"]["dtype"]), # 动态获取 torch.bfloat16
+        torch_dtype=getattr(torch, config["model"]["dtype"]), 
         attn_implementation=config["model"]["attn_implementation"],
         device_map="auto"
     )
-
-    # if num_add_tokens != 0:
-    #     model.resize_token_embeddings(len(tokenizer))
-    #     with torch.no_grad():
-    #         input_embed = model.get_input_embeddings().weight
-    #         if not model.config.tie_word_embeddings:
-    #             output_embed = model.get_output_embeddings().weight
-    #         token_map = {'<think>': 'think', '</think>': '<|endoftext|>', '<answer>': 'answer', '</answer>': '<|endoftext|>'}
-    #         for special_token, reference in token_map.items():
-    #             special_id = tokenizer.convert_tokens_to_ids(special_token)
-    #             ref_id = tokenizer.convert_tokens_to_ids(reference)
-    #             input_embed[special_id] = input_embed[ref_id].clone() if reference != '<|endoftext|>' else input_embed[ref_id] + torch.randn_like(input_embed[ref_id]) * 0.01
-    #             print(f"已用{reference}的语义初始化{special_token}")
-    #             if not model.config.tie_word_embeddings:
-    #                 output_embed[special_id] = output_embed[ref_id].clone() if reference != '<|endoftext|>' else output_embed[ref_id] + torch.randn_like(output_embed[ref_id]) * 0.01
-    #     added_output_dir = os.path.join(output_dir, 'added_special_token')
-    #     model.save_pretrained(added_output_dir)
-    #     tokenizer.save_pretrained(added_output_dir)
-
-
-    # if num_add_tokens != 0:
-    #     model.resize_token_embeddings(len(tokenizer))
-    #     with torch.no_grad():
-    #         tied = model.config.tie_word_embeddings
-    #         input_embed = model.get_input_embeddings()
-    #         if not tied:
-    #             output_embed = model.get_output_embeddings()
-    #         new_token_embeddings = input_embed.weight.data[-num_add_tokens:]
-    #         print(f"随机初始化后的新token embedding (前5个值): \n{new_token_embeddings[0, :5]}")
-    #         mean_input_embed = input_embed.weight.data[:-num_add_tokens].mean(dim=0)
-    #         if not tied:
-    #             mean_output_embed = model.get_output_embeddings().weight.data[:-num_add_tokens].mean(dim=0)
-    #         print(f"计算出的均值embedding (前5个值): \n{mean_input_embed[:5]}")
-    #         for i in range(num_add_tokens):
-    #             input_embed.weight.data[-num_add_tokens + i] = mean_input_embed
-    #             if not tied:
-    #                 output_embed.weight.data[-num_add_tokens + i] = mean_output_embed
-    #     added_output_dir = os.path.join(output_dir, 'added_special_token')
-    #     model.save_pretrained(added_output_dir)
-    #     tokenizer.save_pretrained(added_output_dir)
-
-    model_vocab_size = model.get_input_embeddings().weight.shape[0]
-    tokenizer_vocab_size = len(tokenizer)
-    # assert model_vocab_size == tokenizer_vocab_size, "tokenizer与model的词表大小不匹配"
 
     model.gradient_checkpointing_enable()
     model.config.use_cache = False
@@ -260,29 +168,27 @@ def train(config_path: str, args):
 
 
     for epoch in range(start_epoch, epochs):
-        # 使用 tqdm 包装 loader 显示进度
         progress_bar = tqdm(
             train_loader, 
             desc=f"Epoch {epoch+1}/{epochs}",
-            ncols=120, # 限制宽度，防止在某些终端换行
+            ncols=120, 
             leave=True 
         )
 
         epoch_loss_tracker = 0.0
         
         for batch in progress_bar:
-            # 1. 搬运数据
+            # 搬运数据
             input_ids = batch["input_ids"].to(device)
             labels = batch["labels"].to(device)
             response_mask = batch["response_mask"].to(device)
             attention_mask = batch["attention_mask"].to(device)
 
-            # 2. 获取 Log Probs
-            # 注意：return_token_entropy=False 节省计算，SFT loss 不用它
+            # 获取 Log Probs
             log_probs_dict = get_response_log_probs(model, input_ids, attention_mask, labels)
             policy_log_probs = log_probs_dict["log_probs"]
             
-            # 3. 计算 Loss 并 Backward
+            # 计算 Loss 并 Backward
             _, metrics = sft_microbatch_train_step(
                 policy_log_probs=policy_log_probs,
                 response_mask=response_mask,
@@ -293,7 +199,7 @@ def train(config_path: str, args):
             accumulated_loss += metrics["loss"].item()
             total_micro_steps += 1
 
-            # 4. 梯度累积更新
+            # 梯度累积更新
             if total_micro_steps % grad_accum_steps == 0:
                 # 裁剪
                 grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
@@ -327,7 +233,7 @@ def train(config_path: str, args):
 
                 accumulated_loss = 0.0
 
-                # 5. 评估 (抽查生成)
+                # 评估
                 if global_step % eval_every == 0:
                     torch.cuda.empty_cache()
                     progress_bar.write(f"Step {global_step}: Running Evaluation...")

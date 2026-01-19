@@ -7,9 +7,9 @@ from functools import partial
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-from datasets import load_dataset, snapshot_download
-from huggingface_hub import login
-from transformers import AutoTokenizer
+from datasets import load_dataset
+from huggingface_hub import login, snapshot_download
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 
 # --- Overall Configuration ---
 # Set a single base directory for all data
@@ -48,18 +48,18 @@ def run_complete_platinum_pipeline():
 
     # --- 2. Convert to Standard Format ---
     print("\n--- Step 2: Converting to Standard SFT Format ---")
-    sft_interim_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "sft_interim_v1.jsonl")
+    sft_interim_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "Bespoke-Stratos-17k-R1-tag.jsonl")
     convert_bespoke_stratos_to_jsonl(raw_data_path, sft_interim_path)
 
     # --- 3. Filter by Length and Format ---
     print("\n--- Step 3: Filtering by Length and Format ---")
-    sft_v4_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "sft_v4_formatted.jsonl")
+    sft_v4_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "Bespoke-Stratos-17k-formatted.jsonl")
     filter_long_wrong_format_cot(sft_interim_path, sft_v4_path)
 
     # --- 4. Filter for Purity (Platinum Version) ---
     print("\n--- Step 4: Filtering for 'Platinum' Purity ---")
-    platinum_output_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "sft_v5_platinum.jsonl")
-    rejected_output_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "sft_v5_rejected.jsonl")
+    platinum_output_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "Bespoke-Stratos-17k-Distill-3k.jsonl")
+    rejected_output_path = os.path.join(BASE_DATA_DIR, COT_DATA_SUBDIR, "Bespoke-Stratos-17k-Distill-reject.jsonl")
     filter_pure_cot(sft_v4_path, platinum_output_path, rejected_output_path)
 
     print("\n--- Pipeline Complete! ---")
