@@ -176,14 +176,6 @@ def filter_wet_files(config: Dict[str, Any], config_path: str, max_cpu_workers: 
                               initargs=(config,), # 进程启动时加载模型
                               maxtasksperchild=worker_ttl) as pool: # 防内存泄漏
 
-    # processpool写法
-    # with ProcessPoolExecutor(max_workers=max_workers,
-    #                          initializer=_worker_initializer,
-    #                          ) as executor:
-
-    #   results = tqdm(executor.map(process_func, wet_files),
-    #                total=len(wet_files),
-    #                desc="并行处理wet文件")
 
         print(f"启动ProcessPoolExecutor，最大工作进程数: {max_cpu_workers}")
 
@@ -393,7 +385,7 @@ if __name__ == "__main__":
         # ---------------------------------------------------------
         if not exact_input_files:
             print("\n=== 执行 Stage 1: WET 过滤 ===")
-            exact_input_files = filter_wet_files(config, args.config, max_cpu_workers,)
+            exact_input_files = filter_wet_files(config, args.config, max_cpu_workers,worker_ttl=50)
             exact_input_base = filtered_dir
             if not exact_input_files:
                 print("错误：过滤阶段未产生任何文件，程序终止。")

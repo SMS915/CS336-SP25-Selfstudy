@@ -1,4 +1,5 @@
 import os
+import glob
 import random
 import mmh3
 import xxhash
@@ -6,13 +7,16 @@ import unicodedata
 import numpy as np
 import regex
 import shutil
+import shelve
+import tempfile
 from nltk import ngrams
 from tqdm import tqdm
 from pathlib import Path
 from .UF import UnionFind
 from functools import partial
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
-from typing import List, Dict, Tuple, Set, List, Callable, Hashable, cast
+from typing import List, Dict, Tuple, Set, List, Callable, Hashable, Optional, cast
 from itertools import combinations
 from collections import defaultdict
 random_seed = 42
@@ -53,7 +57,7 @@ def _count_lines_worker(file_paths):
                     local_counts[h] += 1
     return local_counts
 
-def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike, num_workers: int = 30) -> Tuple[List[str | os.PathLike], int, int]:
+def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike, num_workers: int = 30, temp_dir: Optional[str | os.PathLike] = None) -> Tuple[List[str | os.PathLike], int, int]:
     """
     对输入的文本文件进行精确行去重并写入到指定的输出文件夹中。
     采用两阶段行为
@@ -65,57 +69,72 @@ def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str
         input_files (List[os.PathLike]): 一个包含所有输入文档路径的列表
         output_directory (os.PathLike):  用于存放输出文件的文件夹路径
     """
-    line_counts = defaultdict(int)
+
     os.makedirs(output_directory, exist_ok=True)
     hasher = xxhash.xxh3_128
 
     chunk_size = len(input_files) // num_workers + 1
     chunks = [input_files[i:i + chunk_size] for i in range(0, len(input_files), chunk_size)]
-    
-    line_counts = defaultdict(int)
+
     print(f"精确去重：启动 {num_workers} 个进程并行统计行频...")
+    parent_dir_for_temp = temp_dir if temp_dir is not None else output_directory
+    with tempfile.TemporaryDirectory(dir=parent_dir_for_temp) as temp_dir_path:
+        db_path = os.path.join(temp_dir_path, 'line_counts')
+        print(f"临时数据库路径: {db_path}")
 
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        # 并行处理
-        results = list(tqdm(executor.map(_count_lines_worker, chunks), 
-                            total=len(chunks), desc="合并计数器"))
+        with shelve.open(db_path, flag='n') as db:
+            with multiprocessing.Pool(processes=num_workers, maxtasksperchild=50) as pool:
+                worker_iter = pool.imap_unordered(_count_lines_worker, chunks, chunksize=1)
+                for local_counts in tqdm(worker_iter, total=len(chunks), desc="流式合并计数器"):
+                    for line_hash, count in local_counts.items():
+                        str_hash = str(line_hash)
+                        db[str_hash] = db.get(str_hash, 0) + count
+                    
+                    del local_counts
 
-    input_base_path = Path(input_base_dir)
-    output_base_path = Path(output_directory)
-    output_paths = []
+        input_base_path = Path(input_base_dir)
+        output_base_path = Path(output_directory)
+        output_paths = []
 
-    print("正在合并全局计数器...")
-    for local_cnt in results:
-        for k, v in local_cnt.items():
-            line_counts[k] += v
+        print("正在统计结果")
 
-    total_lines_before = sum(line_counts.values())
-    total_lines_after = sum(1 for count in line_counts.values() if count == 1)
-    print(f"统计结果: 原有 {total_lines_before} 行 -> 保留 {total_lines_after} 行 "
-          f"(移除率: {100 * (1 - total_lines_after / total_lines_before):.2f}%)")
+        with shelve.open(db_path, flag='r') as db:
+        
+            total_lines_before = 0
+            total_lines_after = 0
 
-    for input_file in tqdm(input_files, desc="重写"):
-        input_file_path = Path(input_file)
-        # 计算相对于基础输入目录的路径
-        relative_path = input_file_path.relative_to(input_base_path)
+            for _, v in db.items():
+                total_lines_before += v
+                if v == 1:
+                    total_lines_after += 1 
 
-        # 在输出目录中构造完整的、包含子目录的目标路径
-        output_file_path = output_base_path / relative_path
+            print(f"统计结果: 原有 {total_lines_before} 行 -> 保留 {total_lines_after} 行 "
+                f"(移除率: {100 * (1 - total_lines_after / total_lines_before):.2f}%)")
 
-        # 确保输出文件的父目录存在
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
-        output_paths.append(output_file_path)
-        with open(input_file_path, 'r', encoding='utf-8') as fin, \
-             open(output_file_path, 'w', encoding='utf-8') as fout:
-            for line in fin:
-                stripped_line = line.strip()
-                if not stripped_line:
-                    continue
-                line_hash = hasher(stripped_line.encode('utf-8')).intdigest()
-                if line_counts[line_hash] == 1:
-                    fout.write(line)
+            for input_file in tqdm(input_files, desc="重写"):
+                input_file_path = Path(input_file)
+                # 计算相对于基础输入目录的路径
+                relative_path = input_file_path.relative_to(input_base_path)
+
+                # 在输出目录中构造完整的、包含子目录的目标路径
+                output_file_path = output_base_path / relative_path
+
+                # 确保输出文件的父目录存在
+                output_file_path.parent.mkdir(parents=True, exist_ok=True)
+                output_paths.append(output_file_path)
+                with open(input_file_path, 'r', encoding='utf-8') as fin, \
+                    open(output_file_path, 'w', encoding='utf-8') as fout:
+                    for line in fin:
+                        stripped_line = line.strip()
+                        if not stripped_line:
+                            continue
+                        line_hash = hasher(stripped_line.encode('utf-8')).intdigest()
+                        str_hash = str(line_hash)
+                        if db.get(str_hash, 0) == 1:
+                            fout.write(line)
 
     return output_paths, total_lines_before, total_lines_after
+    
 
 def convert_text_into_n_gram(n: int, text: str) -> Set[Tuple[str, ...]]:
     """
@@ -242,7 +261,7 @@ def generate_signature_for_texts(
     #  id_n_gram_map 因为内存受限移除
     return id_signatures_map, id_paths_map, all_doc_ids
 
-def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: Dict[int, np.ndarray]) -> Set[Tuple[int, ...]]:
+def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: Dict[int, np.ndarray], max_bucket_size: int = 100) -> Set[Tuple[int, ...]]:
     """
     对MinHash签名执行局部敏感哈希（LSH），以高效地找出可能重复的候选对。
 
@@ -269,13 +288,13 @@ def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: 
       P(candidate) = 1 - (1 - s^r)^b
 
     这个概率函数近似于一个S形曲线，其拐点的位置和陡峭程度由b和r控制。
-    1.  b 增大, r 减小 (例如 b=50, r=2): "广撒网"策略
+    1.  b 增大, r 减小 (例如 b=50, r=2): 广撒网策略
         - p_band (s^r) 相对较高，P(candidate) 整体偏高。
         - 效果: 提高召回率（不易错过真正的重复项），但降低精确率
           （会引入大量仅中低度相似的候选对），导致后续精确验证阶段的
           计算开销增大。
 
-    2.  b 减小, r 增大 (例如 b=5, r=20): "精准打击"策略
+    2.  b 减小, r 增大 (例如 b=5, r=20): 精准匹配策略
         - p_band (s^r) 极低，P(candidate) 整体偏低，但对高相似度的s增长更敏感。
         - 效果: 提高精确率（候选对大概率是真的重复项），但降低召回率
           （可能错过部分相似度在阈值边缘的重复项），从而减少后续验证
@@ -283,13 +302,20 @@ def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: 
 
     通常选择b和r，使得S形曲线的拐点大致位于感兴趣的Jaccard相似度阈值附近。
     在克制候选对的数量同时，从而直接决定了精确Jaccard验证这个最昂贵阶段的计算开销。
+
+    Args:
+        num_band (int): 哈希段数量, 越高则捕获的候选对越多，高召回率低精确率
+        num_hashes(int): 签名向量长度
+        id_signatures_dict(Dict[int, np.ndarray]): 文档id与签名向量的对应字典
+        max_bucket_size(int): 桶丢弃的阈值大小
+
+    Returns:
+        candidate_pairs (set[tuple[int, int]]): 所有重复文档候选对
     """
-    # assert num_hashes % num_band == 0
     rows = num_hashes // num_band
     effective_num_hashes = rows * num_band
 
     buckets = defaultdict(list)
-    candidate_pairs = set()
     for id, signature in id_signatures_dict.items():
         truncated_signature = signature[:effective_num_hashes]
         for b in range(num_band):
@@ -299,26 +325,26 @@ def get_lsh_candidate_pairs(num_band: int, num_hashes: int, id_signatures_dict: 
 
             buckets[band_key].append(id)
     
+    candidate_pairs = set()
+
+    dropped_buckets_count = 0
+    huge_pairs_avoided = 0
+
     for collision_doc_list in buckets.values():
-        collision_pairs = combinations(collision_doc_list, 2)
-        for pair in collision_pairs:
-            candidate_pairs.add(pair)
+        n = len(collision_doc_list)
+        if n > max_bucket_size:
+            dropped_buckets_count += 1
+            huge_pairs_avoided += n * (n - 1) // 2
+            continue
+        if n > 1:
+            collision_pairs = combinations(collision_doc_list, 2)
+            for pair in collision_pairs:
+                p = tuple(sorted(pair)) 
+                candidate_pairs.add(p)
 
+    print(f"LSH 优化统计: 丢弃了 {dropped_buckets_count} 个过大的桶 (> {max_bucket_size})")
+    print(f"避免了约 {huge_pairs_avoided} 个潜在的候选对计算")
     return candidate_pairs
-
-def _verify_pair_worker(pairs_chunk, id_n_gram_map_subset, threshold):
-    # 为了避免传递整个巨大的 map，这里可以只传需要的 subset
-    # 在 Linux 上，可以依赖 fork 的共享内存
-    true_pairs = []
-    for doc1, doc2 in pairs_chunk:
-        set1 = set(id_n_gram_map_subset[doc1])
-        set2 = set(id_n_gram_map_subset[doc2])
-        intersection = len(set1 & set2)
-        union = len(set1 | set2)
-        if union > 0 and (intersection / union) >= threshold:
-            true_pairs.append((doc1, doc2))
-    return true_pairs
-
 
 def _lazy_verify_initializer(paths_map, n_val, thresh_val):
     """
