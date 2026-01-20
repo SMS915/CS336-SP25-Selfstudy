@@ -1,4 +1,5 @@
 import os
+import gc
 import glob
 import random
 import mmh3
@@ -73,7 +74,8 @@ def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str
     os.makedirs(output_directory, exist_ok=True)
     hasher = xxhash.xxh3_128
 
-    chunk_size = len(input_files) // num_workers + 1
+    target_chunk_size = 10000
+    chunk_size = target_chunk_size
     chunks = [input_files[i:i + chunk_size] for i in range(0, len(input_files), chunk_size)]
 
     print(f"精确去重：启动 {num_workers} 个进程并行统计行频...")
@@ -85,12 +87,18 @@ def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str
         with shelve.open(db_path, flag='n') as db:
             with multiprocessing.Pool(processes=num_workers, maxtasksperchild=50) as pool:
                 worker_iter = pool.imap_unordered(_count_lines_worker, chunks, chunksize=1)
-                for local_counts in tqdm(worker_iter, total=len(chunks), desc="流式合并计数器"):
+                for i, local_counts in enumerate(tqdm(worker_iter, total=len(chunks), desc="流式合并计数器")):
                     for line_hash, count in local_counts.items():
                         str_hash = str(line_hash)
                         db[str_hash] = db.get(str_hash, 0) + count
                     
                     del local_counts
+
+                    if (i + 1) % 50 == 0:
+                        # 强制将 shelve 的缓存刷入磁盘
+                        db.sync()
+                        # 强制 Python 回收循环引用和未使用的内存对象
+                        gc.collect()
 
         input_base_path = Path(input_base_dir)
         output_base_path = Path(output_directory)
@@ -100,16 +108,8 @@ def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str
 
         with shelve.open(db_path, flag='r') as db:
         
-            total_lines_before = 0
-            total_lines_after = 0
-
-            for _, v in db.items():
-                total_lines_before += v
-                if v == 1:
-                    total_lines_after += 1 
-
-            print(f"统计结果: 原有 {total_lines_before} 行 -> 保留 {total_lines_after} 行 "
-                f"(移除率: {100 * (1 - total_lines_after / total_lines_before):.2f}%)")
+            total_lines_processed = 0
+            total_lines_kept = 0
 
             for input_file in tqdm(input_files, desc="重写"):
                 input_file_path = Path(input_file)
@@ -125,15 +125,25 @@ def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str
                 with open(input_file_path, 'r', encoding='utf-8') as fin, \
                     open(output_file_path, 'w', encoding='utf-8') as fout:
                     for line in fin:
+                        total_lines_processed += 1
                         stripped_line = line.strip()
                         if not stripped_line:
                             continue
                         line_hash = hasher(stripped_line.encode('utf-8')).intdigest()
                         str_hash = str(line_hash)
                         if db.get(str_hash, 0) == 1:
+                            total_lines_kept += 1
                             fout.write(line)
 
-    return output_paths, total_lines_before, total_lines_after
+    if total_lines_processed > 0:
+        remove_rate = 100 * (1 - total_lines_kept / total_lines_processed)
+    else:
+        remove_rate = 0.0
+
+    print(f"最终统计结果: 原有 {total_lines_processed} 行 -> 保留 {total_lines_kept} 行 "
+          f"(移除率: {remove_rate:.2f}%)")
+
+    return output_paths, total_lines_processed, total_lines_kept
     
 
 def convert_text_into_n_gram(n: int, text: str) -> Set[Tuple[str, ...]]:
