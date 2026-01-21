@@ -38,8 +38,8 @@ def compute_group_normalized_rewards(reward_fn: Callable,
         reward_metric = reward_fn(response, truth, length_panelty)
         raw_rewards_list.append(reward_metric.get('reward', 0.0))
         format_rewards_list.append(reward_metric.get('format_reward', 0.0))
+        
     # 将奖励转换为Tensor, 并reshape到[batch_size, group_size]的形状
-    
     raw_tensor = torch.tensor(raw_rewards_list, dtype=torch.float32).view(-1, group_size) # batch_size, group_size
     # 计算组内均值
     mean_tensor = raw_tensor.mean(dim=-1, keepdim=True) # (batch_size, 1)

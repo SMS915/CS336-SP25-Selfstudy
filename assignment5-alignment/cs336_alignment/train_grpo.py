@@ -38,23 +38,6 @@ def load_policy_into_vllm_instance(policy: torch.nn.Module, llm:LLM):
     del state_dict
     torch.cuda.empty_cache()
 
-def make_zero_copy_sync(policy: torch.nn.Module, llm: LLM):
-    # 1. 获取训练端的参数字典 (注意保持引用)
-    policy_params = dict(policy.named_parameters())
-
-    # 2. 深入 vLLM 内部拿到对应的模型实例
-    # 注意：不同版本的 vLLM 路径可能略有不同
-    vllm_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
-
-    # 3. 强制覆盖 (The Hack)
-    with torch.no_grad():
-        for name, vllm_param in vllm_model.named_parameters():
-            if name in policy_params:
-                # 核心魔法：将 vllm 的数据指针直接指向 policy 的数据指针
-                # 这样两者共享同一块物理显存
-                vllm_param.data = policy_params[name].data
-
-
 # ==========================================
 # 2. 数据集 (只包含 Prompt)
 # ==========================================
@@ -73,10 +56,10 @@ class GRPODataset(Dataset):
                 try:
                     item = json.loads(line)
                     
-                    # 1. 提取问题 (Problem / Question / Prompt)
+                    # 提取问题 (Problem / Question / Prompt)
                     raw_prompt = item.get("problem") or item.get("question") or item.get("prompt")
                     
-                    # 2. 提取答案 (逻辑：优先取干净的 answer/solution，没有则从 response 提取)
+                    # 提取答案, 优先取干净的 answer/solution，没有则从 response 提取
                     # 尝试获取直接答案
                     direct_answer = item.get("answer") or item.get("solution")
                     
@@ -95,7 +78,7 @@ class GRPODataset(Dataset):
                         print(f"第 {i} 行数据不完整，已跳过。")
                         continue
 
-                    # 3. 构造 Prompt
+                    # 构造 Prompt
                     if prompt_template:
                         p = prompt_template.replace("{question}", str(raw_prompt).strip())
                         self.prompts.append(p)
@@ -105,10 +88,10 @@ class GRPODataset(Dataset):
                     self.ground_truths.append(final_answer)
                 
                 except Exception as e:
-                    print(f"❌ 解析第 {i} 行出错: {e}")
+                    print(f"解析第 {i} 行出错: {e}")
                     continue
                     
-        print(f"📊 加载完成: {len(self.prompts)} 条样本用于 GRPO.")
+        print(f"加载完成: {len(self.prompts)} 条样本用于 GRPO.")
 
     def _extract_answer(self, text: str) -> str:
         """从 SFT/RL 风格的文本中提取 <answer> 标签内的内容"""
@@ -139,7 +122,7 @@ def train(config_path: str):
         wandb.init(
             project=config["wandb"]["project"],
             id=config["model"]["wandb_id"],   # 指定 ID
-            resume="must",      # 强制续训，如果ID不存在会报错
+            resume="must",    # 强制续训，如果ID不存在会报错
             config=config
         )
     
@@ -270,7 +253,6 @@ def train(config_path: str):
         ground_truths = batch["ground_truth"]
 
         # 同步权重到vllm，以确保训练和推理模型的一致性
-        # load_policy_into_vllm_instance(policy, llm)
         load_policy_into_vllm_instance(policy, llm)
         
         # 生成 (vLLM)

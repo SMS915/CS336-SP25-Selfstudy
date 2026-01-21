@@ -65,10 +65,10 @@ def evaluate_vllm_pass_k(
             
         print(f"=== 尝试第 {attempt}/{pass_k} 轮 (剩余 {len(pending_indices)} 题) ===")
         
-        # 1. 准备当前轮次的 Prompts
+        # 准备当前轮次的 Prompts
         current_prompts = [prompts[i] for i in pending_indices]
         
-        # 2. 批量生成 (vLLM 内部会自动批处理)
+        # 批量生成 (vLLM 内部会自动批处理)
         # 每次只生成 1 个 (n=1)，靠外层循环来实现 K
         outputs = vllm_model.generate(current_prompts, eval_sampling_params, use_tqdm=True)
         
@@ -97,7 +97,7 @@ def evaluate_vllm_pass_k(
                 "attempt_id": attempt # 记录是在第几次尝试做出来的
             }
             
-            # 更新最终结果 (无论对错先存进去，如果是错的，可能会被下一轮覆盖)
+            # 更新最终结果，如果是错的，会在后续被覆盖
             final_results[original_idx] = result_entry
             
             # 判断是否做对 (Reward == 1.0)
@@ -135,7 +135,7 @@ def evaluate_vllm_pass_k(
     
     # 此时 final_results 中存储的是每道题最好的结果（如果做对）或最后的结果（如果全错）
     for res in final_results:
-        # 计算长度 (包含 Prompt 的长度在 vLLM output 里不好直接减，这里粗略计算 generated_text 长度)
+        # 粗略计算长度
         total_len += len(res["generated_text"])
         
         metrics = res["metrics"]
@@ -181,8 +181,7 @@ def run_evaluate(config: Dict[str, Any]):
     )
 
     # 采样参数配置
-    # 这里 max_tokens 起到了长度截断的作用
-    # 如果模型生成超过这个长度，vLLM 会强制停止
+    # 按 max_tokens 进行长度截断
 
     eval_params = SamplingParams(
         temperature=config.get('temperature', 1.0), 

@@ -104,7 +104,6 @@ def evaluate_vllm_pass_k(
     
     # 此时 final_results 中存储的是每道题最好的结果（如果做对）或最后的结果（如果全错）
     for res in final_results:
-        # 计算长度 (包含 Prompt 的长度在 vLLM output 里不好直接减，这里粗略计算 generated_text 长度)
         total_len += len(res["generated_text"])
         
         metrics = res["metrics"]
@@ -146,7 +145,7 @@ def run_evaluate(config: Dict[str, Any]):
     llm = LLM(
         model=config['model_path'], 
         dtype="bfloat16", 
-        gpu_memory_utilization=0.90, # 稍微调低一点点防止突发 OOM
+        gpu_memory_utilization=0.90,
         trust_remote_code=True,
     )
 

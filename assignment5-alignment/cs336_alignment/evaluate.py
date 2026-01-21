@@ -72,7 +72,6 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     print(f"开始生成{len(prompts)}条数据")
     start_time = time.time()
     # vllm_model.generate 批处理，比逐条循环生成效率更高
-    # prompts = prompts[:500]
     outputs = vllm_model.generate(prompts, eval_sampling_params)
     end_time = time.time()
     print(f"生成完成，共用时{end_time - start_time}秒")
@@ -142,16 +141,12 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
         prompt_template = f.read()
     formatted_input = formatting_prompt(examples=examples, prompt_template=prompt_template)
 
-    # rope_scaling_config = {"rope_type": "dynamic", "factor": 2.0}
-    
     target_max_len = 8192
 
     llm = LLM(model = model_path, 
               dtype="bfloat16", 
               gpu_memory_utilization = 0.95, 
               trust_remote_code = True,
-            #   rope_scaling=rope_scaling_config,
-            #   max_model_len=target_max_len
               )
 
     eval_params = SamplingParams(temperature = temperature, top_p = top_p, max_tokens=max_tokens ,stop=["</answer>"],
@@ -181,7 +176,7 @@ def parse_arguments() -> Dict[str, Any]:
     # 配置文件参数
     parser.add_argument('--config', type=str, default=None, help='Path to the YAML configuration file.')
 
-    # 具体的运行参数 (默认值为 None，以便区分是否在命令行中指定了该参数)
+    # 运行参数
     parser.add_argument('--example_path', type=str, help='Path to the evaluation dataset (jsonl).')
     parser.add_argument('--prompt_path', type=str, help='Path to the prompt template file.')
     parser.add_argument('--output_path', type=str, help='Path to save evaluation results.')
@@ -202,7 +197,7 @@ def parse_arguments() -> Dict[str, Any]:
             if yaml_config:
                 final_config.update(yaml_config)
 
-    # 使用命令行参数覆盖 YAML 配置 (仅当 CLI 参数不为 None 时)
+    # 使用命令行参数覆盖 YAML 配置
     for key, value in vars(args).items():
         if key != 'config' and value is not None:
             final_config[key] = value
@@ -221,10 +216,6 @@ def validate_config(config: Dict[str, Any]) -> None:
         sys.exit(1)
 
 if __name__ == '__main__':
-    # EXAMPLE_PATH = 'data/MATH/validation.jsonl'
-    # PROMPT_PATH = 'cs336_alignment/prompts/r1_zero.prompt'
-    # OUTPUT_PATH = 'results/sft_v1_result.jsonl'
-    # MODEL_PATH = 'checkpoints/sft_v1'
     config = parse_arguments()
     validate_config(config)
 

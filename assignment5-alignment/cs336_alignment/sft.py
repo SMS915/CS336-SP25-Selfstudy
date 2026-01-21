@@ -170,7 +170,7 @@ def log_generations(
     sampled_prompts = [prompts[i] for i in indices]
     sampled_truths = [ground_truths[i] for i in indices]
 
-    # 2. 准备环境
+    # 准备环境
     device = model.device
     was_training = model.training
     model.eval()  # 切换到评估模式
@@ -184,7 +184,7 @@ def log_generations(
     run_away_count = 0
     print(f"\n[Log Generation] Sampling {n} examples...")
 
-    # 3. 逐条生成与评估
+    # 逐条生成与评估
     for i in range(n):
         prompt = sampled_prompts[i]
         truth = sampled_truths[i]
@@ -240,7 +240,7 @@ def log_generations(
         print(f"Metrics: {metrics} | Entropy: {entropies[-1]:.2f}")
         print("-" * 40)
 
-    # 4. 恢复训练模式
+    # 恢复训练模式
     if was_training:
         model.train()
 
@@ -258,7 +258,6 @@ def log_generations(
 
 def log_generations_vllm(
         llm: LLM,  # 传入训练脚本中的 vLLM 实例
-        tokenizer,
         prompts: List[str],
         ground_truths: List[str],
         reward_fn: Callable[[str, str, bool], Dict[str, float]],
@@ -269,13 +268,13 @@ def log_generations_vllm(
     """
     使用 vLLM 加速生成并记录评估指标。
     """
-    # 1. 随机抽样
+    # 随机抽样
     n = min(num_examples_to_log, len(prompts))
     indices = random.sample(range(len(prompts)), n)
     sampled_prompts = [prompts[i] for i in indices]
     sampled_truths = [ground_truths[i] for i in indices]
 
-    # 2. 配置 vLLM 采样参数
+    # 配置 vLLM 采样参数
     # 开启 logprobs 以便计算熵
     sampling_params = SamplingParams(
         temperature=1.0,
@@ -288,17 +287,15 @@ def log_generations_vllm(
 
     print(f"\n[Log Generation vLLM] Batch inferencing {n} examples...")
 
-    # 3. 批量生成
-    # 注意：在调用此函数前，外部应已执行 make_zero_copy_sync(policy, llm)
+    # 批量生成
     outputs = llm.generate(sampled_prompts, sampling_params, use_tqdm=False)
 
     total_rewards = []
     format_rewards = []
     answer_rewards = []
     lengths = []
-    entropies = []
 
-    # 4. 后处理与评估
+    # 后处理与评估
     for i, output in enumerate(outputs):
         prompt = output.prompt
         generated_text = output.outputs[0].text
@@ -308,30 +305,15 @@ def log_generations_vllm(
         token_ids = output.outputs[0].token_ids
         lengths.append(len(token_ids))
 
-        # 5. 计算熵 (vLLM 风格)
-        # vLLM 的 logprobs 结构与 HF 不同，这里计算生成序列的平均 token 熵
-        step_entropies = []
-        if output.outputs[0].logprobs:
-            for logprob_dict in output.outputs[0].logprobs:
-                # logprob_dict 是 {token_id: LogprobObj}
-                # 熵 H = -sum(p * log(p))
-                probs = np.exp([lp.logprob for lp in logprob_dict.values()])
-                # 归一化（因为只取了 top-k）
-                probs = probs / np.sum(probs)
-                ent = -np.sum(probs * np.log(probs + 1e-10))
-                step_entropies.append(ent)
 
-        avg_ent = np.mean(step_entropies) if step_entropies else 0.0
-        entropies.append(avg_ent)
-
-        # 6. 计算奖励
+        # 计算奖励
         metrics = reward_fn(generated_text, truth, verify)
         total_rewards.append(metrics.get("reward", 0.0))
         format_rewards.append(metrics.get("format_reward", 0.0))
         answer_rewards.append(metrics.get("answer_reward", 0.0))
 
         # 打印部分示例
-        if i < 2:  # 仅打印前两个示例节省日志空间
+        if i < 2:
             print("-" * 40)
             print(f" Prompt: {prompt[:50]}...")
             print(f"Generated: {generated_text[-150:]} (Len: {len(token_ids)})")
@@ -343,8 +325,7 @@ def log_generations_vllm(
         "eval/reward": np.mean(total_rewards),
         "eval/format_reward": np.mean(format_rewards),
         "eval/answer_reward": np.mean(answer_rewards),
-        "eval/length": np.mean(lengths),
-        "eval/entropy": np.mean(entropies) if entropies else 0.0,
+        "eval/length": np.mean(lengths)
     }
 
     return stats

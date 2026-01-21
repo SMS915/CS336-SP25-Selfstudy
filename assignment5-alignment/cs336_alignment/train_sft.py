@@ -38,7 +38,7 @@ def get_collate_fn(tokenizer, max_length = 1024, prompt_template = None):
     DataLoader 会把 batch_data (list of dicts) 传给这个函数。
     """
     def collate_fn(batch_data):
-        # 1. 解包数据
+        # 解包数据
         prompts = []
         for item in batch_data:
             raw_prompt = item["prompt"]
@@ -201,7 +201,7 @@ def train(config_path: str, args):
 
             # 梯度累积更新
             if total_micro_steps % grad_accum_steps == 0:
-                # 裁剪
+                # 梯度裁剪
                 grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
                 
                 scheduler.step()
@@ -253,7 +253,7 @@ def train(config_path: str, args):
                     wandb.log(eval_stats)
                     del eval_stats
                     torch.cuda.empty_cache() 
-                    model.train() # 切回训练模式
+                    model.train()
 
         # 保存该epoch模型
         epoch_output_dir = os.path.join(output_dir, f'epoch{epoch}')
