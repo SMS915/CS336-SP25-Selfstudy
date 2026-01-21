@@ -17,7 +17,7 @@ from .UF import UnionFind
 from functools import partial
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
-from typing import List, Dict, Tuple, Set, List, Callable, Hashable, Optional, cast
+from typing import List, Dict, Tuple, Set, List, Callable, Hashable, Optional, Literal, cast
 from itertools import combinations
 from collections import defaultdict
 random_seed = 42
@@ -58,7 +58,7 @@ def _count_lines_worker(file_paths):
                     local_counts[h] += 1
     return local_counts
 
-def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike, num_workers: int = 30, temp_dir: Optional[str | os.PathLike] = None) -> Tuple[List[str | os.PathLike], int, int]:
+def exact_line_deduplication_disk_based(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike, num_workers: int = 30, temp_dir: Optional[str | os.PathLike] = None) -> Tuple[List[str | os.PathLike], int, int]:
     """
     对输入的文本文件进行精确行去重并写入到指定的输出文件夹中。
     采用两阶段行为
@@ -145,6 +145,85 @@ def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str
 
     return output_paths, total_lines_processed, total_lines_kept
     
+def exact_line_deduplication_ram_based(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike, num_workers: int = 30) -> Tuple[List[str | os.PathLike], int, int]:
+    """
+    对输入的文本文件进行精确行去重并写入到指定的输出文件夹中。
+    采用两阶段行为
+    第一阶段，遍历所有输入文件，计算每个处理后的行在整个文件集合中出现的总频率
+    第二阶段，再次遍历所有输入文件，只保留那些在第一阶段统计为频率为1的行，并将结果写入到输出目录对应的文件
+    目的是过滤那些语料库中可能出现的结构化，样板化文字，比如 导航栏，页脚等
+
+    Args:
+        input_files (List[os.PathLike]): 一个包含所有输入文档路径的列表
+        output_directory (os.PathLike):  用于存放输出文件的文件夹路径
+    """
+    line_counts = defaultdict(int)
+    os.makedirs(output_directory, exist_ok=True)
+    hasher = xxhash.xxh3_128
+
+    chunk_size = len(input_files) // num_workers + 1
+    chunks = [input_files[i:i + chunk_size] for i in range(0, len(input_files), chunk_size)]
+    
+    line_counts = defaultdict(int)
+    print(f"精确去重：启动 {num_workers} 个进程并行统计行频...")
+
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # 并行处理
+        results = list(tqdm(executor.map(_count_lines_worker, chunks), 
+                            total=len(chunks), desc="合并计数器"))
+
+    input_base_path = Path(input_base_dir)
+    output_base_path = Path(output_directory)
+    output_paths = []
+
+    print("正在合并全局计数器...")
+    for local_cnt in results:
+        for k, v in local_cnt.items():
+            line_counts[k] += v
+
+    total_lines_processed = 0
+    total_lines_kept = 0
+
+    for input_file in tqdm(input_files, desc="重写"):
+        input_file_path = Path(input_file)
+        # 计算相对于基础输入目录的路径
+        relative_path = input_file_path.relative_to(input_base_path)
+
+        # 在输出目录中构造完整的、包含子目录的目标路径
+        output_file_path = output_base_path / relative_path
+
+        # 确保输出文件的父目录存在
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+        output_paths.append(output_file_path)
+        with open(input_file_path, 'r', encoding='utf-8') as fin, \
+             open(output_file_path, 'w', encoding='utf-8') as fout:
+            for line in fin:
+                stripped_line = line.strip()
+                total_lines_processed += 1
+                if not stripped_line:
+                    continue
+                line_hash = hasher(stripped_line.encode('utf-8')).intdigest()
+                if line_counts[line_hash] == 1:
+                    total_lines_kept += 1
+                    fout.write(line)
+
+    if total_lines_processed > 0:
+        remove_rate = 100 * (1 - total_lines_kept / total_lines_processed)
+    else:
+        remove_rate = 0.0
+
+    print(f"最终统计结果: 原有 {total_lines_processed} 行 -> 保留 {total_lines_kept} 行 "
+          f"(移除率: {remove_rate:.2f}%)")
+
+    return output_paths, total_lines_processed, total_lines_kept
+
+
+def exact_line_deduplication(input_files: List[os.PathLike], input_base_dir: str | os.PathLike, output_directory:str | os.PathLike, num_workers: int = 30, base: Literal['disk', 'memory'] = 'memory', temp_dir: Optional[str | os.PathLike] = None) -> Tuple[List[str | os.PathLike], int, int]:
+    if base == 'memory':
+        return exact_line_deduplication_ram_based(input_files, input_base_dir, output_directory, num_workers)
+    elif base == 'disk':
+        return exact_line_deduplication_disk_based(input_files, input_base_dir, output_directory, num_workers, temp_dir)
+
 
 def convert_text_into_n_gram(n: int, text: str) -> Set[Tuple[str, ...]]:
     """
