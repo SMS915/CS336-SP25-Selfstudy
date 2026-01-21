@@ -5,8 +5,8 @@ import time
 import datetime
 from tqdm import tqdm
 from typing import Literal
-from cs336_basics.bpe_fast import BPETokenizer
-from cs336_basics.bpe_naive import train_bpe_run
+from cs336_basics.BPE.bpe_fast import BPETokenizer
+from cs336_basics.BPE.bpe_naive import train_bpe_run
 
 
 def main():

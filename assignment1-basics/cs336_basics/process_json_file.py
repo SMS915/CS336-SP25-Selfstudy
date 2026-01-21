@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 # 引入你的 Tokenizer
 try:
-    from bpe_fast import BPETokenizer
+    from cs336_basics.BPE.bpe_fast import BPETokenizer
 except ImportError:
     raise ImportError("请确保 bpe_fast.py 存在且包含 BPETokenizer 类")
 

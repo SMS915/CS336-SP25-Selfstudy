@@ -2,8 +2,9 @@ import os
 import multiprocessing as mp
 import numpy as np
 import time
-from bpe_fast import BPETokenizer, find_chunk_boundaries # 导入你的 FastBPE
-from bpe_naive import BPETokenizer as OriginalBPETokenizer
+from cs336_basics.BPE.bpe_fast import BPETokenizer as FastBPETokenizer
+from cs336_basics.BPE.bpe_naive import BPETokenizer as NaiveBPETokenizer
+from cs336_basics.BPE.bpe_fast import find_chunk_boundaries
 
 # --- 配置 ---
 TOKENIZER_DIR = "BPE_File"
@@ -73,7 +74,7 @@ def main():
     # 1. 加载原始分词器
     print("正在加载原始 BPE 分词器...")
     t_load_start = time.time()
-    tokenizer = OriginalBPETokenizer.from_files(
+    tokenizer = NaiveBPETokenizer.from_files(
         vocab_filepath=os.path.join(TOKENIZER_DIR, "gpt2_vocab.json"),
         merges_filepath=os.path.join(TOKENIZER_DIR, "gpt2_merges.txt"),
         special_tokens=["<|endoftext|>"]
@@ -127,6 +128,8 @@ def main():
         print(f"\n[完成] {filename}")
         print(f"  - 总耗时: {duration:.2f} 秒")
         print(f"  - 吞吐量: {total_tokens / duration / 1000:.2f} k tokens/s")
+
+    
 
 
 

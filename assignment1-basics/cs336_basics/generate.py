@@ -4,7 +4,7 @@ import argparse
 import os
 
 from cs336_basics.model import TransformerLM
-from cs336_basics.bpe_naive import BPETokenizer
+from cs336_basics.BPE.bpe_fast import BPETokenizer
 from cs336_basics.checkpointing import get_latest_checkpoint, get_best_checkpoint, load_checkpoint
 from cs336_basics.generation_utils import generate_text
 
