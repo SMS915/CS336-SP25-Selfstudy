@@ -1,3 +1,10 @@
+micro:
+  vocab_size: 1600
+  d_model: 256
+  d_ff: 704
+  num_layers: 3
+  num_heads: 4
+
 small:
   vocab_size: 50257
   d_model: 768
