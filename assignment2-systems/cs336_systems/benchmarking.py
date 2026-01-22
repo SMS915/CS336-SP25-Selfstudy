@@ -5,7 +5,49 @@ import random
 import argparse
 import numpy as np
 
-from cs336_basics.model import TransformerLM as Transformer
+import torch.cuda.nvtx as nvtx
+import cs336_basics.model
+from cs336_basics.utils import Softmax
+from einops import einsum, rearrange
+from jaxtyping import Float, Bool
+from math import sqrt
+
+from cs336_basics.model import ScaledDotProductAttention as original_SDPA
+
+def annotated_scaled_dot_product_attention(
+    Q: Float[torch.Tensor, "batch_size num_q q_seq_len d_q"],
+    K: Float[torch.Tensor, "batch_size num_k k_seq_len d_k"],
+    V: Float[torch.Tensor, "batch_size num_v v_seq_len d_v"],
+    mask: Bool[torch.Tensor, "batch_size q_seq_len k_seq_len"] = None
+)-> Float[torch.Tensor, "batch_size q_seq_len d_v"]:
+    with nvtx.range("ScaledDotProductAttention"):
+        is_gqa = False
+        if Q.ndim == 4:
+            num_heads_q, num_heads_k = Q.shape[1], K.shape[1]
+            if num_heads_q != num_heads_k:
+                is_gqa = True
+                n_rep = num_heads_q // num_heads_k
+                Q = rearrange(Q, 'b (h_kv n_rep) l d -> b h_kv n_rep l d', n_rep=n_rep)
+                K = rearrange(K, 'b h_kv l d -> b h_kv 1 l d', n_rep=n_rep)
+                V = rearrange(V, 'b h_kv l d -> b h_kv 1 l d', n_rep=n_rep)
+
+        d_k = K.shape[-1]
+        with nvtx.range("Compute Attention Score"):
+            attn_scores = einsum(Q, K, "b ... q d, b ... k d -> b ... q k") / sqrt(d_k)
+
+        with nvtx.range("Masking"):
+            if mask is not None:
+                attn_scores = torch.where(mask, attn_scores, float('-inf'))
+        with nvtx.range("Softmax"):
+            attn_weights = Softmax(attn_scores, -1)
+
+        with nvtx.range("Final matmul"):
+            output =  einsum(attn_weights, V, "b ... q k, b ... k d -> b ... q d")
+        if is_gqa:
+            output = rearrange(output, "b h_kv n_rep l d -> b (h_kv n_rep) l d")
+
+        return output
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -50,14 +92,19 @@ def main():
     batch_size = args.batch_size
     warmup_steps = args.warmup_steps
 
-    model = Transformer(vocab_size=vocab_size,                        
+
+    cs336_basics.model.ScaledDotProductAttention = annotated_scaled_dot_product_attention
+
+    model = cs336_basics.model.TransformerLM(vocab_size=vocab_size,                        
                         context_length=context_length,
                         d_model=d_model,
                         d_ff=d_ff,
                         num_layers=num_layers,
                         num_heads=num_heads)
     
-    batched_data = torch.randint(0, vocab_size, (batch_size, context_length))
+    model.to('cuda')
+    # model.count_params()
+    batched_data = torch.randint(0, vocab_size, (batch_size, context_length)).to('cuda')
 
     print("Warmup Stage")
     warmup_start = timeit.default_timer()
