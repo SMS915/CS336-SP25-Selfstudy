@@ -125,33 +125,34 @@ def main():
     backward_timings = []
     total_timings = []
     print(f"Measuring for {measure_steps} steps")
-    for _ in range(measure_steps):
-        start_time = timeit.default_timer()
+    with nvtx.range("Measurement Loop"):
+        for _ in range(measure_steps):
+            start_time = timeit.default_timer()
 
-        # 运行测量操作
-        output = model(batched_data)
-        torch.cuda.synchronize()
+            # 运行测量操作
+            output = model(batched_data)
+            torch.cuda.synchronize()
 
-        forward_end = timeit.default_timer()
+            forward_end = timeit.default_timer()
 
-        loss = output.sum()
-        loss.backward()
-        torch.cuda.synchronize()
+            loss = output.sum()
+            loss.backward()
+            torch.cuda.synchronize()
 
-        end_time = timeit.default_timer()
+            end_time = timeit.default_timer()
 
-        forward_timings.append(forward_end - start_time)
-        backward_timings.append(end_time - forward_end)
-        total_timings.append(end_time - start_time)
+            forward_timings.append(forward_end - start_time)
+            backward_timings.append(end_time - forward_end)
+            total_timings.append(end_time - start_time)
 
-    forward_mean = np.mean(forward_timings)
-    forward_std = np.std(forward_timings)
-    
-    backward_mean = np.mean(backward_timings)
-    backward_std = np.std(backward_timings)
+        forward_mean = np.mean(forward_timings)
+        forward_std = np.std(forward_timings)
 
-    total_mean = forward_mean + backward_mean
-    total_std = np.std(total_timings)
+        backward_mean = np.mean(backward_timings)
+        backward_std = np.std(backward_timings)
+
+        total_mean = forward_mean + backward_mean
+        total_std = np.std(total_timings)
 
     print("Measurement ends!")
     print(f"Takes {np.sum(total_timings):.2f} secs in total")
