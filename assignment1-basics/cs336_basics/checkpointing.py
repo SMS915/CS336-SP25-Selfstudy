@@ -14,7 +14,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     iteration: int,
     out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes],
-    scaler: Optional[torch.cuda.amp.GradScaler] = None
+    scaler: Optional[torch.amp.grad_scaler.GradScaler] = None
 ) -> bool:
     """
     保存训练检查点（Model, Optimizer, Iteration），
@@ -69,7 +69,7 @@ def load_checkpoint(
     model: torch.nn.Module,
     model_compiled: Optional[bool] = None,
     optimizer: Optional[torch.optim.Optimizer] = None,
-    scaler: Optional[torch.amp.GradScaler] = None
+    scaler: Optional[torch.amp.grad_scaler.GradScaler] = None
 ) -> int:
 
     """

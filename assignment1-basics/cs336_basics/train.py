@@ -6,11 +6,13 @@ import os
 import math
 import numpy as np
 
-from cs336_basics.utils import *
+import cs336_basics.utils as utils
 from cs336_basics.optimizer import AdamW
-from cs336_basics.checkpointing import *
-from cs336_basics.model import *
+from cs336_basics.checkpointing import get_latest_checkpoint, load_checkpoint, save_checkpoint
+from cs336_basics.model import TransformerLM
 from cs336_basics.fast_data import create_dataloader
+
+from torch.amp.grad_scaler import GradScaler
 
 def main():
     parser = argparse.ArgumentParser(description="训练大语言模型的脚本")
@@ -72,7 +74,7 @@ def main():
         d_model=config['d_model'],
         num_layers=config['n_layers'],
         num_heads=config['n_heads'],
-        d_ff = config['d_ff'],
+        d_ff=config['d_ff'],
         theta=config['theta'],
         post_norm=config.get('post_norm', False),
         no_norm = config.get('no_norm', False),
@@ -100,7 +102,7 @@ def main():
         lr=config.get('max_learning_rate', 3e-4),
         weight_decay=config.get('weight_decay', 0.01),
         betas=betas,
-        eps = config.get('eps', 1e-8)
+        eps=config.get('eps', 1e-8)
     )
     ckpt_dir = config.get('checkpoint_path', 'checkpoints/')
 
@@ -121,7 +123,7 @@ def main():
 
     print(f"AMP enabled: {amp_enabled}, Dtype: Using half precision with dtype: {amp_dtype}, Enable amp training: {amp_enabled}")
 
-    scaler = torch.amp.GradScaler(enabled=use_scaler)
+    scaler = GradScaler(enabled=use_scaler)
 
     # 配置从检查点开始训练
     resume_training = config.get('load_ckpt', False)
@@ -148,7 +150,7 @@ def main():
 
     for step in range(start_step, config['max_steps']):
         # 更新学习率
-        new_lr = get_lr_schedule(
+        new_lr = utils.get_lr_schedule(
             t=step, 
             t_warm=config['warmup_steps'], 
             t_cycle=config['cycle_steps'], 
@@ -175,9 +177,9 @@ def main():
             targets = targets_cpu.to(device, dtype=torch.long, non_blocking=True)
 
             # 前向传播
-            with torch.amp.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
+            with torch.amp.autocast_mode.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
                 logits = model(inputs, token_positions=None)
-                loss = cross_entropy_loss(logits.view(-1, config['vocab_size']), targets.view(-1))
+                loss = utils.cross_entropy_loss(logits.view(-1, config['vocab_size']), targets.view(-1))
                 
                 # Loss 归一化
                 loss = loss / grad_accum_steps
@@ -189,7 +191,7 @@ def main():
             accum_loss += loss.item() * grad_accum_steps 
 
             scaler.unscale_(optimizer)
-            curr_grad_norm = clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
+            curr_grad_norm = utils.clip_gradient(model.parameters(), config.get('max_grad_norm', 1.0))
             scaler.step(optimizer)
             scaler.update()
 
@@ -222,9 +224,9 @@ def main():
                     val_inputs = val_inputs_cpu.to(device, dtype=torch.long, non_blocking=True)
                     val_targets = val_targets_cpu.to(device, dtype=torch.long, non_blocking=True)
                     
-                    with torch.amp.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
+                    with torch.amp.autocast_mode.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
                         val_logits = model(val_inputs, token_positions=None)
-                        val_loss += cross_entropy_loss(val_logits.view(-1, config['vocab_size']), val_targets.view(-1)).item()
+                        val_loss += utils.cross_entropy_loss(val_logits.view(-1, config['vocab_size']), val_targets.view(-1)).item()
 
             avg_val_loss = val_loss / config['eval_steps']
             perplexity = math.exp(avg_val_loss)

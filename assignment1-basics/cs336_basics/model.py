@@ -400,18 +400,18 @@ def ScaledDotProductAttention(Q: Float[torch.Tensor, "batch_size num_q q_seq_len
                               mask: Bool[torch.Tensor, "batch_size q_seq_len k_seq_len"] = None)\
                               -> Float[torch.Tensor, "batch_size q_seq_len d_v"]:
     """
-   计算缩放点积注意力。
-   公式: Attention(Q, K, V) = softmax( (Q @ K^T) / sqrt(d_k) ) @ V
+    计算缩放点积注意力。
+    公式: Attention(Q, K, V) = softmax( (Q @ K^T) / sqrt(d_k) ) @ V
 
-   Args:
+    Args:
        Q: 查询张量。Shape: (*batch, query_seq_len, d_q)
        K: 键张量。Shape: (*batch, key_seq_len, d_k)
        V: 值张量。Shape: (*batch, value_seq_len, d_v)
        mask: 可选的布尔掩码。Shape: (*batch, query_seq_len, key_seq_len)
 
-   Returns:
+    Returns:
        注意力输出。Shape: (*batch, query_seq_len, d_v)
-   """
+    """
     is_gqa = False
     if Q.ndim == 4:
         num_heads_q, num_heads_k = Q.shape[1], K.shape[1]
