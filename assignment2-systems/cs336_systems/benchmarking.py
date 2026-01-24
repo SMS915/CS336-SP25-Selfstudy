@@ -1,3 +1,4 @@
+
 import yaml
 import timeit
 import torch
@@ -18,11 +19,11 @@ from cs336_basics.model import ScaledDotProductAttention as original_SDPA
 
 
 def annotated_scaled_dot_product_attention(
-        Q: Float[torch.Tensor, "batch_size num_q q_seq_len d_q"],
-        K: Float[torch.Tensor, "batch_size num_k k_seq_len d_k"],
-        V: Float[torch.Tensor, "batch_size num_v v_seq_len d_v"],
-        mask: Optional[Bool[torch.Tensor, "batch_size q_seq_len k_seq_len"]] = None
-) -> Float[torch.Tensor, "batch_size q_seq_len d_v"]:
+    Q: Float[torch.Tensor, "batch_size num_q q_seq_len d_q"],
+    K: Float[torch.Tensor, "batch_size num_k k_seq_len d_k"],
+    V: Float[torch.Tensor, "batch_size num_v v_seq_len d_v"],
+    mask: Optional[Bool[torch.Tensor, "batch_size q_seq_len k_seq_len"]] = None
+)-> Float[torch.Tensor, "batch_size q_seq_len d_v"]:
     with nvtx.range("ScaledDotProductAttention"):
         is_gqa = False
         if Q.ndim == 4:
@@ -146,7 +147,7 @@ def main():
 
     scaler = torch.amp.grad_scaler.GradScaler(enabled=use_scaler)
 
-    batched_data = torch.randint(0, vocab_size, (batch_size, context_length)).to('cuda').to('cuda')
+    batched_data = torch.randint(0, vocab_size, (batch_size, context_length)).to('cuda')
 
     print("Warmup Stage")
     warmup_start = timeit.default_timer()
@@ -183,16 +184,16 @@ def main():
         start_time = timeit.default_timer()
         with nvtx.range("Forward Pass"):
             with torch.amp.autocast_mode.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
-                output = model(batched_data)
+                output = model(batched_data)        
         torch.cuda.synchronize()
 
         forward_end = timeit.default_timer()
-        # with nvtx.range("Backward Pass"):
-        #     loss = output.sum()
-        #     scaler.scale(loss).backward()
-        # torch.cuda.synchronize()
+        with nvtx.range("Backward Pass"):
+            loss = output.sum()
+            scaler.scale(loss).backward()
+        torch.cuda.synchronize()
         backward_end = timeit.default_timer()
-
+        
         if optimize:
             with nvtx.range("Optimizer step"):
                 scaler.unscale_(optimizer)
@@ -200,7 +201,7 @@ def main():
                 scaler.update()
                 torch.cuda.synchronize()
                 optimize_end = timeit.default_timer()
-
+        
         end_time = timeit.default_timer()
 
         forward_timings.append(forward_end - start_time)
