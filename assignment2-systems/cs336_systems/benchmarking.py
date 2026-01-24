@@ -1,3 +1,4 @@
+
 import yaml
 import timeit
 import torch
@@ -18,11 +19,11 @@ from cs336_basics.model import ScaledDotProductAttention as original_SDPA
 
 
 def annotated_scaled_dot_product_attention(
-        Q: Float[torch.Tensor, "batch_size num_q q_seq_len d_q"],
-        K: Float[torch.Tensor, "batch_size num_k k_seq_len d_k"],
-        V: Float[torch.Tensor, "batch_size num_v v_seq_len d_v"],
-        mask: Optional[Bool[torch.Tensor, "batch_size q_seq_len k_seq_len"]] = None
-) -> Float[torch.Tensor, "batch_size q_seq_len d_v"]:
+    Q: Float[torch.Tensor, "batch_size num_q q_seq_len d_q"],
+    K: Float[torch.Tensor, "batch_size num_k k_seq_len d_k"],
+    V: Float[torch.Tensor, "batch_size num_v v_seq_len d_v"],
+    mask: Optional[Bool[torch.Tensor, "batch_size q_seq_len k_seq_len"]] = None
+)-> Float[torch.Tensor, "batch_size q_seq_len d_v"]:
     with nvtx.range("ScaledDotProductAttention"):
         is_gqa = False
         if Q.ndim == 4:
@@ -72,6 +73,8 @@ def main():
     parser.add_argument("--optimize", action='store_true')
     parser.add_argument('--precision', type=str, default='autocast', choices=['fp32', 'fp16', 'bf16', 'autocast'],
                         help='Training precision. "autocast" will automatically choose the best available.')
+    
+    parser.add_argument("--profile_memory", action="store_true")
     args = parser.parse_args()
 
     with open(args.config_path, "r") as f:
@@ -100,17 +103,13 @@ def main():
 
     cs336_basics.model.ScaledDotProductAttention = annotated_scaled_dot_product_attention
 
-    cs336_basics.model.ScaledDotProductAttention = annotated_scaled_dot_product_attention
-
-    model = cs336_basics.model.cs336_basics.model.TransformerLMLM(vocab_size=vocab_size,
+    model = cs336_basics.model.TransformerLM(vocab_size=vocab_size,
                                              context_length=context_length,
                                              d_model=d_model,
                                              d_ff=d_ff,
                                              num_layers=num_layers,
                                              num_heads=num_heads)
 
-    model.to('cuda')
-    # model.count_params()
     model.to('cuda')
     # model.count_params()
     optimize = args.optimize == True
@@ -148,7 +147,7 @@ def main():
 
     scaler = torch.amp.grad_scaler.GradScaler(enabled=use_scaler)
 
-    batched_data = torch.randint(0, vocab_size, (batch_size, context_length)).to('cuda').to('cuda')
+    batched_data = torch.randint(0, vocab_size, (batch_size, context_length)).to('cuda')
 
     print("Warmup Stage")
     warmup_start = timeit.default_timer()
@@ -174,14 +173,18 @@ def main():
     optimize_timings = []
     total_timings = []
 
+
+    profile_memory = args.profile_memory == True
     print(f"Measuring for {measure_steps} steps")
+    if profile_memory:
+        torch.cuda.memory._record_memory_history(max_entries = 1000000)
     for _ in range(measure_steps):
         if optimize:
             optimizer.zero_grad()
         start_time = timeit.default_timer()
         with nvtx.range("Forward Pass"):
             with torch.amp.autocast_mode.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
-                output = model(batched_data)
+                output = model(batched_data)        
         torch.cuda.synchronize()
 
         forward_end = timeit.default_timer()
@@ -190,7 +193,7 @@ def main():
             scaler.scale(loss).backward()
         torch.cuda.synchronize()
         backward_end = timeit.default_timer()
-
+        
         if optimize:
             with nvtx.range("Optimizer step"):
                 scaler.unscale_(optimizer)
@@ -198,7 +201,7 @@ def main():
                 scaler.update()
                 torch.cuda.synchronize()
                 optimize_end = timeit.default_timer()
-
+        
         end_time = timeit.default_timer()
 
         forward_timings.append(forward_end - start_time)
@@ -220,6 +223,9 @@ def main():
     if optimize:
         optimize_mean = np.mean(optimize_timings)
         optimize_std = np.mean(optimize_timings)
+    if profile_memory:
+        torch.cuda.memory._dump_snapshot("profiles/memory_snapshot_no_backward.pickle")
+        torch.cuda.memory._record_memory_history(enabled=None)
     print("Measurement ends!")
     print(f"Takes {np.sum(total_timings):.2f} secs in total")
     print(f"For whole progress, the average time is {total_mean:.2f}, standard deviation is {total_std:.2f}.")
