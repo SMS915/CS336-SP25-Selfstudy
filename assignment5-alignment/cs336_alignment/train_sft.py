@@ -11,7 +11,7 @@ from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from torch.optim import AdamW
 from transformers.optimization import get_cosine_schedule_with_warmup 
 
-from cs336_alignment.sft import get_response_log_probs, sft_microbatch_train_step, log_generations
+from cs336_alignment.sft import get_response_log_probs, sft_microbatch_train_step, log_generations_transformer
 from cs336_alignment.utils import tokenize_prompt_and_output, robust_reward_fn
 
 class SFTDataset(Dataset):
@@ -203,10 +203,9 @@ def train(config_path: str, args):
             if total_micro_steps % grad_accum_steps == 0:
                 # 梯度裁剪
                 grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
-                
-                scheduler.step()
 
                 # 更新
+                scheduler.step()
                 optimizer.step()
                 optimizer.zero_grad()
                 
@@ -238,7 +237,7 @@ def train(config_path: str, args):
                     torch.cuda.empty_cache()
                     progress_bar.write(f"Step {global_step}: Running Evaluation...")
                     eval_max_tokens = config["evaluation"].get("max_new_tokens", 2048)
-                    eval_stats = log_generations(
+                    eval_stats = log_generations_transformer(
                         model=model,
                         tokenizer=tokenizer,
                         prompts=val_prompts,

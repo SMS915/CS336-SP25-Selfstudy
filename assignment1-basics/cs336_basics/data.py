@@ -38,15 +38,12 @@ class DataLoader:
         self.device = device
         self.token_dtype = token_dtype
 
-        # --- 在初始化时就映射文件并获取token ID ---
-        # 这种方式假设在DataLoader的生命周期内，文件不会改变
         if not os.path.exists(dataset_path):
             raise FileNotFoundError(f"数据集文件未找到: {dataset_path}")
 
         with open(self.dataset_path, "rb") as f:
             # 使用 mmap 进行内存映射
             mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-            # 从内存映射中创建Numpy数组，这是一个视图，不会消耗大量RAM
             self.token_ids = np.frombuffer(mm, dtype=self.token_dtype)
 
         self.num_tokens = len(self.token_ids)
@@ -59,20 +56,17 @@ class DataLoader:
 
         # 无限循环，持续产出批次
         while True:
-            # 1. 随机选择 batch_size 个起始点
-            # 确保切片不会越界
+            # 随机选择 batch_size 个起始点，并确保切片不会越界
             max_start_index = self.num_tokens - (self.context_length + 1)
             start_indices = rng.integers(0, max_start_index, size=self.batch_size)
 
-            # 2. 从这些起始点切片并堆叠
-            # 使用列表推导式高效地构建输入和目标序列
+            # 从起始点切片并堆叠
             # x[i : i + L]
             inputs_np = np.stack([self.token_ids[i: i + self.context_length] for i in start_indices])
             # y[i] = x[i+1]
             targets_np = np.stack([self.token_ids[i + 1: i + self.context_length + 1] for i in start_indices])
 
-            # 3. 转换为 PyTorch 张量并移动到指定设备
-            # 将numpy数组转换为torch张量时，指定为long类型（int64），这是嵌入层和损失函数期望的
+            # 转换为 PyTorch 张量并移动到指定设备，指定为long类型（int64）
             inputs = torch.from_numpy(inputs_np.astype(np.int64)).to(self.device)
             targets = torch.from_numpy(targets_np.astype(np.int64)).to(self.device)
 

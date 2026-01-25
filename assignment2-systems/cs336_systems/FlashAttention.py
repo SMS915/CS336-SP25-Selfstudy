@@ -40,7 +40,7 @@ class flash_attention_torch(torch.autograd.Function):
             for K_j, V_j in zip(K_blocks, V_blocks):                                  # B, H, B_k, d_k
                 prev_m_i = m_i
                 prev_l_i = L_i
-                S_ij = Q_i @ K_j.transpose(2, 3)/ math.sqrt(D_q)                      # (B, H, B_q, D_q) x (B, H, D_k(D_q), B_k) = B, H, B_q, B_k
+                S_ij = Q_i @ K_j.transpose(2, 3)/ math.sqrt(D_q)                      # B, H, B_q, B_k = (B, H, B_q, D_q) x (B, H, D_k(D_q), B_k)
                 m_curr = torch.max(S_ij, dim=-1, keepdim=True).values                 # B, H, B_q, 1
                 m_i = torch.maximum(prev_m_i, m_curr)                                 # B, H, B_q, 1
                 exp_max_diff = torch.exp(prev_m_i - m_i)                              # B, H, B_q, 1
@@ -64,6 +64,22 @@ class flash_attention_torch(torch.autograd.Function):
         ctx.save_for_backward(Q, K, V, O, L)
         return O
             
+@triton.jit
+def flash_fwd_kernel(
+        Q_ptr, K_ptr, V_ptr,
+        O_ptr, L_ptr,
+        stride_qb, stride_qq, stride_qd,
+        stride_kb, stride_kk, stride_kd,
+        stride_vb, stride_vk, stride_vd,
+        stride_ob, stride_oq, stride_od,
+        stride_lb, stride_lq,
+        N_QUERIES, N_KEYS,
+        scale,
+        D: tl.constexpr,
+        Q_TILE_SIZE: tl.constexpr,
+        K_TILE_SIZE: tl.constexpr
+    ):
+    
 
 
 

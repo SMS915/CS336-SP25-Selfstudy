@@ -280,12 +280,6 @@ def train_bpe_run(input_path : str,
 
         del pair_counts[greatest_pair]
 
-    # with open("vocab.pkl", "wb") as f:
-    #     pickle.dump(vocab, f)
-
-    # with open("merges.pkl", "wb") as f:
-    #     pickle.dump(merges, f)
-
     return vocab, merges
 
 

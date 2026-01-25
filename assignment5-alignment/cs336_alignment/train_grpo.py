@@ -18,7 +18,7 @@ from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from vllm import LLM, SamplingParams
 # 引入组件
 from cs336_alignment.sft import (
-    log_generations,
+    log_generations_transformer,
     log_generations_vllm,
     get_response_log_probs,
 )
@@ -28,9 +28,7 @@ from cs336_alignment.grpo import (
 )
 from cs336_alignment.utils import tokenize_prompt_and_output, robust_reward_fn
 
-# ==========================================
-# 1. 辅助函数：权重同步
-# ==========================================
+# 权重同步辅助函数
 def load_policy_into_vllm_instance(policy: torch.nn.Module, llm:LLM):
     state_dict = policy.state_dict()
     llm_model = llm.llm_engine.model_executor.driver_worker.model_runner.model
@@ -38,9 +36,7 @@ def load_policy_into_vllm_instance(policy: torch.nn.Module, llm:LLM):
     del state_dict
     torch.cuda.empty_cache()
 
-# ==========================================
-# 2. 数据集 (只包含 Prompt)
-# ==========================================
+# 数据集 (只包含 Prompt)
 class GRPODataset(Dataset):
     def __init__(self, data_path, prompt_template=None, start_sample=None, max_samples=None):
         self.prompts = []
@@ -109,9 +105,7 @@ class GRPODataset(Dataset):
             "ground_truth": self.ground_truths[idx]
         }
 
-# ==========================================
-# 3. 训练主循环
-# ==========================================
+# 训练主循环
 def train(config_path: str):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -185,8 +179,10 @@ def train(config_path: str):
         enforce_eager=True, # 显存优化技巧
         enable_prefix_caching=False,
     )
-    
+
+    load_policy_into_vllm_instance(policy, llm)
     sampling_params = SamplingParams(
+
         temperature=config["training"]["sampling_temperature"],
         min_tokens=config["training"]["sampling_min_tokens"],
         max_tokens=config["training"]["sampling_max_tokens"],
@@ -240,9 +236,9 @@ def train(config_path: str):
 
     print(f"当前最佳reward为{best_reward}")
     while global_step < n_grpo_steps:
-        # -----------------------------------------
-        # 第一阶段：采样
-        # -----------------------------------------
+    # -----------------------------------------
+    # 采样阶段
+    # -----------------------------------------
         try:
             batch = next(data_iter)
         except StopIteration:
@@ -251,9 +247,6 @@ def train(config_path: str):
             
         prompts = batch["prompt"]
         ground_truths = batch["ground_truth"]
-
-        # 同步权重到vllm，以确保训练和推理模型的一致性
-        load_policy_into_vllm_instance(policy, llm)
         
         # 生成 (vLLM)
         generation_outputs = llm.generate(prompts, sampling_params, use_tqdm=False)
@@ -292,7 +285,7 @@ def train(config_path: str):
         for r in all_responses:
             lengths.append(len(tokenizer.encode(r))) # 估算 Token 长度
         
-        # 1.5 准备训练数据
+        # 准备训练数据
         tokenized_batch = tokenize_prompt_and_output(
             prompt_strs=all_prompts,
             output_strs=all_responses,
@@ -309,11 +302,12 @@ def train(config_path: str):
         total_entropy = 0.0
         total_tokens = 0
         old_log_probs_list = []
-        token_entropy_list = []
+
+        # 由于vllm和transformers的前向算子不一致，在这里用transformer库重新计算log_prob
         policy.eval()
         with torch.no_grad():
             with torch.amp.autocast('cuda', dtype=torch.bfloat16):
-                # 分批计算
+                # 分批计算log_prob
                 for i in tqdm(range(0, len(input_ids), inference_batch_size), desc="Calculating Ref LogProbs"):
                     batch_input_ids = input_ids[i : i + inference_batch_size]
                     batch_labels = labels[i : i + inference_batch_size]
@@ -339,9 +333,9 @@ def train(config_path: str):
         wandb.log({"train/mean_token_entropy": mean_rollout_entropy}, commit=False)
         del total_entropy
 
-        # -----------------------------------------
-        # 优化阶段
-        # -----------------------------------------
+    # -----------------------------------------
+    # 优化阶段
+    # -----------------------------------------
         train_dataset_len = len(input_ids)
         # 打乱
         indices = torch.randperm(train_dataset_len)
@@ -408,7 +402,7 @@ def train(config_path: str):
         wandb.log({
             # 核心表现
             "train/reward_mean": reward_meta["mean_reward"],
-            "train/reward_std": raw_rewards.std().item(),    # 组间方差
+            "train/reward_std": raw_rewards.std().item(),     # 组间方差
             "train/format_rate": reward_meta["format_rate"],  # 格式正确率
             
             # 训练动态
@@ -425,14 +419,14 @@ def train(config_path: str):
             # Step
             "train/global_step": global_step
         })
+        # 同步权重到vllm，以确保on-policy RL时训练和推理模型的一致性
+        load_policy_into_vllm_instance(policy, llm)
         
         pbar.set_postfix(reward=reward_meta["mean_reward"])
 
         if global_step % config["evaluation"]["eval_every_steps"] == 0:
-            policy.eval()
-            
-            eval_max_tokens = config["evaluation"].get("max_new_tokens", 4096)
-            # eval_stats = log_generations(
+            # policy.eval()
+            # eval_stats = log_generations_transformer(
             #     model=policy,
             #     tokenizer=tokenizer,
             #     prompts=val_prompts,
@@ -441,10 +435,10 @@ def train(config_path: str):
             #     num_examples_to_log=config["evaluation"]["num_examples_to_log"],
             #     max_new_tokens=eval_max_tokens
             # )
+            # policy.train()
 
             eval_stats = log_generations_vllm(
                 llm=llm,  # 传入 vllm 实例
-                tokenizer=tokenizer,
                 prompts=val_prompts,
                 ground_truths=val_truths,
                 reward_fn=robust_reward_fn,
@@ -455,8 +449,7 @@ def train(config_path: str):
             # 合并日志
             eval_stats["train/global_step"] = global_step
             wandb.log(eval_stats, commit=False)
-            
-            policy.train() # 切回训练模式
+
             
         current_reward = reward_meta["mean_reward"]
         

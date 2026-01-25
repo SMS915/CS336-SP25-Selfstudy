@@ -66,7 +66,7 @@ def create_dataloader(config, is_train=True):
     loader = DataLoader(
         dataset,
         batch_size=config['batch_size'],
-        shuffle=False,      # 内部已经随机,不需要 shuffle=True，
+        shuffle=False,
         drop_last=True,     # 丢弃最后不足一个batch的数据
         # 多进程加载
         num_workers=8,      

@@ -10,8 +10,8 @@ from cs336_basics.BPE.bpe_fast import find_chunk_boundaries
 TOKENIZER_DIR = "BPE_File"
 DATA_DIR = "data"
 TOKEN_DTYPE = np.uint16
-NUM_WORKERS = 14 # 留一个核给主进程和IO
-CHUNK_MULTIPLIER = 4 # 任务块数量是核心数的倍数，让调度更灵活
+NUM_WORKERS = 14
+CHUNK_MULTIPLIER = 4
 
 def benchmark_worker(args):
     """
@@ -29,8 +29,7 @@ def benchmark_worker(args):
             
         # 解码
         text_chunk = bytes_data.decode('utf-8', errors='replace')
-        
-        # --- 核心差异点：调用原始 BPE 的 encode ---
+
         token_ids = tokenizer.encode(text_chunk)
         
         return len(token_ids)
@@ -71,7 +70,6 @@ def encode_worker(args):
 def main():
     print(f"--- 原始 BPE 性能基准测试 (Processers: {NUM_WORKERS}) ---")
 
-    # 1. 加载原始分词器
     print("正在加载原始 BPE 分词器...")
     t_load_start = time.time()
     tokenizer = NaiveBPETokenizer.from_files(
@@ -81,7 +79,6 @@ def main():
     )
     print(f"加载耗时: {time.time() - t_load_start:.2f}s")
 
-    # 2. 指定只测试 TinyStories
     files_to_process = [
         "TinyStoriesV2-GPT4-train.txt",
         "TinyStoriesV2-GPT4-valid.txt"
@@ -115,10 +112,8 @@ def main():
             tasks.append((input_path, boundaries[i], boundaries[i+1], tokenizer))
 
         total_tokens = 0
-        
-        # 并行执行 (无写入 IO)
+
         with mp.Pool(processes=NUM_WORKERS) as pool:
-            # 使用 imap_unordered 稍微快一点点，因为我们不在乎顺序，只在乎总数
             for count in pool.imap_unordered(benchmark_worker, tasks):
                 total_tokens += count
                 print(f"\r  - 已处理 Token: {total_tokens:,}", end="", flush=True)

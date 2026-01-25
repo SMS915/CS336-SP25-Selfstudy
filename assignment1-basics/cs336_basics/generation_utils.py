@@ -28,10 +28,8 @@ def generate_text(model: TransformerLM, tokenizer: BPETokenizer, prompt: str, ma
     with torch.no_grad():
         for _ in range(max_new_tokens):
             if input_tensor.size(1) > model.context_length:
-                # start_pos = input_tensor.size(1) - model.context_length
                 idx_cond = input_tensor[:, -model.context_length:]
             else:
-                # start_pos = 0
                 idx_cond = input_tensor
             current_len = idx_cond.size(1)
             token_positions = torch.arange(current_len, device=idx_cond.device).unsqueeze(0)

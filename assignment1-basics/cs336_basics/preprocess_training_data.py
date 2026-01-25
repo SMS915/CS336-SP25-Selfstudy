@@ -11,7 +11,7 @@ from cs336_basics.BPE.bpe_fast import BPETokenizer as FastTokenizer
 from cs336_basics.BPE.bpe_naive import BPETokenizer as NaiveTokenizer
 
 TOKEN_DTYPE = np.uint16  # 对于 GPT-2 级别的词表 (50257)，uint16 (0-65535) 足够且节省空间
-CHUNK_MULTIPLIER = 4     # 任务块数量是核心数的倍数，让调度更灵活
+CHUNK_MULTIPLIER = 4
 
 DATA_DIR = "data"
 DEFAULT_FILES = [
@@ -89,18 +89,15 @@ def process_file(input_path: str, tokenizer: FastTokenizer | NaiveTokenizer, num
     num_tasks = len(boundaries) - 1
     print(f"文件被切分为 {num_tasks} 个任务块。")
 
-    # 2. 准备任务参数
     tasks = []
     for i in range(num_tasks):
         start = boundaries[i]
         end = boundaries[i+1]
-        # 注意：tokenizer 对象会被序列化传给子进程
         tasks.append((input_path, start, end, tokenizer, i))
 
     total_tokens = 0
     
-    # 3. 启动多进程处理
-    # 使用 imap 保证结果有序返回 (order-preserving)，这对写入二进制文件至关重要
+    #多进程处理，使用 imap 保证结果有序返回 (order-preserving)，这对写入二进制文件至关重要
     print("启动多进程编码...")
     with mp.Pool(processes=num_workers) as pool:
         with open(output_path, 'wb') as f_out:

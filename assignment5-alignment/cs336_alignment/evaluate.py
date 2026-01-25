@@ -188,7 +188,6 @@ def parse_arguments() -> Dict[str, Any]:
     # 初始化最终配置字典
     final_config = {}
 
-    # 如果提供了 YAML 配置文件，先加载它
     if args.config:
         if not os.path.exists(args.config):
             raise FileNotFoundError(f"Config file not found: {args.config}")

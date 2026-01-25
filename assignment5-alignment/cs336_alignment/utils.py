@@ -15,7 +15,6 @@ def pertoken_entropy(logits: torch.Tensor) -> torch.Tensor:
 def optim_pertoken_entropy(logits: torch.Tensor) -> torch.Tensor:
     log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
     probs = torch.exp(log_probs)
-    # entr(x) = -x * log(x)
     entropy = torch.sum(torch.special.entr(probs), dim=-1)
     return entropy 
 

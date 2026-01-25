@@ -30,30 +30,24 @@ def run_training_for_profile():
     print("实际训练出的merges size: ", len(merges))
 
 if __name__ == "__main__":
-    # 创建 Profile 对象
     profiler = cProfile.Profile()
     
     print("开始性能分析...")
-    # 开启分析
     profiler.enable()
-    
-    # --- 运行代码 ---
+
     run_training_for_profile()
-    # ------------------
-    
     # 停止分析
     profiler.disable()
     print("分析结束。")
 
-    # --- 输出分析结果 ---
     # 将结果保存到文件，以便用可视化工具查看
     profiler.dump_stats("bpe_stats.prof")
     
     # 在控制台打印前 20 行最耗时的函数
-    stats = pstats.Stats(profiler).sort_stats('tottime') # 按自身运行时间排序
+    stats = pstats.Stats(profiler).sort_stats('tottime')
     print("\n=== Top 20 functions by internal time (tottime) ===")
     stats.print_stats(20)
     
-    stats = pstats.Stats(profiler).sort_stats('cumtime') # 按累积运行时间排序
+    stats = pstats.Stats(profiler).sort_stats('cumtime')
     print("\n=== Top 20 functions by cumulative time (cumtime) ===")
     stats.print_stats(20)

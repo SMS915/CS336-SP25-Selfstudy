@@ -137,7 +137,7 @@ def sft_microbatch_train_step(policy_log_probs: torch.Tensor, response_mask: tor
 
     return actual_loss, log
 
-def log_generations(
+def log_generations_transformer(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerBase,
     prompts: List[str],
@@ -320,7 +320,7 @@ def log_generations_vllm(
             print(f"Truth: {truth} | Reward: {metrics.get('reward'):.2f}")
             print("-" * 40)
 
-    # 7. 汇总统计
+    # 汇总统计
     stats = {
         "eval/reward": np.mean(total_rewards),
         "eval/format_reward": np.mean(format_rewards),

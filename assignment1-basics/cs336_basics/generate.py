@@ -27,7 +27,7 @@ def main():
 
     try:
         tokenizer = BPETokenizer.from_files(
-            vocab_filepath='BPE_File/gpt2_vocab.json', # 假设config中有这些路径
+            vocab_filepath='BPE_File/gpt2_vocab.json',
             merges_filepath='BPE_File/gpt2_merges.txt',
             special_tokens=["<|endoftext|>"]
         )
@@ -66,7 +66,6 @@ def main():
         
         except Exception as e:
             print(f"加载检查点失败: {e}")
-            # 打印详细错误栈以便调试
             import traceback
             traceback.print_exc()
             return

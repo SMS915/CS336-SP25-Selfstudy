@@ -10,12 +10,10 @@ try:
 except ImportError:
     raise ImportError("请确保 bpe_fast.py 存在且包含 BPETokenizer 类")
 
-# ================= 配置区域 =================
-# 在这里填入你的本地 JSONL 文件路径
+
 INPUT_FILE_PATH = "data/c4/c4_valid_full.jsonl"  # 支持 .jsonl 或解压后的文件
 # 输出文件路径
 OUTPUT_FILE_PATH = "c4_validation.bin"
-# ===========================================
 
 def main():
     parser = argparse.ArgumentParser()
@@ -30,7 +28,6 @@ def main():
         print(f"错误: 找不到输入文件: {args.input}")
         return
 
-    # 1. 加载 Tokenizer
     eot_token = "<|endoftext|>"
     print(f"Loading tokenizer from {args.vocab}...")
     tokenizer = BPETokenizer.from_files(
@@ -39,18 +36,15 @@ def main():
         special_tokens=[eot_token]
     )
 
-    # 2. 获取 EOT ID
     eot_encoded = tokenizer.encode(eot_token)
     assert len(eot_encoded) == 1, "Error: <|endoftext|> 被分词异常"
     eot_id = eot_encoded[0]
     print(f"EOT ID: {eot_id}")
 
-    # 3. 确定数据类型
     vocab_size = len(tokenizer.get_vocab())
     dtype = np.uint16 if vocab_size < 65535 else np.uint32
     print(f"Vocab size: {vocab_size}, dtype: {dtype}")
 
-    # 4. 处理文件
     buffer = []
     BUFFER_SIZE = 1_000_000 # 100万token写一次
     total_tokens = 0
@@ -67,30 +61,18 @@ def main():
         file_opener = open
         mode = 'r'
 
-    with file_opener(args.input, mode, encoding='utf-8') as f_in, \
-         open(args.output, "wb") as f_out:
-        
-        # 使用 tqdm 包装文件迭代器
-        # 这里的 total 未知（除非先扫一遍文件），所以显示的是 处理速度 (lines/s)
+    with file_opener(args.input, mode, encoding='utf-8') as f_in, open(args.output, "wb") as f_out:
         pbar = tqdm(f_in, desc="Tokenizing", unit="doc")
         
         for line in pbar:
             if not line.strip(): continue
             
             try:
-                # 1. 解析 JSON
                 data = json.loads(line)
                 text = data.get('text', '')
-                
                 if not text: continue
-
-                # 2. 编码
                 tokens = tokenizer.encode(text)
-
-                # 3. 追加 EOT
                 tokens.append(eot_id)
-
-                # 存入 buffer
                 buffer.extend(tokens)
                 doc_count += 1
                 

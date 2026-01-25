@@ -7,13 +7,11 @@ from typing import Iterable, List, Dict, Iterator, Set, Tuple, BinaryIO
 from collections import defaultdict, Counter
 from tqdm import tqdm  # 引入 tqdm
 
-# --- 正则与全局常量 ---
 BPAT = rb"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 Compiled_Byte_PAT = regex.compile(BPAT)
 Compiled_Str_PAT = regex.compile(PAT)
 
-# --- 辅助函数 (保持不变) ---
 
 def find_chunk_boundaries(
     filename: str | os.PathLike,
@@ -249,8 +247,6 @@ class BPETokenizer:
         self._b_special_tokens = []
         if special_tokens is not None:
             # 确保special tokens被添加到词表中（如果尚未存在）
-            # 注意：这里的逻辑假设输入vocab已经包含了训练好的tokens
-            # 如果是Train方法生成的实例，vocab通常已经包含了special tokens
             next_token_id = max(self._vocab.keys()) + 1 if self._vocab else 0
             for t in special_tokens:
                 b = t.encode('utf-8')
@@ -325,17 +321,14 @@ class BPETokenizer:
                 special_tokens_bytes = [s.encode('utf-8') for s in special_tokens]
                 num_processes = 14
                 
-                # 1. 计算文件边界
                 print("Step 1/3: 寻找分块边界...")
                 boundaries = find_chunk_boundaries(input_path, num_processes, split_token)
                 tasks = []
                 for start, end in zip(boundaries[:-1], boundaries[1:]):
                     tasks.append((input_path, start, end, [split_token])) # 这里的split_token用作切分
 
-                # 2. 并行预分词统计
                 print("Step 2/3: 并行预分词统计...")
                 global_word_freqs = Counter()
-                # 使用 tqdm 显示预分词进度 (虽然 chunksize=1 可能跳得快，但有反馈总是好的)
                 with multiprocessing.Pool(processes=num_processes) as pool:
                     results = list(tqdm(pool.imap(_process_chunk_worker, tasks, chunksize=1), 
                                       total=len(tasks), desc="Processing chunks"))
@@ -352,10 +345,7 @@ class BPETokenizer:
                     self._words.append(word)
                     self.index_word(word)
 
-                # 3. 合并循环
                 print("Step 3/3: 执行 BPE 合并...")
-                
-                # 初始化进度条
                 pbar = tqdm(total=vocab_size, initial=256, desc="Building Vocab")
                 
                 next_token_id = 256
@@ -579,7 +569,7 @@ class BPETokenizer:
         for token_id in token_ids:
             token_bytes = self._vocab.get(token_id)
             if token_bytes is None:
-                continue # Skip unknown tokens
+                continue
             decoded_bytes.append(token_bytes)
 
         return b"".join(decoded_bytes).decode(encoding='utf-8', errors='replace')

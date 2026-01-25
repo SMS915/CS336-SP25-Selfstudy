@@ -9,7 +9,6 @@ from vllm import LLM, SamplingParams
 from typing import List, Dict, Callable, Any
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 
-# 引用你 utils.py 中的函数
 from cs336_alignment.utils import format_prompt_for_instruct
 from cs336_alignment.drgrpo_grader import qwen_instruct_reward_fn
 
@@ -23,7 +22,6 @@ def load_data(file_path: str, max_samples: int = 0) -> List[Dict]:
     print(f"已加载数据: {len(examples)} 条")
     return examples
 
-# --- 修改后的格式化函数 ---
 def formatting_prompt_qwen(examples: List[Dict], tokenizer: Any) -> List[str]:
     """使用官方模板构建适合 Instruct 模型的 Prompt"""
     prompts = []
@@ -132,16 +130,16 @@ def run_evaluate(config: Dict[str, Any]):
     max_samples = config.get('max_samples', 0)
     examples = load_data(config['example_path'], max_samples)
     
-    # 1. 加载 Tokenizer (用于 Prompt 模板渲染)
+    # 加载 Tokenizer用于 Prompt 模板渲染
     tokenizer = AutoTokenizer.from_pretrained(config['model_path'], trust_remote_code=True)
 
     test_prompt = format_prompt_for_instruct("1+1=?", tokenizer)
     print(f"--- Prompt Sample ---\n{test_prompt}\n---------------------")
     
-    # 2. 格式化 Prompt
+    # 格式化 Prompt
     formatted_input = formatting_prompt_qwen(examples=examples, tokenizer=tokenizer)
     
-    # 3. 初始化 vLLM
+    # 初始化 vLLM
     llm = LLM(
         model=config['model_path'], 
         dtype="bfloat16", 
@@ -149,7 +147,6 @@ def run_evaluate(config: Dict[str, Any]):
         trust_remote_code=True,
     )
 
-    # 4. 适配 Qwen-Instruct 的采样参数
     # Qwen-Math-Instruct 官方推荐停止符
     stop_tokens = ["<|im_end|>", "<|endoftext|>", "\n\n\n"] 
     if config.get('use_r1_format', False):
@@ -195,7 +192,7 @@ def parse_arguments() -> Dict[str, Any]:
     parser.add_argument('--temperature', type=float, help='Sampling temperature.')
     parser.add_argument('--top_p', type=float, help='Top-p sampling.')
     
-    # 新增 Pass@K 参数
+    # Pass@K 参数
     parser.add_argument('--max_samples', type=int, help='Sampling temperature.')
     parser.add_argument('--pass_k', type=int, help='Number of attempts per problem (Pass@K).')
 
