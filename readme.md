@@ -1,4 +1,6 @@
-# CS336：大语言模型系统与对齐 (Stanford Spring 2025 实现与扩展)
+# **R1-Lite & LLM-Sys: High-Performance Reasoning & Data Pipeline**
+
+*An Extended Implementation based on Stanford CS336 (Spring 2025)*
 
 ![Course Status](https://img.shields.io/badge/Course-CS336_Spring_2025-cardinal)
 ![Language](https://img.shields.io/badge/Python-3.10%2B-blue)
@@ -6,15 +8,13 @@
 
 本仓库包含我在学习斯坦福 CS336 课程中的核心实现。
 
-**不仅仅是完成作业**，本项目旨在以**生产级标准**扩展课程内容。在完成标准教学要求的基础上，重点进行了系统的**性能优化**、关键架构的消融实验，并在消费级显卡上成功复现了 **GRPO** 与其部分变体。
+不仅仅是完成作业，本项目旨在扩展课程内容。在完成标准教学要求的基础上，重点进行了系统的性能优化、关键架构的**消融实验**，并在消费级显卡上成功复现了 **GRPO** 与其部分变体。
 
 **课程网站：** [https://stanford-cs336.github.io/spring2025/](https://stanford-cs336.github.io/spring2025/)
 
-*注：当前代码为功能完整的实验性原型。计划在2026年2月美赛后进行重构与模块化优化。*
 
-## 核心亮点与独创性工作
 
-*以下模块均在课程基础要求之上进行了深度扩展，是本项目的核心工程价值。*
+## 核心亮点
 
 ### 1. 复现 DeepSeek R1-Zero：单卡训练推理模型
 
@@ -26,11 +26,13 @@
 
 **核心贡献与洞察：**
 
-- **GRPO 算法实现：**摒弃了传统的 Value Model， 实现了**组相对策略优化 (GRPO)**，大幅节省了显存开销，并比对了 **"Dr. GRPO"** 改进策略（去除 Advantage 标准化和响应长度偏差），
+- **GRPO 算法实现：**摒弃了传统的 Value Model， 实现了**组相对策略优化 (GRPO)**，大幅节省了显存开销，并比对了**"Dr. GRPO"** 改进策略（去除 Advantage 标准化和响应长度偏差），
 
 - **“白金数据”定律：** 发现 **3,000 条高质量/格式清洗数据** 的训练效果远超 25,000 条含噪数据。
 
 - **思维链 (CoT) 演化观测：** 观测并记录了模型思维链长度的“倒 U 型”进化过程——从Baseline的直觉式解答，到SFT“机械模仿”导致的冗长重复，最终通过RL收敛为“内化推理”的高效精简。
+
+- **数据泄露观测**：观测到基座模型在AIME24和AIME25数据集上的反常表现，结合具体推理链证实了模型预训练阶段存在数据泄露现象。
 
   
 
@@ -67,23 +69,24 @@
 - **BPE 分词器工程级重构：** 在朴素BPE分词器实现的基础逻辑上，基于 **倒排索引**、**最小堆** 和 **多进程并行** 重写了 BPE 算法，实现了从“玩具级”到“工业级”的跨越：
   - **训练效率 (Training):** 在 **10GB+ 全量 OpenWebText** 语料上，仅耗时 **8分30秒** 即完成 32k 词表的构建（相比之下，朴素算法处理 100MB 语料需 50分钟，在大规模数据上实现了数量级的性能飞跃）。
   - **编码吞吐 (Encoding):** 在 15 vCPU 环境下，对 **27亿 Token (11GB)** 的文本实现了 **15.5M Tokens/s** 的超高吞吐量。
+  
 - **架构演进消融实验：**深度对比 RoPE vs. Sinusoidal、SwiGLU vs. ReLU、RMSNorm vs. LayerNorm，验证了现代架构（Llama-style）的收敛优势。
 
+  
 
+## 项目架构
 
-## 课程模块与进度
+虽然底层基于课程框架，但本项目已重构为三个核心独立子系统：
 
-本项目严格遵循 CS336 的课程体系，覆盖了 LLM 从预训练到对齐的全生命周期。
-
-| 模块     | 作业 (Assignment)   | 核心内容                                                     |   状态   |
-| -------- | :------------------ | :----------------------------------------------------------- | :------: |
-| 基础架构 | **A1：Basics**      | **构建 Transformer**<br/>• 手写 Attention, RoPE, RMSNorm, SwiGLU<br/>• 实现 BPE 分词器与 AdamW 优化器<br/>• Top-p / Temperature 采样生成 | &#x2705; |
-| 系统优化 | **A2：Systems**     | **并行与效率**<br/>• 混合精度训练 (AMP)<br/>• 分布式数据并行 (DDP)<br/>• Kernel 优化 | &#9744;  |
-| 扩展定律 | **A3：Scaling**$^*$ | **Scaling Laws**<br/>• 计算预算分配与损失预测                |    ❌     |
-| 数据工程 | **A4：Data**        | **预训练语料处理**<br/>• Resiliparse 提取 WARC/WET<br/>• 多维度质量分类，包括自定义的质量分类器<br/>• MinHash LSH 去重流水线 | &#x2705; |
-| 对齐与RL | **A5：Alignment**   | **推理与强化学习**<br/>• 数学推理任务评测 (MATH)<br/>• 监督微调 (SFT)<br/>• 强化学习 (GRPO/R1-Zero) | &#x2705; |
-
-*注：Assignment 3 因需要斯坦福内部 API 无法完成；Assignment 2 正在规划中。*
+*   **Core / Transformer-From-Scratch** (`./assignment1-basics`):
+    *   手写 Decoder-only Transformer (RoPE, RMSNorm, SwiGLU)
+    *   高性能 BPE 分词器 
+*   **Data / Pipeline** (`./assignment4-data`):
+    *   TB级 Common Crawl 处理流水线
+    *   MinHash LSH 去重与质量过滤
+*   **Alignment / R1-Lite-Reasoning** (`./assignment5-alignment`):
+    *   DeepSeek-R1 复现 (SFT + GRPO)
+    *   Math Reasoning 强化学习与评估
 
 ---
 
@@ -94,7 +97,6 @@
 ```bash
 # 1. 安装环境与依赖
 pip install uv
-
 
 # 在对应文件夹同步环境与运行特定作业的测试
 cd ./assignment1-data
