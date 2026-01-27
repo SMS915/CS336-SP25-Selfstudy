@@ -1,0 +1,20 @@
+# 数据集路径
+example_path: "data/AMC/AMC12.jsonl"
+
+# Prompt 模板路径
+prompt_path: "prompts/r1_zero.prompt"
+
+# 结果保存路径
+output_path: "results/drgrpo_curriculum_best/drgrpo_curriculum_best_amc_pass_64.jsonl"
+
+model_path: "checkpoints/drgrpo_curriculum/checkpoint-step-300"
+
+max_tokens: 4096
+
+temperature: 0.7
+
+top_p: 0.95
+
+max_samples: 0
+
+pass_k: 64

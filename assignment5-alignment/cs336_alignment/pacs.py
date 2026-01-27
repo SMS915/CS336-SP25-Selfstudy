@@ -23,6 +23,7 @@ def compute_reward_proxy(
     return beta * (policy_log_probs - ref_log_probs)
 
 def compute_pacs_score(reward_proxy: torch.Tensor, group_size: int):
+    # print(f"proxy size: {reward_proxy.shape}")
     assert reward_proxy.dim() == 1 and reward_proxy.shape[-1] % group_size == 0
 
     proxy_grouped = reward_proxy.view(-1, group_size)
@@ -38,17 +39,12 @@ def get_raw_rewards(
     repeated_ground_truths: List[str], 
 ) -> tuple[torch.Tensor, Dict[str, float]]:
     """
-    计算基于组归一化（Group Normalization）的奖励优势（Advantage）。
-
-    该函数实现了 GRPO (Group Relative Policy Optimization) 的核心逻辑：
-    对同一提示（Prompt）生成的多个回复（Group）进行打分，并计算每个回复相对于组内均值的优势。
+    从一组模型的响应中根据奖励函数得到每个响应的 reward。
 
     Args:
         reward_fn (Callable): 奖励函数，接受 (response, ground_truth) 并返回包含 'reward' 键的字典。
         rollout_responses (List[str]): 模型生成的回复列表，总长度应为 batch_size * group_size。
         repeated_ground_truths (List[str]): 对应的标准答案列表，长度与 rollout_responses 一致。
-        group_size (int): 每个组包含的样本数量 (GRPO 中的 G)。
-        advantage_eps (float): 防止除以零的小常数。
 
     Returns:
         tuple[torch.Tensor, Dict[str, float]]:
@@ -83,27 +79,29 @@ def pacs_microbatch_train_step(
     ):
     
     """
-    执行 GRPO 的单个微批次（Micro-batch）训练步骤。
+    执行 PACS 的单个微批次（Micro-batch）训练步骤。
 
-    计算损失，处理掩码，进行反向传播。
+    计算奖励代理和RLOO风格的类优势得分，并进行反向传播。
 
     Args:
         policy_log_probs (torch.Tensor): 模型生成的对数概率。
+        old_log_probs (torch.Tensor | None): 参考模型的对数概率。
         response_mask (torch.Tensor): 掩码，用于指示哪些 token 是生成的回复（loss 仅在回复部分计算）。
         gradient_accumulation_steps (int): 梯度累积步数，用于归一化 loss。
-        loss_type (Literal): 损失函数类型。
+        
         raw_rewards (torch.Tensor | None): 原始奖励。
-        advantages (torch.Tensor | None): 优势函数。
-        old_log_probs (torch.Tensor | None): 参考模型的对数概率。
-        cliprange (float | None): 裁剪范围。
 
     Returns:
         tuple:
             - actual_loss (torch.Tensor): 用于反向传播的最终标量损失。
-            - metadata (Dict): 包含损失数值和其他监控指标的字典。
+            - approx_kl (torch.Tensor): 对KL散度的k2估计。
     """
     masked_policy_log_probs = policy_log_probs * response_mask
     masked_old_log_probs = old_log_probs * response_mask
+    with torch.no_grad():
+        log_ratio =  (policy_log_probs - old_log_probs.detach()).to(torch.float32)
+        approx_kl = (log_ratio ** 2).mean() * 0.5
+        del log_ratio
 
     reward_proxy = compute_reward_proxy(masked_policy_log_probs, masked_old_log_probs, beta).sum(dim=-1)
 
@@ -115,7 +113,7 @@ def pacs_microbatch_train_step(
     
     if positive_count:
         pos_weight = negative_count / positive_count
-        pos_weight_tensor = torch.Tensor([pos_weight], device=score.device)
+        pos_weight_tensor = torch.tensor([pos_weight], device=score.device, dtype=score.dtype)
         bce_with_logits_loss = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight_tensor)
     else:
         bce_with_logits_loss = torch.nn.BCEWithLogitsLoss()
@@ -126,6 +124,6 @@ def pacs_microbatch_train_step(
 
     actual_loss.backward()
 
-    metadata = {'loss': loss.detach()}
-    
-    return actual_loss, metadata
+    actual_kl = approx_kl / gradient_accumulation_steps
+
+    return actual_loss, actual_kl

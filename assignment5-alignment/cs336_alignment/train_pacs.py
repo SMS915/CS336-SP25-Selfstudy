@@ -4,6 +4,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 import re
 import yaml
+import random
 import argparse
 import torch
 import json
@@ -87,7 +88,7 @@ class GRPODataset(Dataset):
                     print(f"解析第 {i} 行出错: {e}")
                     continue
                     
-        print(f"加载完成: {len(self.prompts)} 条样本用于 GRPO.")
+        print(f"加载完成: {len(self.prompts)} 条样本用于 PACS.")
 
     def _extract_answer(self, text: str) -> str:
         """从 SFT/RL 风格的文本中提取 <answer> 标签内的内容"""
@@ -119,6 +120,9 @@ def train(config_path: str):
             resume="must",    # 强制续训，如果ID不存在会报错
             config=config
         )
+
+    seed = config["training"].get("seed", 42)
+    random.seed(seed)
     
     device = "cuda"
     output_dir = config["training"]["output_dir"]
@@ -224,7 +228,7 @@ def train(config_path: str):
     )
 
     print(f"从第{global_step}步继续训练")
-    pbar = tqdm(total=n_grpo_steps, desc="GRPO Steps")
+    pbar = tqdm(total=n_grpo_steps, desc="PACS Steps")
     pbar.update(global_step)
     # 无限循环数据，直到达到 n_grpo_steps
     data_iter = iter(dataloader)
@@ -298,7 +302,8 @@ def train(config_path: str):
         with torch.no_grad():
             with torch.amp.autocast('cuda', dtype=torch.bfloat16):
                 # 分批计算log_prob
-                for i in tqdm(range(0, len(input_ids), inference_batch_size), desc="Calculating Ref LogProbs"):
+                # for i in tqdm(range(0, len(input_ids), inference_batch_size), desc="Calculating Ref LogProbs"):
+                for i in range(0, len(input_ids), inference_batch_size):
                     batch_input_ids = input_ids[i : i + inference_batch_size]
                     batch_labels = labels[i : i + inference_batch_size]
                     batch_mask = attention_mask[i: i + inference_batch_size]
@@ -307,7 +312,7 @@ def train(config_path: str):
                                                             batch_input_ids,
                                                             batch_mask,
                                                             batch_labels,
-                                                            return_token_entropy=True)
+                                                            return_token_entropy=False)
 
                     if "token_entropy" in log_probs_dict:
                         entropy_sum = (log_probs_dict["token_entropy"] * batch_mask).sum().item()
@@ -329,6 +334,14 @@ def train(config_path: str):
         train_dataset_len = len(input_ids)
         # 打乱
         indices = torch.randperm(train_dataset_len)
+        assert train_dataset_len % group_size == 0, f"数据集长度 {train_dataset_len} 必须是 group_size {group_size} 的倍数"
+        assert micro_batch_size % group_size == 0, f"micro_batch_size {micro_batch_size} 必须是 group_size {group_size} 的倍数"
+
+        num_groups = train_dataset_len // group_size
+        group_indices = torch.randperm(num_groups) # 打乱组的顺序
+
+        # 将组索引映射回样本索引，确保每组内的 G 个样本依然连续
+        indices = (group_indices.unsqueeze(-1) * group_size + torch.arange(group_size)).flatten()
         
         policy.train()
         optimizer.zero_grad()
@@ -336,9 +349,8 @@ def train(config_path: str):
         for epoch_idx in range(epochs_per_batch):
             assert train_dataset_len % micro_batch_size == 0
             actual_accum_steps = train_dataset_len // micro_batch_size
-            epoch_metrics = {"loss": [], "clip_ratio": [], "approx_kl": []}
+            epoch_metrics = {"loss": [], "approx_kl": []}
             current_epoch_loss = 0.0
-            current_epoch_clip = 0.0
             current_epoch_kl = 0.0
 
             for i in range(0, train_dataset_len, micro_batch_size):
@@ -358,8 +370,8 @@ def train(config_path: str):
                     mb_log_probs_dict = get_response_log_probs(policy, mb_input_ids, mb_attention_mask, mb_labels)
                     mb_policy_log_probs = mb_log_probs_dict["log_probs"]
 
-                    # GRPO Backward
-                    loss, step_metrics = pacs_microbatch_train_step(
+                    # PACS Backward
+                    loss, approx_kl = pacs_microbatch_train_step(
                         policy_log_probs=mb_policy_log_probs,
                         old_log_probs=mb_old_lp,
                         response_mask=mb_mask,
@@ -370,8 +382,7 @@ def train(config_path: str):
                     )
 
                 current_epoch_loss += loss.item()
-                current_epoch_clip += step_metrics["clip_ratio"].item() / actual_accum_steps
-                current_epoch_kl += step_metrics["approx_kl"].item() / actual_accum_steps
+                current_epoch_kl += approx_kl.item()
 
             # End of Micro-batches -> Update
             grad_norm = torch.nn.utils.clip_grad_norm_(policy.parameters(), config["training"]["max_grad_norm"])
@@ -379,7 +390,6 @@ def train(config_path: str):
             optimizer.step()
             optimizer.zero_grad()
             epoch_metrics["loss"].append(current_epoch_loss)
-            epoch_metrics["clip_ratio"].append(current_epoch_clip)
             epoch_metrics["approx_kl"].append(current_epoch_kl)
         current_lr = scheduler.get_last_lr()[0]
         global_step += 1
@@ -393,6 +403,7 @@ def train(config_path: str):
             
             # 训练动态
             "train/loss": np.mean(epoch_metrics["loss"]),
+            "train/approx_kl": np.mean(epoch_metrics["approx_kl"]),
             "train/lr": current_lr,
             "train/grad_norm": grad_norm.item(),
             
