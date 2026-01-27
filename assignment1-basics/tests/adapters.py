@@ -591,7 +591,7 @@ def run_load_checkpoint(
     """
     return load_checkpoint(src, model, optimizer)
 
-from cs336_basics.bpe_fast import BPETokenizer
+from cs336_basics.BPE.bpe_fast import BPETokenizer
 
 def get_tokenizer(
     vocab: dict[int, bytes],
