@@ -1,0 +1,18 @@
+
+example_path: "data/MATH/test_split.jsonl"
+
+prompt_path: "prompts/r1_zero.prompt"
+
+output_path: "results/pacs/pacs_pass_8.jsonl"
+
+model_path: "checkpoints/pacs/checkpoint-step-450"
+
+max_tokens: 4096
+
+temperature: 0.7
+
+top_p: 0.95
+
+max_samples: 5000
+
+pass_k: 8

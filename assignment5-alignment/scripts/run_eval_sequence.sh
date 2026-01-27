@@ -1,17 +1,23 @@
 #!/bin/bash
 # 定义日志文件
-LOG_FILE="logs/evaluate-drgrpo-math-test-pass-64.log"
+LOG_FILE="logs/evaluate-pacs.log"
 
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-CONFIG_DIR="configs/eval/drgrpo"
+CONFIG_DIR="configs/eval/pacs"
 
 EVAL_SCRIPT="cs336_alignment/evaluate_passk.py"
 
 # EVAL_SCRIPT="cs336_alignment/evaluate_instruct_passk.py"
 
 tasks=(
-    "evaluate_drgrpo_aime24_pass64.yaml"
+    evaluate_pacs_gsm8k_pass1.yaml
+    evaluate_pacs_aime24_pass64.yaml
+    evaluate_pacs_aime25_pass64.yaml
+    evaluate_pacs_amc_pass64.yaml
+    evaluate_pacs_gsm8k_pass1.yaml
+    evaluate_pacs_math500_pass64.yaml
+    evaluate_pacs_MathTest_pass8.yaml
 )
 
 # "evaluate_drgrpo_aime25_pass64.yaml"
