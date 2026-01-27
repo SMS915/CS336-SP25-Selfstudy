@@ -119,7 +119,7 @@ def sft_microbatch_train_step(policy_log_probs: torch.Tensor, response_mask: tor
     # masked_loss = response_mask * pertoken_loss
 
     # 计算有效 token 的总 Loss，并按常数归一化
-    loss_sum  = masked_normalize(pertoken_loss, response_mask, normalize_constant=normalize_constant,dim=None)
+    loss_sum = masked_normalize(pertoken_loss, response_mask, normalize_constant=normalize_constant,dim=None)
 
     # 根据 batch_size 和 梯度累积步数 进一步平均
     actual_loss = loss_sum / gradient_accumulation_steps / batch_size

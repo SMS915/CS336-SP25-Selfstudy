@@ -22,9 +22,9 @@ from cs336_alignment.sft import (
     log_generations_vllm,
     get_response_log_probs,
 )
-from cs336_alignment.grpo import (
-    compute_group_normalized_rewards,
-    grpo_microbatch_train_step
+from cs336_alignment.pacs import (
+    pacs_microbatch_train_step,
+    get_raw_rewards
 )
 from cs336_alignment.utils import tokenize_prompt_and_output, robust_reward_fn
 
@@ -182,7 +182,6 @@ def train(config_path: str):
 
     load_policy_into_vllm_instance(policy, llm)
     sampling_params = SamplingParams(
-
         temperature=config["training"]["sampling_temperature"],
         min_tokens=config["training"]["sampling_min_tokens"],
         max_tokens=config["training"]["sampling_max_tokens"],
@@ -199,7 +198,6 @@ def train(config_path: str):
         start_sample=config["data"]["start_sample"],
         max_samples=config["data"]["max_samples"]
     )
-    # Batch Size = rollout_batch_size / group_size
     questions_per_batch = config["training"]["rollout_batch_size"] // config["training"]["group_size"]
     
     dataloader = DataLoader(dataset, batch_size=questions_per_batch, shuffle=False, drop_last=True)
@@ -208,10 +206,8 @@ def train(config_path: str):
     n_grpo_steps = config["training"]["n_grpo_steps"]
     micro_batch_size = config["training"]["micro_batch_size"]
     epochs_per_batch = config["training"]["epochs_per_rollout_batch"]
-    clip_range = config["training"]["clip_range"]
-    normalize_by_std = config["training"].get("normalize_by_std", True)
-    remove_length_norm = config["training"].get("remove_length_norm", False)
-    fixed_norm_length = config["training"].get("fixed_norm_length", 2048)
+    group_size = config["training"]["group_size"]
+    beta = config["training"].get("beta", 1.0)
    
     start_step = config["model"]["start_step"]
     global_step = start_step if start_step is not None else 0
@@ -266,19 +262,13 @@ def train(config_path: str):
             all_ground_truths.extend(q_truths)
             
         # 计算奖励 (Reward & Advantage)
-        advantages, raw_rewards, reward_meta = compute_group_normalized_rewards(
+        raw_rewards, reward_meta = get_raw_rewards(
             reward_fn=robust_reward_fn,
             rollout_responses=all_responses,
-            repeated_ground_truths=all_ground_truths,
-            group_size=config["training"]["group_size"],
-            advantage_eps=config["training"]["advantage_eps"],
-            normalize_by_std=normalize_by_std,
-            length_panelty=config["training"].get("length_panelty", False)
+            repeated_ground_truths=all_ground_truths
         )
         # 转为 Tensor 并移到 GPU
-        advantages = advantages.to(device).unsqueeze(1)
-        raw_rewards = raw_rewards.to(device).unsqueeze(1)
-
+        raw_rewards = raw_rewards.to(device)
 
         lengths = []
         
@@ -358,7 +348,7 @@ def train(config_path: str):
                 mb_input_ids = input_ids[mb_idx]
                 mb_labels = labels[mb_idx]
                 mb_mask = response_mask[mb_idx]
-                mb_adv = advantages[mb_idx]
+                mb_rewards = raw_rewards[mb_idx]
                 mb_old_lp = old_log_probs[mb_idx]
                 mb_attention_mask = attention_mask[mb_idx]
                 # mb_rewards = raw_rewards[mb_idx] # 如果是 no_baseline 需要这个
@@ -369,17 +359,14 @@ def train(config_path: str):
                     mb_policy_log_probs = mb_log_probs_dict["log_probs"]
 
                     # GRPO Backward
-                    loss, step_metrics = grpo_microbatch_train_step(
+                    loss, step_metrics = pacs_microbatch_train_step(
                         policy_log_probs=mb_policy_log_probs,
+                        old_log_probs=mb_old_lp,
                         response_mask=mb_mask,
                         gradient_accumulation_steps=actual_accum_steps,
-                        loss_type=config["training"]["loss_type"],
-                        advantages=mb_adv,
-                        old_log_probs=mb_old_lp,
-                        cliprange=clip_range,
-                        remove_length_norm=remove_length_norm,
-                        fixed_norm_length = fixed_norm_length
-                        # raw_rewards=mb_rewards
+                        raw_rewards=mb_rewards,
+                        group_size=group_size,
+                        beta=beta
                     )
 
                 current_epoch_loss += loss.item()
@@ -406,8 +393,6 @@ def train(config_path: str):
             
             # 训练动态
             "train/loss": np.mean(epoch_metrics["loss"]),
-            "train/clip_fraction": np.mean(epoch_metrics["clip_ratio"]),
-            "train/approx_kl": np.mean(epoch_metrics["approx_kl"]),
             "train/lr": current_lr,
             "train/grad_norm": grad_norm.item(),
             
