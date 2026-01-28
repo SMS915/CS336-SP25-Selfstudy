@@ -5,7 +5,7 @@ example_path: "data/AIME/aime2024_test.jsonl"
 prompt_path: "prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/pacs/pacs_aime25_pass_64.jsonl"
+output_path: "results/pacs/pacs_aime24_pass_64.jsonl"
 
 model_path: "checkpoints/pacs/checkpoint-step-450"
 

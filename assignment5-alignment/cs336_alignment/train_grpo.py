@@ -182,7 +182,6 @@ def train(config_path: str):
 
     load_policy_into_vllm_instance(policy, llm)
     sampling_params = SamplingParams(
-
         temperature=config["training"]["sampling_temperature"],
         min_tokens=config["training"]["sampling_min_tokens"],
         max_tokens=config["training"]["sampling_max_tokens"],
