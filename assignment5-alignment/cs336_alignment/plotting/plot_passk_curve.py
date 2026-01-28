@@ -10,12 +10,13 @@ def plot_pass_k_curve(results_list, task_name: str, show_k_list=[1, 2, 4, 8], te
     # --- 1. 定义专业配色与样式配置 ---
     # 颜色字典：确保不同实验版本颜色固定，方便对比
     STYLE_CONFIG = {
-        'grpo_without_std_norm': {'color': '#E11D48', 'z': 20, 'lw': 2.0, 'marker': 's', 'alpha': 1.0},  # 核心实验：玫瑰红
-        'instruct': {'color': '#0F172A', 'z': 15, 'lw': 2.0, 'marker': 'D', 'alpha': 0.9, 'ls': '--'},  # 官方：深蓝黑
-        'drgrpo': {'color': '#8B5CF6', 'z': 10, 'lw': 2.2, 'marker': 'p', 'alpha': 0.8},  # 紫色
-        'grpo': {'color': '#F59E0B', 'z': 10, 'lw': 2.2, 'marker': 'o', 'alpha': 0.8},  # 琥珀色
+        'grpo_without_std_norm': {'color': '#8B5CF6', 'z': 18, 'lw': 2.0, 'marker': 's', 'alpha': 1.0},  # 紫色
+        'instruct': {'color': '#0F172A', 'z': 15, 'lw': 2.0, 'marker': 'D', 'alpha': 0.9, 'ls': '--'},  # 深蓝黑
+        'drgrpo': {'color': '#E11D48', 'z': 20, 'lw': 2.2, 'marker': 'p', 'alpha': 0.8},  # 玫瑰红
+        'grpo': {'color': '#F59E0B', 'z': 10, 'lw': 2.0, 'marker': 'o', 'alpha': 0.8},  # 琥珀色
         'sft': {'color': '#3B82F6', 'z': 8, 'lw': 2.0, 'marker': 'v', 'alpha': 0.7},  # 蓝色
         'baseline': {'color': '#94A3B8', 'z': 5, 'lw': 1.8, 'marker': 'h', 'alpha': 0.6},  # 灰色
+        'pacs': {'color': '#009182', 'z': 22, 'lw': 2.0, 'marker': '^', 'alpha': 0.8} # 墨绿色
     }
 
     plt.figure(figsize=(12, 7), dpi=300)
@@ -125,9 +126,9 @@ def plot_pass_k_curve(results_list, task_name: str, show_k_list=[1, 2, 4, 8], te
     save_dir = os.path.join(os.getcwd(), 'asset/')
     os.makedirs(save_dir, exist_ok=True)
     if text:
-        save_name = f'{task_name}_Pass@{last_k}对比图.png'
+        save_name = f'{task_name}_Pass@{last_k}对比图（含PACS）.png'
     else:
-        save_name = f'{task_name}_Pass@{last_k}对比图-无标注.png'
+        save_name = f'{task_name}_Pass@{last_k}对比图（含PACS）-无标注.png'
     save_path = os.path.join(save_dir, save_name)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()  # 释放内存
@@ -154,6 +155,10 @@ if __name__ == "__main__":
     grpo_math_test_pass8_result = {'grpo': (0.598, 0.721, 0.769, 0.795, 0.814, 0.825, 0.838, 0.847)}
 
     drgrpo_math_test_pass8_result = {'drgrpo': (0.585, 0.714, 0.760, 0.791, 0.809, 0.823, 0.835, 0.844)}
+
+
+    pacs_math_test_pass8_results = {'pacs': (0.585, 0.710, 0.762, 0.791, 0.812, 0.826, 0.836, 0.843)}
+
 
     baseline_math500_pass64_result = {'baseline': (0.144, 0.262, 0.320, 0.414, 0.482, 0.524, 0.578, 0.614,
                                                    0.642, 0.664, 0.700, 0.710, 0.714, 0.734, 0.750, 0.758,
@@ -410,11 +415,48 @@ if __name__ == "__main__":
                                                                      0.267, 0.267, 0.267, 0.300, 0.300, 0.333, 0.333, 0.333,
                                                                      0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333)}
 
-    math_test_pass8_results  = [baseline_math_test_pass8_result, sft_math_test_pass8_result, grpo_without_std_norm_math_test_pass8_result, grpo_math_test_pass8_result, drgrpo_math_test_pass8_result, instruct_math_test_pass8_result]
-    math500_pass64_results   = [baseline_math500_pass64_result, sft_math500_pass64_result, grpo_math500_pass64_result, grpo_without_std_norm_math500_pass64_result, drgrpo_math500_pass64_result, drgrpo_curriculum_math500_pass64_results, instruct_math500_pass64_result]
-    amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, grpo_AMC12_pass64_result, grpo_without_std_norm_AMC12_pass64_result, drgrpo_amc_pass64_result,drgrpo_curriculum_amc12_pass64_results, instruct_AMC_12_pass64_result]
-    aime_2025_pass64_results = [baseline_aime25_pass64_result, sft_aime25_pass64_result, grpo_aime25_pass64_result, grpo_without_std_norm_aime25_pass64_result, drgrpo_aime25_pass64_result, instruct_aime25_pass64_result]
-    aime_2024_pass64_results = [baseline_aime24_pass64_result, sft_aime24_pass64_result, grpo_aime24_pass64_result, grpo_without_std_norm_aime24_pass64_result, drgrpo_aime24_pass64_result,drgrpo_curriculum_aime24_pass64_results, instruct_aime24_pass64_result]
+    pacs_aime24_pass64_results = {'pacs': (0.033, 0.067, 0.100, 0.133, 0.167, 0.167, 0.167, 0.200,
+                                           0.200, 0.233, 0.267, 0.267, 0.267, 0.267, 0.300, 0.300,
+                                           0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300, 0.300,
+                                           0.300, 0.300, 0.333, 0.367, 0.367, 0.367, 0.367, 0.367,
+                                           0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367,
+                                           0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367, 0.367,
+                                           0.400, 0.400, 0.400, 0.400, 0.400, 0.400, 0.400, 0.400,
+                                           0.400, 0.400, 0.400, 0.400, 0.400, 0.400, 0.400, 0.400)}
+
+    pacs_aime25_pass64_results = {'pacs': (0.067, 0.100, 0.100, 0.167, 0.200, 0.200, 0.200, 0.200,
+                                           0.200, 0.200, 0.200, 0.200, 0.200, 0.233, 0.267, 0.267,
+                                           0.267, 0.267, 0.267, 0.300, 0.300, 0.300, 0.300, 0.300,
+                                           0.300, 0.300, 0.300, 0.333, 0.333, 0.333, 0.333, 0.333,
+                                           0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333,
+                                           0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333,
+                                           0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333,
+                                           0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333, 0.333)}
+
+    pacs_amc_pass64_results = {'pacs':    (0.241, 0.398, 0.434, 0.494, 0.518, 0.530, 0.566, 0.566,
+                                           0.578, 0.578, 0.590, 0.602, 0.602, 0.614, 0.663, 0.663,
+                                           0.675, 0.675, 0.675, 0.675, 0.675, 0.699, 0.699, 0.699,
+                                           0.699, 0.699, 0.699, 0.699, 0.699, 0.699, 0.699, 0.699,
+                                           0.711, 0.723, 0.723, 0.723, 0.723, 0.723, 0.723, 0.723,
+                                           0.723, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735, 0.735,
+                                           0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747,
+                                           0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747, 0.747)}
+
+    pacs_math500_pass64_results = {'pacs': (0.562, 0.684, 0.732, 0.778, 0.792, 0.808, 0.824, 0.834,
+                                            0.850, 0.850, 0.854, 0.856, 0.862, 0.868, 0.874, 0.876,
+                                            0.878, 0.880, 0.884, 0.886, 0.886, 0.890, 0.894, 0.896,
+                                            0.900, 0.902, 0.904, 0.904, 0.906, 0.906, 0.908, 0.908,
+                                            0.908, 0.908, 0.910, 0.912, 0.914, 0.914, 0.920, 0.920,
+                                            0.920, 0.920, 0.920, 0.922, 0.924, 0.924, 0.924, 0.924,
+                                            0.924, 0.924, 0.926, 0.926, 0.926, 0.928, 0.928, 0.928,
+                                            0.928, 0.928, 0.928, 0.930, 0.930, 0.930, 0.930, 0.930)}
+
+
+    math_test_pass8_results  = [baseline_math_test_pass8_result, sft_math_test_pass8_result, grpo_without_std_norm_math_test_pass8_result, grpo_math_test_pass8_result, drgrpo_math_test_pass8_result, instruct_math_test_pass8_result, pacs_math_test_pass8_results]
+    math500_pass64_results   = [baseline_math500_pass64_result, sft_math500_pass64_result, grpo_math500_pass64_result, grpo_without_std_norm_math500_pass64_result, drgrpo_math500_pass64_result, drgrpo_curriculum_math500_pass64_results, instruct_math500_pass64_result, pacs_math500_pass64_results]
+    amc12_pass64_results     = [baseline_AMC12_pass64_result, sft_AMC12_pass64_result, grpo_AMC12_pass64_result, grpo_without_std_norm_AMC12_pass64_result, drgrpo_amc_pass64_result,drgrpo_curriculum_amc12_pass64_results, instruct_AMC_12_pass64_result, pacs_amc_pass64_results]
+    aime_2025_pass64_results = [baseline_aime25_pass64_result, sft_aime25_pass64_result, grpo_aime25_pass64_result, grpo_without_std_norm_aime25_pass64_result, drgrpo_aime25_pass64_result, instruct_aime25_pass64_result, pacs_aime25_pass64_results]
+    aime_2024_pass64_results = [baseline_aime24_pass64_result, sft_aime24_pass64_result, grpo_aime24_pass64_result, grpo_without_std_norm_aime24_pass64_result, drgrpo_aime24_pass64_result,drgrpo_curriculum_aime24_pass64_results, instruct_aime24_pass64_result, pacs_aime24_pass64_results]
 
 
 
