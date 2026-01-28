@@ -3,7 +3,7 @@ example_path: "data/MATH/test_split.jsonl"
 
 prompt_path: "prompts/r1_zero.prompt"
 
-output_path: "results/pacs/pacs_pass_8.jsonl"
+output_path: "results/pacs/pacs_math_pass_8.jsonl"
 
 model_path: "checkpoints/pacs/checkpoint-step-450"
 
