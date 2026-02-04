@@ -589,7 +589,7 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    return load_checkpoint(src, model, optimizer)
+    return load_checkpoint(src, model, False, optimizer)
 
 from cs336_basics.BPE.bpe_fast import BPETokenizer
 
