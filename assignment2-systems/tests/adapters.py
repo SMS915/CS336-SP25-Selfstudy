@@ -7,7 +7,6 @@ import torch
 from cs336_systems.FlashAttention import flash_attention_torch
 
 
-
 def get_flashattention_autograd_function_pytorch() -> Type:
     """
     Returns a torch.autograd.Function subclass that implements FlashAttention2.
@@ -18,7 +17,6 @@ def get_flashattention_autograd_function_pytorch() -> Type:
         A class object (not an instance of the class)
     """
     # For example: return MyFlashAttnAutogradFunctionClass
-    # raise NotImplementedError
     return flash_attention_torch
 
 

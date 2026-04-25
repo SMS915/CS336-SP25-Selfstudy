@@ -5,6 +5,7 @@ import triton.language as tl
 from typing import Tuple
 from jaxtyping import Float, Int, Bool
 
+
 class flash_attention_torch(torch.autograd.Function):
     @staticmethod
     def forward(
@@ -79,6 +80,8 @@ def flash_fwd_kernel(
         Q_TILE_SIZE: tl.constexpr,
         K_TILE_SIZE: tl.constexpr
     ):
+    
+    pass
     
 
 
