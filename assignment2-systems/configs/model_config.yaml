@@ -1,0 +1,41 @@
+micro:
+  vocab_size: 1600
+  d_model: 256
+  d_ff: 704
+  num_layers: 3
+  num_heads: 4
+
+small:
+  vocab_size: 50257
+  d_model: 768
+  d_ff: 3072
+  num_layers: 12
+  num_heads: 12
+
+medium:
+  vocab_size: 50257
+  d_model: 1024
+  d_ff: 4096
+  num_layers: 24
+  num_heads: 16
+
+large:
+  vocab_size: 50257
+  d_model: 1280
+  d_ff: 5120
+  num_layers: 36
+  num_heads: 20
+
+xl:
+  vocab_size: 50257
+  d_model: 1600
+  d_ff: 6400
+  num_layers: 48
+  num_heads: 25
+
+2.7B:
+  vocab_size: 50257
+  d_model: 2560
+  d_ff: 10240
+  num_layers: 32
+  num_heads: 32

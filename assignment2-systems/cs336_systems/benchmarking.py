@@ -56,6 +56,8 @@ def annotated_scaled_dot_product_attention(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str, default='configs/model_config.yaml')
+    parser.add_argument("--device", type=str, default="cuda:0",
+                        help='Torch device to run on, e.g. "cuda:0".')
 
     parser.add_argument("--model_size", type=str, required=True)
     parser.add_argument("--vocab_size", type=int)
@@ -76,6 +78,14 @@ def main():
     
     parser.add_argument("--profile_memory", action="store_true")
     args = parser.parse_args()
+    device = torch.device(args.device)
+    device_type = device.type
+    if device_type == "cuda":
+        torch.cuda.set_device(device)
+
+    def synchronize_device():
+        if device_type == "cuda":
+            torch.cuda.synchronize(device=device)
 
     with open(args.config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -110,9 +120,9 @@ def main():
                                              num_layers=num_layers,
                                              num_heads=num_heads)
 
-    model.to('cuda')
+    model.to(device)
     # model.count_params()
-    optimize = args.optimize == True
+    optimize = (args.optimize == True)
     if optimize:
         optimizer = AdamW(model.parameters(),
                           lr=0.001,
@@ -129,7 +139,7 @@ def main():
         amp_dtype = torch.float16
         use_scaler = True
     elif args.precision == 'bf16':
-        if torch.cuda.is_bf16_supported():
+        if device_type == 'cuda' and torch.cuda.is_bf16_supported():
             amp_dtype = torch.bfloat16
             use_scaler = False
         else:
@@ -137,7 +147,7 @@ def main():
             amp_dtype = torch.float16
             use_scaler = True
     elif args.precision == 'autocast':
-        amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        amp_dtype = torch.bfloat16 if device_type == 'cuda' and torch.cuda.is_bf16_supported() else torch.float16
         use_scaler = (amp_dtype == torch.float16)
 
     if amp_enabled:
@@ -147,21 +157,23 @@ def main():
 
     scaler = torch.amp.grad_scaler.GradScaler(enabled=use_scaler)
 
-    batched_data = torch.randint(0, vocab_size, (batch_size, context_length)).to('cuda')
+    batched_data = torch.randint(0, vocab_size, (batch_size, context_length), device=device)
 
     print("Warmup Stage")
     warmup_start = timeit.default_timer()
     for _ in range(warmup_steps):
-        optimizer.zero_grad()
+        if optimize:
+            optimizer.zero_grad()
         output = model(batched_data)
         loss = output.sum()
         loss.backward()
-        scaler.unscale_(optimizer)
-        scaler.step(optimizer)
-        scaler.update()
+        if optimize:
+            scaler.unscale_(optimizer)
+            scaler.step(optimizer)
+            scaler.update()
 
     # 同步，确保预热完成
-    torch.cuda.synchronize()
+    synchronize_device()
     warmup_end = timeit.default_timer()
     warmup_time = warmup_end - warmup_start
     print(f"Warmup finish! Takes {warmup_time:.2f} seconds")
@@ -176,22 +188,22 @@ def main():
 
     profile_memory = args.profile_memory == True
     print(f"Measuring for {measure_steps} steps")
-    if profile_memory:
+    if profile_memory and device_type == 'cuda':
         torch.cuda.memory._record_memory_history(max_entries = 1000000)
     for _ in range(measure_steps):
         if optimize:
             optimizer.zero_grad()
         start_time = timeit.default_timer()
         with nvtx.range("Forward Pass"):
-            with torch.amp.autocast_mode.autocast(device_type='cuda', enabled=amp_enabled, dtype=amp_dtype):
+            with torch.amp.autocast_mode.autocast(device_type=device_type, enabled=amp_enabled, dtype=amp_dtype):
                 output = model(batched_data)        
-        torch.cuda.synchronize()
+        synchronize_device()
 
         forward_end = timeit.default_timer()
         with nvtx.range("Backward Pass"):
             loss = output.sum()
             scaler.scale(loss).backward()
-        torch.cuda.synchronize()
+        synchronize_device()
         backward_end = timeit.default_timer()
         
         if optimize:
@@ -199,7 +211,7 @@ def main():
                 scaler.unscale_(optimizer)
                 scaler.step(optimizer)
                 scaler.update()
-                torch.cuda.synchronize()
+                synchronize_device()
                 optimize_end = timeit.default_timer()
         
         end_time = timeit.default_timer()
@@ -223,7 +235,7 @@ def main():
     if optimize:
         optimize_mean = np.mean(optimize_timings)
         optimize_std = np.mean(optimize_timings)
-    if profile_memory:
+    if profile_memory and device_type == 'cuda':
         torch.cuda.memory._dump_snapshot("profiles/memory_snapshot_no_backward.pickle")
         torch.cuda.memory._record_memory_history(enabled=None)
     print("Measurement ends!")

@@ -13,7 +13,7 @@ class flash_attention_torch(torch.autograd.Function):
         Q:Float[torch.Tensor, "b h s_q d_q"], 
         K:Float[torch.Tensor, "b h s_k d_k"], 
         V:Float[torch.Tensor, "b h s_v d_v"],
-        is_causal: Bool = False
+        is_causal: Bool = True
     )->Float[torch.Tensor, "b h s_q d_v"]:
         input_3d = False
         if Q.ndim == 3:
@@ -38,10 +38,17 @@ class flash_attention_torch(torch.autograd.Function):
             L_i = torch.zeros(B, H, q_size, 1, dtype=torch.float32)                   # B, H, B_q, 1
             O_i = torch.zeros(B, H, q_size, D_q, dtype=Q.dtype)                       # B, H, B_q, D_q  
 
+            k_index = 0
             for K_j, V_j in zip(K_blocks, V_blocks):                                  # B, H, B_k, d_k
+                k_size = K_j.shape[2]
                 prev_m_i = m_i
                 prev_l_i = L_i
                 S_ij = Q_i @ K_j.transpose(2, 3)/ math.sqrt(D_q)                      # B, H, B_q, B_k = (B, H, B_q, D_q) x (B, H, D_k(D_q), B_k)
+                if is_causal:
+                    q_abs = (q_index + torch.arange(q_size, device=Q.device)).view(q_size, 1)
+                    k_abs = (k_index + torch.arange(k_size, device=K.device)).view(1, k_size)
+                    future_mask = k_abs > q_abs
+                    S_ij[future_mask] = -torch.inf
                 m_curr = torch.max(S_ij, dim=-1, keepdim=True).values                 # B, H, B_q, 1
                 m_i = torch.maximum(prev_m_i, m_curr)                                 # B, H, B_q, 1
                 exp_max_diff = torch.exp(prev_m_i - m_i)                              # B, H, B_q, 1
@@ -49,6 +56,7 @@ class flash_attention_torch(torch.autograd.Function):
                 P_ij = torch.exp(S_ij - m_i)                                          # B, H, B_q, B_k
                 L_i = exp_max_diff * prev_l_i + torch.sum(P_ij, dim=-1, keepdim=True) # B, H, B_q, 1
                 O_i = exp_max_diff * O_i + (P_ij.to(V_j.dtype) @ V_j)
+                k_index += k_size
 
             O_i_final = O_i * pow(L_i, -1)
             L_i_final = m_i + torch.log(L_i)
