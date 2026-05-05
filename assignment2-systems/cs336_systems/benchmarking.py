@@ -16,6 +16,7 @@ from torch.optim import AdamW
 from math import sqrt
 
 from cs336_basics.model import ScaledDotProductAttention as original_SDPA
+from cs336_systems.FlashAttention import flash_attention_torch as FlashTorch_SDPA
 
 
 def annotated_scaled_dot_product_attention(
@@ -52,6 +53,10 @@ def annotated_scaled_dot_product_attention(
 
         return output
 
+def flash_torch_attention_wrapper(Q, K, V, mask=None):
+    is_causal = mask is not None
+    with nvtx.range("FlashAttentionTorch"):
+        return FlashTorch_SDPA.apply(Q, K, V, is_causal)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -75,8 +80,10 @@ def main():
     parser.add_argument("--optimize", action='store_true')
     parser.add_argument('--precision', type=str, default='autocast', choices=['fp32', 'fp16', 'bf16', 'autocast'],
                         help='Training precision. "autocast" will automatically choose the best available.')
-    
+    parser.add_argument("--attention_impl", type=str, default="baseline", choices=["baseline", "nvtx_sdpa", "flash_torch"])
     parser.add_argument("--profile_memory", action="store_true")
+    parser.add_argument("--compile", action="store_true")
+    
     args = parser.parse_args()
     device = torch.device(args.device)
     device_type = device.type
@@ -110,8 +117,10 @@ def main():
     batch_size = args.batch_size
     warmup_steps = args.warmup_steps
 
-
-    cs336_basics.model.ScaledDotProductAttention = annotated_scaled_dot_product_attention
+    if args.attention_impl == "nvtx_sdpa":
+        cs336_basics.model.ScaledDotProductAttention = annotated_scaled_dot_product_attention
+    elif args.attention_impl == "flash_torch":
+        cs336_basics.model.ScaledDotProductAttention = flash_torch_attention_wrapper
 
     model = cs336_basics.model.TransformerLM(vocab_size=vocab_size,
                                              context_length=context_length,
@@ -119,8 +128,10 @@ def main():
                                              d_ff=d_ff,
                                              num_layers=num_layers,
                                              num_heads=num_heads)
-
+    
     model.to(device)
+    if args.compile:
+        model = torch.compile(model, mode='default')
     # model.count_params()
     optimize = (args.optimize == True)
     if optimize:
