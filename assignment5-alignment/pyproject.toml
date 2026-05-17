@@ -29,9 +29,14 @@ include = ["cs336_alignment"]
 package = true
 no-build-isolation-package = ["flash-attn"]
 
+[[tool.uv.index]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
 
 [tool.uv.sources]
 alpaca-eval = { path = "./libs/alpaca_eval" }
+flash-attn = { path = "./wheels/flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl" }
 
 [tool.pytest.ini_options]
 log_cli = true
