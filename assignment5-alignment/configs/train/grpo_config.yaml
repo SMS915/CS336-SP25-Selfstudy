@@ -7,7 +7,16 @@ model:
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
+  trust_remote_code: true
   wandb_id: null
+
+runtime:
+  device: "cuda"
+  cuda_visible_devices: null
+  hf_device_map: null
+  max_memory_gb_per_gpu: null
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.25
 
 data:
   train_path: "data/CoT/Bespoke-Stratos-17k-R1-tag.jsonl"
@@ -48,8 +57,6 @@ training:
   # === vllm 参数 ===
   enforce_eager: True
   enable_prefix_caching: False
-  gpu_memory_utilization: 0.25
-
   stop_tokens: ["</answer>", "<|endoftext|>"]
 
   fixed_norm_length: null

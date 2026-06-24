@@ -7,6 +7,10 @@ from functools import partial
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
+from cs336_alignment.hf_mirror import configure_hf_mirror, get_hf_snapshot_download_kwargs
+
+configure_hf_mirror(verbose=False)
+
 from datasets import load_dataset
 from huggingface_hub import login, snapshot_download
 from transformers.models.auto.tokenization_auto import AutoTokenizer
@@ -71,16 +75,14 @@ def download_bespoke_stratos_dataset(target_dir):
     Downloads the Bespoke-Stratos-17k dataset from the Hugging Face Hub.
     """
     os.makedirs(target_dir, exist_ok=True)
-    # Set the HF_ENDPOINT, useful for users in regions with restricted access
-    os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+    configure_hf_mirror()
 
     print(f"Downloading dataset '{DATASET_REPO_ID}' to '{target_dir}'...")
     snapshot_download(
         repo_id=DATASET_REPO_ID,
         repo_type="dataset",
         local_dir=target_dir,
-        local_dir_use_symlinks=False,
-        resume_download=True
+        **get_hf_snapshot_download_kwargs(),
     )
     print("Download complete.")
 

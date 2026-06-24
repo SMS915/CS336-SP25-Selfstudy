@@ -1,0 +1,51 @@
+model:
+  model_path: "models/Qwen3-1.7B-Base"
+  dtype: "bfloat16"
+  attn_implementation: "flash_attention_2"
+  trust_remote_code: true
+
+runtime:
+  device: "cuda"
+  cuda_visible_devices: "4,5,6,7"
+  hf_device_map: null
+  max_memory_gb_per_gpu: null
+
+fsdp:
+  sharding_strategy: "full_shard"
+  use_orig_params: true
+  sync_module_states: true
+  limit_all_gathers: true
+  cpu_offload: false
+  forward_prefetch: false
+  transformer_layer_cls_names:
+    - "Qwen2DecoderLayer"
+    - "Qwen3DecoderLayer"
+
+data:
+  train_path: "data/CoT/Bespoke-Stratos-17k-qwen3-sft.jsonl"
+  valid_path: "data/MATH/test_split.jsonl"
+  valid_max_samples: 256
+  prompt_path: "prompts/qwen3_boxed_only.prompt"
+  max_seq_length: 4096
+  max_samples: 0
+
+training:
+  output_dir: "/home/liujunhui/shared/junhui/CSDIY/checkpoints/RL/qwen3/drgrpo"
+  learning_rate: 2.0e-5
+  epochs: 1
+  warmup_ratio: 0.05
+  micro_batch_size: 1
+  gradient_accumulation_steps: 32
+  gradient_checkpointing: true
+  max_grad_norm: 1.0
+  save_steps: 200
+
+evaluation:
+  eval_every_steps: 10
+  micro_batch_size: 1
+  max_eval_batches: 8
+
+wandb:
+  project: "CS336-Assignment5-Alignment"
+  run_name: "qwen3_sft_fsdp"
+  entity: null

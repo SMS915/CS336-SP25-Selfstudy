@@ -2,7 +2,14 @@
 model:
   model_path: "models/Qwen2.5-Math-1.5B"
   dtype: "bfloat16"
-  attn_implementation: "sdpa"
+  attn_implementation: "flash_attention_2"
+  trust_remote_code: true
+
+runtime:
+  device: "cuda"
+  cuda_visible_devices: "7"
+  hf_device_map: null
+  max_memory_gb_per_gpu: null
 
 data:
   train_path: "data/CoT/Bespoke-Stratos-17k-Distill-3k.jsonl"
@@ -12,13 +19,14 @@ data:
   max_samples: null
 
 training:
-  output_dir: "checkpoints/sft"
+  output_dir: "checkpoints/sft-full-6epoch"
   learning_rate: 2.0e-5
   epochs: 6
   warmup_ratio: 0.05
 
-  micro_batch_size: 4
-  gradient_accumulation_steps: 16
+  micro_batch_size: 1
+  gradient_accumulation_steps: 64
+  gradient_checkpointing: true
   
   max_grad_norm: 1.0
   save_steps: 1000
@@ -30,5 +38,5 @@ evaluation:
 
 wandb:
   project: "CS336-Assignment5-Alignment"
-  run_name: "sft"
+  run_name: "sft-full-epoch6"
   entity: null 

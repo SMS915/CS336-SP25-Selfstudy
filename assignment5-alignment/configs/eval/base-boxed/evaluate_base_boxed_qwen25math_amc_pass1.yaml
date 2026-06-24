@@ -1,0 +1,27 @@
+example_path: "data/AMC/AMC12.jsonl"
+
+output_path: "results/base-boxed/qwen25math_amc_pass1.jsonl"
+
+model_path: "models/Qwen2.5-Math-1.5B"
+
+max_tokens: 4096
+
+temperature: 0.7
+
+top_p: 0.95
+
+max_samples: 0
+
+pass_k: 1
+
+dtype: "bfloat16"
+
+gpu_memory_utilization: 0.7
+
+tensor_parallel_size: 1
+
+cuda_visible_devices: "7"
+
+prompt_batch_size: 8
+
+max_num_seqs: 8

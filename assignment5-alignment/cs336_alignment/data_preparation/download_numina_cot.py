@@ -1,5 +1,9 @@
-from datasets import load_dataset
 import os
+from cs336_alignment.hf_mirror import configure_hf_mirror
+
+configure_hf_mirror()
+
+from datasets import load_dataset
 
 def download_dataset(repo_id="AI-MO/NuminaMath-CoT", save_path="./data/NuminaMath-CoT/raw"):
     print(f"开始从 {repo_id} 下载数据集...")

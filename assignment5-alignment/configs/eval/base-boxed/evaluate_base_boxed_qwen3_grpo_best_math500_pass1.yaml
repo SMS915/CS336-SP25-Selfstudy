@@ -1,0 +1,27 @@
+example_path: "data/MATH/math500-test.jsonl"
+
+output_path: "results/base-boxed/qwen3_grpo_step_400_math_500_pass1.jsonl"
+
+model_path: "/home/liujunhui/shared/junhui/CSDIY/checkpoints/RL/qwen3/drgrpo/checkpoint-step-400"
+
+max_tokens: 2048
+
+temperature: 0
+
+top_p: 1.0
+
+max_samples: 0
+
+pass_k: 1
+
+dtype: "bfloat16"
+
+gpu_memory_utilization: 0.9
+
+tensor_parallel_size: 1
+
+cuda_visible_devices: "3"
+
+prompt_batch_size: 16
+
+max_num_seqs: 16

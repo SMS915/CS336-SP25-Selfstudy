@@ -1,0 +1,55 @@
+# configs/train/sft_lora_config.yaml
+model:
+  model_path: "models/Qwen2.5-Math-1.5B"
+  dtype: "bfloat16"
+  attn_implementation: "flash_attention_2"
+  trust_remote_code: true
+
+runtime:
+  device: "cuda"
+  cuda_visible_devices: "5"
+  hf_device_map: null
+  max_memory_gb_per_gpu: null
+
+data:
+  train_path: "data/CoT/Bespoke-Stratos-17k-Distill-3k.jsonl"
+  valid_path: "data/MATH/test_split.jsonl"
+  prompt_path: "prompts/r1_zero.prompt"
+  max_seq_length: 4096
+  max_samples: null
+
+training:
+  output_dir: "checkpoints/sft_lora_rank8_alpha16_3epoch"
+  learning_rate: 2.0e-4
+  epochs: 3
+  warmup_ratio: 0.05
+  micro_batch_size: 4
+  gradient_accumulation_steps: 16
+  gradient_checkpointing: true
+  max_grad_norm: 1.0
+  save_steps: 1000
+
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  bias: "none"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+evaluation:
+  eval_every_steps: 10
+  num_examples_to_log: 4
+  max_new_tokens: 4096
+
+wandb:
+  project: "CS336-Assignment5-Alignment"
+  run_name: "sft_lora_rank8_alpha16_3epoch"
+  entity: null
+

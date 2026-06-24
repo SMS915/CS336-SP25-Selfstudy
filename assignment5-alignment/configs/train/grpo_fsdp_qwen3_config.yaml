@@ -1,0 +1,77 @@
+model:
+  model_path: "models/Qwen3-1.7B-Base"
+  best_reward: 0.0
+  start_step: 0
+  dtype: "bfloat16"
+  attn_implementation: "flash_attention_2"
+  trust_remote_code: true
+  wandb_id: null
+
+runtime:
+  device: "cuda"
+  cuda_visible_devices: "4,5,6,7,8"
+  hf_device_map: null
+  max_memory_gb_per_gpu: null
+
+fsdp:
+  sharding_strategy: "full_shard"
+  use_orig_params: true
+  sync_module_states: true
+  limit_all_gathers: true
+  cpu_offload: false
+  forward_prefetch: false
+  transformer_layer_cls_names:
+    - "Qwen2DecoderLayer"
+    - "Qwen3DecoderLayer"
+
+data:
+  train_path: "data/CoT/Bespoke-Stratos-17k-qwen3-sft.jsonl"
+  valid_path: "data/MATH/math500-test.jsonl"
+  prompt_path: "prompts/qwen3_boxed_only.prompt"
+  max_seq_length: 4096
+  max_samples: 4096
+
+training:
+  output_dir: "/data/shared/junhui/CSDIY/checkpoints/RL/qwen3/drgrpo"
+  n_grpo_steps: 300
+  warmup_ratio: 0.1
+  learning_rate: 5.0e-6
+  advantage_eps: 1.0e-6
+  questions_per_rank: 2
+  group_size: 4
+  inference_batch_size: 1
+  micro_batch_size: 1
+  epochs_per_rollout_batch: 1
+  sampling_temperature: 0.6
+  top_p: 0.95
+  sampling_min_tokens: 4
+  sampling_max_tokens: 2048
+  gradient_checkpointing: true
+  loss_type: "grpo_clip"
+  clip_range: 0.2
+  max_grad_norm: 1.0
+  normalize_by_std: false
+  remove_length_norm: true
+  length_panelty: false
+  fixed_norm_length: 4096
+  reward_style: "boxed_only"
+  stop_strings: []
+  save_steps: 50
+
+evaluation:
+  enabled: true
+  valid_path: "data/MATH/math500-test.jsonl"
+  eval_every_steps: 10
+  eval_gpu_index: 4
+  num_eval_examples: 64
+  num_rollouts_per_example: 4
+  eval_batch_size: 1
+  temperature: 0.6
+  top_p: 0.95
+  sampling_min_tokens: 4
+  max_new_tokens: 2048
+
+wandb:
+  project: "CS336-Assignment5-Alignment"
+  run_name: "qwen3_grpo_fsdp"
+  entity: null

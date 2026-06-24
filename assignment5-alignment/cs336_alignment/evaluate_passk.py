@@ -8,6 +8,7 @@ import numpy as np
 from vllm import LLM, SamplingParams
 from typing import List, Dict, Callable, Any
 from cs336_alignment.utils import robust_reward_fn
+from cs336_alignment.device_config import apply_runtime_environment, build_runtime_wrapper_from_flat_config
 
 def load_data(file_path: str, max_samples: int = 0) -> List[Dict]:
     examples = []
@@ -27,6 +28,22 @@ def formatting_prompt(examples: List[Dict], prompt_template: str) -> List[str]:
         prompt = prompt_template.replace("{question}", ex["problem"])
         prompts.append(prompt)
     return prompts
+
+
+def validate_model_path_for_vllm(model_path: str) -> None:
+    if not os.path.isdir(model_path):
+        return
+
+    adapter_config_path = os.path.join(model_path, "adapter_config.json")
+    model_config_path = os.path.join(model_path, "config.json")
+    if os.path.exists(adapter_config_path) and not os.path.exists(model_config_path):
+        raise ValueError(
+            "当前 model_path 指向的是 LoRA adapter 目录，而不是完整模型目录。"
+            "这个目录只有 adapter_config.json / adapter_model.safetensors，"
+            "vLLM 无法直接按完整模型加载。"
+            "请先运行 `python cs336_alignment/merge_lora_adapter.py --adapter_path "
+            f"{model_path} --output_path <merged_dir>` 合并权重，再把 model_path 改成合并后的目录。"
+        )
 
 def evaluate_vllm_pass_k(
     vllm_model: LLM, 
@@ -161,6 +178,7 @@ def evaluate_vllm_pass_k(
     return final_results
 
 def run_evaluate(config: Dict[str, Any]):
+    apply_runtime_environment(build_runtime_wrapper_from_flat_config(config))
     """
     Args:
         config (Dict): 包含所有参数的字典
@@ -171,12 +189,14 @@ def run_evaluate(config: Dict[str, Any]):
         prompt_template = f.read()
     
     formatted_input = formatting_prompt(examples=examples, prompt_template=prompt_template)
+    validate_model_path_for_vllm(config["model_path"])
     
     # vLLM 初始化
     llm = LLM(
         model=config['model_path'], 
-        dtype="bfloat16", 
-        gpu_memory_utilization=0.95, 
+        dtype=config.get('dtype', 'bfloat16'),
+        tensor_parallel_size=config.get('tensor_parallel_size', 1),
+        gpu_memory_utilization=config.get('gpu_memory_utilization', 0.95), 
         trust_remote_code=True,
     )
 
@@ -227,6 +247,10 @@ def parse_arguments() -> Dict[str, Any]:
     parser.add_argument('--max_tokens', type=int, help='Max tokens (truncation).')
     parser.add_argument('--temperature', type=float, help='Sampling temperature.')
     parser.add_argument('--top_p', type=float, help='Top-p sampling.')
+    parser.add_argument('--dtype', type=str, help='vLLM dtype, e.g. bfloat16.')
+    parser.add_argument('--tensor_parallel_size', type=int, help='Number of GPUs used by vLLM tensor parallel.')
+    parser.add_argument('--gpu_memory_utilization', type=float, help='vLLM gpu memory utilization.')
+    parser.add_argument('--cuda_visible_devices', type=str, help='Visible GPU ids, e.g. 0 or 0,1.')
     
     # 新增 Pass@K 参数
     parser.add_argument('--max_samples', type=int, help='Sampling temperature.')
@@ -254,6 +278,8 @@ def parse_arguments() -> Dict[str, Any]:
         final_config['max_tokens'] = 1024
     if 'temperature' not in final_config:
         final_config['temperature'] = 1.0
+    if 'dtype' not in final_config:
+        final_config['dtype'] = 'bfloat16'
 
     return final_config
 

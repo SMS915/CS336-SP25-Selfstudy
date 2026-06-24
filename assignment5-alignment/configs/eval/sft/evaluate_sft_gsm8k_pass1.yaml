@@ -5,9 +5,9 @@ example_path: "data/gsm8k/test_clean.jsonl"
 prompt_path: "prompts/r1_zero.prompt"
 
 # 结果保存路径
-output_path: "results/sft_gsm8k_pass1.jsonl"
+output_path: "results/sft_ckpt_gsm8k_pass1.jsonl"
 
-model_path: "checkpoints/sft_v4/epoch0"
+model_path: "checkpoints/sft_v6_epoch0/epoch0"
 
 max_tokens: 2048
 
@@ -18,3 +18,15 @@ top_p: 0.95
 max_samples: 0
 
 pass_k: 1
+
+dtype: "bfloat16"
+
+gpu_memory_utilization: 0.95
+
+tensor_parallel_size: 1
+
+cuda_visible_devices: "3"
+
+prompt_batch_size: 30
+
+max_num_seqs: 16

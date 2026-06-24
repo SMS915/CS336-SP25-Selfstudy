@@ -4,6 +4,13 @@ model:
   dtype: "bfloat16"
   # attn_implementation: "flash_attention_2"
   attn_implementation: "sdpa"
+  trust_remote_code: true
+
+runtime:
+  device: "cuda"
+  cuda_visible_devices: null
+  hf_device_map: null
+  max_memory_gb_per_gpu: null
 
 data:
   train_path: "data/CoT/Bespoke-Stratos-17k-Distill-3k.jsonl"
@@ -20,6 +27,7 @@ training:
 
   micro_batch_size: 4
   gradient_accumulation_steps: 16
+  gradient_checkpointing: true
   
   max_grad_norm: 1.0
   save_steps: 1000  # 或者设大一点只存最后

@@ -7,6 +7,7 @@ import argparse
 from vllm import LLM, SamplingParams
 from typing import List, Dict, Callable, Any
 from cs336_alignment.utils import robust_reward_fn
+from cs336_alignment.device_config import apply_runtime_environment, build_runtime_wrapper_from_flat_config
 from transformers.generation.configuration_utils import GenerationConfig
 
 def load_data(file_path: str) -> List[Dict]:
@@ -111,7 +112,9 @@ def evaluate_vllm(vllm_model: LLM, reward_fn: Callable[[str, str], dict[str, flo
     return results
 
 def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_path: str,
-                  max_tokens: int = 1024, top_p: float = 1.0, temperature: float = 1.0):
+                  max_tokens: int = 1024, top_p: float = 1.0, temperature: float = 1.0,
+                  dtype: str = "bfloat16", tensor_parallel_size: int = 1,
+                  gpu_memory_utilization: float = 0.95):
     """
     执行端到端的模型评估流程：加载数据、初始化模型、生成并保存结果。
 
@@ -143,11 +146,13 @@ def run_evaluate(example_path: str, prompt_path: str, output_path: str, model_pa
 
     target_max_len = 8192
 
-    llm = LLM(model = model_path, 
-              dtype="bfloat16", 
-              gpu_memory_utilization = 0.95, 
-              trust_remote_code = True,
-              )
+    llm = LLM(
+        model=model_path,
+        dtype=dtype,
+        tensor_parallel_size=tensor_parallel_size,
+        gpu_memory_utilization=gpu_memory_utilization,
+        trust_remote_code=True,
+    )
 
     eval_params = SamplingParams(temperature = temperature, top_p = top_p, max_tokens=max_tokens ,stop=["</answer>"],
                                include_stop_str_in_output=True)
@@ -182,6 +187,12 @@ def parse_arguments() -> Dict[str, Any]:
     parser.add_argument('--output_path', type=str, help='Path to save evaluation results.')
     parser.add_argument('--model_path', type=str, help='Path to the model checkpoint or HF ID.')
     parser.add_argument('--max_tokens', type=int, help='Max token limitation for generate output')
+    parser.add_argument('--temperature', type=float, help='Sampling temperature.')
+    parser.add_argument('--top_p', type=float, help='Top-p sampling.')
+    parser.add_argument('--dtype', type=str, help='vLLM dtype, e.g. bfloat16.')
+    parser.add_argument('--tensor_parallel_size', type=int, help='Number of GPUs used by vLLM tensor parallel.')
+    parser.add_argument('--gpu_memory_utilization', type=float, help='vLLM gpu memory utilization.')
+    parser.add_argument('--cuda_visible_devices', type=str, help='Visible GPU ids, e.g. 0 or 0,1.')
 
     args = parser.parse_args()
 
@@ -217,6 +228,7 @@ def validate_config(config: Dict[str, Any]) -> None:
 if __name__ == '__main__':
     config = parse_arguments()
     validate_config(config)
+    apply_runtime_environment(build_runtime_wrapper_from_flat_config(config))
 
     print("正在用以下配置运行评估")
     for k, v in config.items():
@@ -232,10 +244,12 @@ if __name__ == '__main__':
         output_path=config['output_path'],
         model_path=config['model_path'],
         max_tokens=config.get('max_tokens', 1024),
-        temperature=config.get('temperature', 1.0)
+        top_p=config.get('top_p', 1.0),
+        temperature=config.get('temperature', 1.0),
+        dtype=config.get('dtype', 'bfloat16'),
+        tensor_parallel_size=config.get('tensor_parallel_size', 1),
+        gpu_memory_utilization=config.get('gpu_memory_utilization', 0.95),
     )
-
-
 
 
 

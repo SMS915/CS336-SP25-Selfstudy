@@ -2,6 +2,10 @@ import os
 os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] = "1"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
+from cs336_alignment.bootstrap_runtime import bootstrap_cuda_visible_devices
+
+bootstrap_cuda_visible_devices(default_config_path="configs/train/grpo_config.yaml")
+
 import re
 import yaml
 import argparse
@@ -17,6 +21,14 @@ from transformers.optimization import get_cosine_schedule_with_warmup
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from vllm import LLM, SamplingParams
 # 引入组件
+from cs336_alignment.device_config import (
+    apply_runtime_environment,
+    build_model_load_kwargs,
+    get_autocast_device_type,
+    get_model_primary_device,
+    get_vllm_load_kwargs,
+    resolve_torch_device,
+)
 from cs336_alignment.sft import (
     log_generations_transformer,
     log_generations_vllm,
@@ -109,6 +121,8 @@ class GRPODataset(Dataset):
 def train(config_path: str):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
+
+    apply_runtime_environment(config)
     
     if config["model"]["wandb_id"] is None:
         wandb.init(project=config["wandb"]["project"], name=config["wandb"]["run_name"], config=config)
@@ -120,12 +134,16 @@ def train(config_path: str):
             config=config
         )
     
-    device = "cuda"
+    default_device = resolve_torch_device(config)
+    dtype = getattr(torch, config["model"]["dtype"])
     output_dir = config["training"]["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
 
     # 加载分词器与prompt
-    tokenizer = AutoTokenizer.from_pretrained(config["model"]["model_path"])
+    tokenizer = AutoTokenizer.from_pretrained(
+        config["model"]["model_path"],
+        trust_remote_code=config["model"].get("trust_remote_code", True),
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         
@@ -150,15 +168,17 @@ def train(config_path: str):
 
     # 初始化策略模型(PyTorch)
     print("加载策略模型 (Training)...")
-    policy = AutoModelForCausalLM.from_pretrained(
-        config["model"]["model_path"],
-        torch_dtype=getattr(torch, config["model"]["dtype"]),
-        attn_implementation=config["model"]["attn_implementation"],
-        device_map="cuda",
-    )
+    model_load_kwargs = build_model_load_kwargs(config)
+    policy = AutoModelForCausalLM.from_pretrained(config["model"]["model_path"], **model_load_kwargs)
+    if "device_map" not in model_load_kwargs:
+        policy.to(default_device)
+    device = get_model_primary_device(policy)
+    device_type = get_autocast_device_type(device)
+    print(f"训练设备入口: {device}")
     # 开启梯度检查点省显存
-    policy.gradient_checkpointing_enable()
-    policy.use_cache = False
+    if config["training"].get("gradient_checkpointing", True):
+        policy.gradient_checkpointing_enable()
+    policy.config.use_cache = False
     policy.train()
 
     
@@ -168,24 +188,18 @@ def train(config_path: str):
 
     # 初始化vllm
     print("加载vllm (Generation)...")
-    gpu_util = config["training"].get("gpu_memory_utilization", 0.4) 
-    
-    llm = LLM(
-        model=config["model"]["model_path"],
-        dtype=config["model"]["dtype"],
-        gpu_memory_utilization=gpu_util, 
-        trust_remote_code=True,
-        max_model_len=config["data"]["max_seq_length"], # 4096
-        enforce_eager=True, # 显存优化技巧
-        enable_prefix_caching=False,
-    )
+    vllm_load_kwargs = get_vllm_load_kwargs(config, default_gpu_memory_utilization=0.4)
+    if vllm_load_kwargs.get("tensor_parallel_size", 1) != 1:
+        print("警告: 当前 RL 的权重同步逻辑主要按 tensor_parallel_size=1 验证，多卡 vLLM 需额外留意兼容性。")
+
+    llm = LLM(model=config["model"]["model_path"], **vllm_load_kwargs)
 
     load_policy_into_vllm_instance(policy, llm)
     sampling_params = SamplingParams(
         temperature=config["training"]["sampling_temperature"],
         min_tokens=config["training"]["sampling_min_tokens"],
         max_tokens=config["training"]["sampling_max_tokens"],
-        stop=["</answer>", "<|endoftext|>"],
+        stop=config["training"].get("stop_tokens", ["</answer>", "<|endoftext|>"]),
         include_stop_str_in_output=True,
         n=config["training"]["group_size"], # 一次生成 G 个
         repetition_penalty=config["training"]["repetition_penalty"],
@@ -305,7 +319,7 @@ def train(config_path: str):
         # 由于vllm和transformers的前向算子不一致，在这里用transformer库重新计算log_prob
         policy.eval()
         with torch.no_grad():
-            with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+            with torch.amp.autocast(device_type=device_type, dtype=dtype):
                 # 分批计算log_prob
                 for i in tqdm(range(0, len(input_ids), inference_batch_size), desc="Calculating Ref LogProbs"):
                     batch_input_ids = input_ids[i : i + inference_batch_size]
@@ -325,7 +339,7 @@ def train(config_path: str):
                         total_tokens += token_count
                     old_log_probs_list.append(log_probs_dict["log_probs"].detach().cpu())
                 
-        old_log_probs = torch.cat(old_log_probs_list, dim=0).cuda()
+        old_log_probs = torch.cat(old_log_probs_list, dim=0).to(device)
         policy.train() # 恢复 Train 模式
 
         mean_rollout_entropy = total_entropy / (total_tokens + 1e-8)
@@ -363,7 +377,7 @@ def train(config_path: str):
                 # mb_rewards = raw_rewards[mb_idx] # 如果是 no_baseline 需要这个
                 
                 # Forward
-                with torch.amp.autocast('cuda', dtype=torch.bfloat16):
+                with torch.amp.autocast(device_type=device_type, dtype=dtype):
                     mb_log_probs_dict = get_response_log_probs(policy, mb_input_ids, mb_attention_mask, mb_labels)
                     mb_policy_log_probs = mb_log_probs_dict["log_probs"]
 
@@ -475,6 +489,6 @@ def train(config_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/grpo_config.yaml")
+    parser.add_argument("--config", type=str, default="configs/train/grpo_config.yaml")
     args = parser.parse_args()
     train(args.config)

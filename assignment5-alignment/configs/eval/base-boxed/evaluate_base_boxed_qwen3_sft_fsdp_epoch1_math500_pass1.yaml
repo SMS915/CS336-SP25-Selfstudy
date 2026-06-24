@@ -1,0 +1,27 @@
+example_path: "data/MATH/math500-test.jsonl"
+
+output_path: "results/base-boxed/qwen3_full_fsdp_math500_pass1.jsonl"
+
+model_path: "checkpoints/qwen3_sft_fsdp/epoch1"
+
+max_tokens: 4096
+
+temperature: 0
+
+top_p: 0.95
+
+max_samples: 0
+
+pass_k: 1
+
+dtype: "bfloat16"
+
+gpu_memory_utilization: 0.95
+
+tensor_parallel_size: 1
+
+cuda_visible_devices: "6"
+
+prompt_batch_size: 8
+
+max_num_seqs: 8

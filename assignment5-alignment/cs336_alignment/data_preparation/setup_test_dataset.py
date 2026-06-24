@@ -1,13 +1,15 @@
 import json
 import os
-from datasets import load_dataset
-from tqdm import tqdm
+from cs336_alignment.hf_mirror import configure_hf_mirror
 
 # --- 全局配置 ---
 # 所有数据集存放的总目录
 BASE_DATA_DIR = "data"
-# 设置镜像，如果在中国大陆或网络不佳时可以取消注释
-# os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
+configure_hf_mirror()
+
+from datasets import load_dataset
+from tqdm import tqdm
 
 
 def prepare_aime_datasets():

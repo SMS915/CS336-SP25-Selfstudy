@@ -1,5 +1,10 @@
 import argparse
 import os
+
+from cs336_alignment.bootstrap_runtime import bootstrap_cuda_visible_devices
+
+bootstrap_cuda_visible_devices(default_config_path="configs/train/sft_config.yaml")
+
 import torch
 import json
 import wandb
@@ -12,6 +17,12 @@ from torch.optim import AdamW
 from transformers.optimization import get_cosine_schedule_with_warmup 
 
 from cs336_alignment.sft import get_response_log_probs, sft_microbatch_train_step, log_generations_transformer
+from cs336_alignment.device_config import (
+    apply_runtime_environment,
+    build_model_load_kwargs,
+    get_model_primary_device,
+    resolve_torch_device,
+)
 from cs336_alignment.utils import tokenize_prompt_and_output, robust_reward_fn
 
 class SFTDataset(Dataset):
@@ -65,6 +76,8 @@ def get_collate_fn(tokenizer, max_length = 1024, prompt_template = None):
 def train(config_path: str, args):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
+
+    apply_runtime_environment(config)
     
     print(f"从{config_path}加载配置")
     print(json.dumps(config, indent=2))
@@ -88,23 +101,26 @@ def train(config_path: str, args):
     # 路径与设备
     output_dir = config["training"]["output_dir"]
     os.makedirs(output_dir, exist_ok=True)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    default_device = resolve_torch_device(config)
     model_load_path = args.resume_from if args.resume_from else config["model"]["model_path"]
 
     print("Loading model and tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(model_load_path)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_load_path,
+        trust_remote_code=config["model"].get("trust_remote_code", True),
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-        
-    model = AutoModelForCausalLM.from_pretrained(
-        model_load_path,
-        torch_dtype=getattr(torch, config["model"]["dtype"]), 
-        attn_implementation=config["model"]["attn_implementation"],
-        device_map="auto"
-    )
+    model_load_kwargs = build_model_load_kwargs(config)
+    model = AutoModelForCausalLM.from_pretrained(model_load_path, **model_load_kwargs)
+    if "device_map" not in model_load_kwargs:
+        model.to(default_device)
+    device = get_model_primary_device(model)
+    print(f"训练设备入口: {device}")
 
-    model.gradient_checkpointing_enable()
+    if config["training"].get("gradient_checkpointing", True):
+        model.gradient_checkpointing_enable()
     model.config.use_cache = False
     model.train()
 
@@ -234,7 +250,8 @@ def train(config_path: str, args):
 
                 # 评估
                 if global_step % eval_every == 0:
-                    torch.cuda.empty_cache()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                     progress_bar.write(f"Step {global_step}: Running Evaluation...")
                     eval_max_tokens = config["evaluation"].get("max_new_tokens", 2048)
                     eval_stats = log_generations_transformer(
@@ -251,7 +268,8 @@ def train(config_path: str, args):
                     eval_stats["train/global_step"] = global_step
                     wandb.log(eval_stats)
                     del eval_stats
-                    torch.cuda.empty_cache() 
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                     model.train()
 
         # 保存该epoch模型
@@ -264,7 +282,7 @@ def train(config_path: str, args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/sft_config.yaml", help="Path to YAML config file")
+    parser.add_argument("--config", type=str, default="configs/train/sft_config.yaml", help="Path to YAML config file")
 
     parser.add_argument("--resume_from", type=str, default=None, help="Path to the checkpoint directory (e.g., checkpoints/sft_v1/epoch0)")
     parser.add_argument("--wandb_id", type=str, default=None, help="The ID of the wandb run to resume (e.g., a1b2c3d4)")
